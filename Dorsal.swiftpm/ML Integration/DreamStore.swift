@@ -10,6 +10,7 @@ class DreamStore: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
     @Published var selectedTab: Int = 0
     @Published var navigationPath = NavigationPath()
     @Published var filterTag: String? = nil
+    @Published var searchQuery: String = ""
     
     // Recording State
     @Published var currentTranscript: String = ""
@@ -18,8 +19,9 @@ class DreamStore: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
     @Published var audioPower: Float = 0.0
     
     // Smart Checklist State
-    @Published var checklist: [ChecklistItem] = []
-    @Published var currentQuestionIndex: Int = 0
+    @Published var activeQuestion: ChecklistItem?
+    @Published var remainingQuestions: [ChecklistItem] = []
+    @Published var isQuestionSatisfied: Bool = false // UI Trigger
     
     // Internal Engines
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -30,21 +32,26 @@ class DreamStore: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
     override init() {
         super.init()
         loadDreams()
-        resetChecklist()
+        setupChecklist()
     }
     
-    var activeQuestion: ChecklistItem? {
-        if currentQuestionIndex < checklist.count {
-            return checklist[currentQuestionIndex]
-        }
-        return nil
-    }
-    
+    // MARK: - Filtering Logic
     var filteredDreams: [Dream] {
+        var result = dreams
+        
         if let tag = filterTag {
-            return dreams.filter { $0.keyEntities.contains(tag) }
+            result = result.filter { $0.keyEntities.contains(tag) }
         }
-        return dreams
+        
+        if !searchQuery.isEmpty {
+            result = result.filter {
+                $0.rawTranscript.localizedCaseInsensitiveContains(searchQuery) ||
+                $0.smartSummary.localizedCaseInsensitiveContains(searchQuery) ||
+                $0.keyEntities.contains(where: { $0.localizedCaseInsensitiveContains(searchQuery) })
+            }
+        }
+        
+        return result
     }
     
     var allTags: [String] {
@@ -54,17 +61,20 @@ class DreamStore: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
     // MARK: - Actions
     func selectTagFilter(_ tag: String) {
         filterTag = tag
+        searchQuery = "" // Clear search when tagging
         selectedTab = 1 // Switch to Journal
+        navigationPath = NavigationPath() // Reset stack to root
     }
     
     func clearFilter() {
         filterTag = nil
+        searchQuery = ""
     }
     
-    // MARK: - Recording Logic
+    // MARK: - Recording
     func startRecording() {
         currentTranscript = ""
-        resetChecklist()
+        setupChecklist()
         
         let audioSession = AVAudioSession.sharedInstance()
         try? audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -108,9 +118,14 @@ class DreamStore: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
         withAnimation { isRecording = false; isPaused = false }
         
         if save {
-            let newDream = createAndSaveDream()
-            selectedTab = 1
-            navigationPath.append(newDream)
+            Task {
+                let newDream = await createAndSaveDream()
+                await MainActor.run {
+                    selectedTab = 1
+                    navigationPath = NavigationPath() // Clear stack first
+                    navigationPath.append(newDream) // Push new dream
+                }
+            }
         }
     }
     
@@ -121,42 +136,83 @@ class DreamStore: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
     
     // MARK: - Checklist Logic
     private func analyzeChecklist() {
+        guard let current = activeQuestion, !isQuestionSatisfied else { return }
+        
         let lower = currentTranscript.lowercased()
-        if currentQuestionIndex < checklist.count {
-            let currentItem = checklist[currentQuestionIndex]
-            for keyword in currentItem.keywords {
-                if lower.contains(keyword) {
-                    withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                        checklist[currentQuestionIndex].isSatisfied = true
-                        currentQuestionIndex += 1
-                    }
-                    break
-                }
+        
+        // Check if current question is satisfied
+        for keyword in current.keywords {
+            if lower.contains(keyword) {
+                triggerSuccessAndAdvance()
+                return
             }
         }
     }
     
-    private func resetChecklist() {
-        currentQuestionIndex = 0
-        checklist = [
-            ChecklistItem(question: "Where did the dream take place?", keywords: ["house", "home", "school", "work", "outside", "forest", "room", "sky", "beach", "space", "city"]),
-            ChecklistItem(question: "Who was with you?", keywords: ["mom", "dad", "friend", "brother", "sister", "people", "someone", "dog", "cat", "nobody", "alone"]),
-            ChecklistItem(question: "Was it day or night?", keywords: ["day", "night", "sun", "moon", "dark", "bright", "light", "morning"]),
-            ChecklistItem(question: "Did you feel safe?", keywords: ["safe", "scared", "terrified", "anxious", "happy", "ok", "fine", "good"]),
-            ChecklistItem(question: "Were you moving or still?", keywords: ["run", "walk", "fly", "still", "stuck", "froze", "swim", "drive"]),
-            ChecklistItem(question: "What colors stood out?", keywords: ["red", "blue", "green", "black", "white", "yellow", "purple", "dark", "neon"])
-        ]
+    private func triggerSuccessAndAdvance() {
+        withAnimation { isQuestionSatisfied = true }
+        
+        // Delay to show green state, then swap
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            self.advanceQuestion()
+        }
     }
     
-    private func createAndSaveDream() -> Dream {
-        let sentiment = IntelligenceService.analyzeSentiment(text: currentTranscript)
-        let entities = IntelligenceService.extractEntities(text: currentTranscript, existingTags: allTags)
-        let summary = IntelligenceService.generateSmartSummary(from: currentTranscript)
+    private func advanceQuestion() {
+        guard !remainingQuestions.isEmpty else {
+            withAnimation { activeQuestion = nil }
+            return
+        }
         
-        // NEW: Extract specific categories
+        // Smart Selection: Find a question triggered by current text context
+        let lower = currentTranscript.lowercased()
+        var nextIndex = 0
+        
+        for (index, q) in remainingQuestions.enumerated() {
+            for trigger in q.triggerKeywords {
+                if lower.contains(trigger) {
+                    nextIndex = index
+                    break
+                }
+            }
+        }
+        
+        withAnimation {
+            isQuestionSatisfied = false
+            activeQuestion = remainingQuestions.remove(at: nextIndex)
+        }
+    }
+    
+    private func setupChecklist() {
+        // Pool of questions
+        var pool = [
+            ChecklistItem(question: "Who was there with you?", keywords: ["mom", "dad", "friend", "brother", "sister", "people", "someone", "dog", "cat", "nobody", "alone"], triggerKeywords: ["saw", "met", "with"]),
+            ChecklistItem(question: "Where did it take place?", keywords: ["house", "home", "school", "work", "outside", "forest", "room", "sky", "beach", "space", "city"], triggerKeywords: ["went", "at", "in"]),
+            ChecklistItem(question: "How did the environment feel?", keywords: ["day", "night", "dark", "bright", "cold", "hot", "rain", "fog", "clear"], triggerKeywords: ["outside", "sky", "weather"]),
+            ChecklistItem(question: "Did you feel safe?", keywords: ["safe", "scared", "terrified", "anxious", "happy", "ok", "fine", "good"], triggerKeywords: ["felt", "scary", "weird"]),
+            ChecklistItem(question: "What were you doing?", keywords: ["run", "walk", "fly", "still", "stuck", "froze", "swim", "drive", "eating", "talking"], triggerKeywords: ["then", "started"]),
+            ChecklistItem(question: "Were there any distinct colors?", keywords: ["red", "blue", "green", "black", "white", "yellow", "purple", "dark", "neon"], triggerKeywords: ["looked", "saw"])
+        ]
+        
+        activeQuestion = pool.removeFirst() // Start with "Who"
+        remainingQuestions = pool
+        isQuestionSatisfied = false
+    }
+    
+    private func createAndSaveDream() async -> Dream {
+        let sentiment = IntelligenceService.analyzeSentiment(text: currentTranscript)
+        let allTags = self.allTags
+        
+        let entities = IntelligenceService.extractEntities(text: currentTranscript, existingTags: allTags)
         let people = IntelligenceService.extractPeople(from: currentTranscript)
         let places = IntelligenceService.extractPlaces(from: currentTranscript)
         let emotions = IntelligenceService.extractEmotions(from: currentTranscript)
+        
+        // Use new smart summary logic
+        let summary = IntelligenceService.generateSmartSummary(from: currentTranscript, entities: entities, emotions: emotions)
+        
+        // Generate Image using Simulated API
+        let imageHex = try? await ImageCreator.shared.generateImage(prompt: summary, style: .illustration)
         
         let newDream = Dream(
             id: UUID(),
@@ -169,8 +225,7 @@ class DreamStore: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
             people: people,
             places: places,
             emotions: emotions,
-            artSeed: Int.random(in: 0...1000),
-            dominantColorHex: sentiment < 0 ? "#1A103C" : "#2A9D8F"
+            generatedImageHex: imageHex
         )
         
         dreams.insert(newDream, at: 0)
@@ -191,6 +246,6 @@ class DreamStore: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
     }
     
     private var dreamsURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("dorsal_dreams_v3.json")
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("dorsal_dreams_v4.json")
     }
 }
