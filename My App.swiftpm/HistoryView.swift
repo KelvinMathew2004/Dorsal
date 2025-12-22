@@ -4,27 +4,50 @@ struct HistoryView: View {
     @ObservedObject var store: DreamStore
     
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $store.navigationPath) {
             ZStack {
-                Theme.bgStart.ignoresSafeArea()
+                Theme.gradientBackground.ignoresSafeArea()
                 
-                ScrollView {
-                    LazyVStack(spacing: 15) {
-                        ForEach(store.dreams) { dream in
-                            NavigationLink(value: dream) {
-                                DreamRow(dream: dream)
+                VStack(spacing: 0) {
+                    // Filter Bar
+                    if store.filterTag != nil {
+                        HStack {
+                            Text("Filtering by:")
+                                .foregroundStyle(.gray)
+                                .font(.caption)
+                            
+                            TagPill(text: store.filterTag!, isSelected: true)
+                            
+                            Spacer()
+                            
+                            Button {
+                                withAnimation { store.clearFilter() }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.white.opacity(0.6))
                             }
                         }
+                        .padding()
+                        .background(.ultraThinMaterial)
                     }
-                    .padding()
+                    
+                    ScrollView {
+                        LazyVStack(spacing: 15) {
+                            ForEach(store.filteredDreams) { dream in
+                                NavigationLink(value: dream) {
+                                    DreamRow(dream: dream)
+                                }
+                            }
+                        }
+                        .padding()
+                    }
                 }
             }
-            .navigationTitle("Dream Log")
+            .navigationTitle("Journal")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .navigationDestination(for: Dream.self) { dream in
-                DreamDetailView(dream: dream)
+                DreamDetailView(store: store, dream: dream)
             }
         }
     }
@@ -34,12 +57,12 @@ struct DreamRow: View {
     let dream: Dream
     
     var body: some View {
-        HStack {
-            // Emoji Badge
-            Text(dream.sentimentEmoji)
-                .font(.largeTitle)
+        HStack(spacing: 15) {
+            // Mini Art Preview
+            DreamArtCanvas(dream: dream, isThumbnail: true)
                 .frame(width: 60, height: 60)
-                .background(Circle().fill(Color.white.opacity(0.1)))
+                .cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.2)))
             
             VStack(alignment: .leading, spacing: 5) {
                 Text(dream.date.formatted(date: .abbreviated, time: .shortened))
@@ -52,16 +75,13 @@ struct DreamRow: View {
                     .lineLimit(2)
             }
             Spacer()
-            
-            Image(systemName: "chevron.right")
-                .foregroundStyle(.gray)
         }
-        .padding()
+        .padding(10)
         .background(.ultraThinMaterial)
         .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(.white.opacity(0.1), lineWidth: 1)
+                .stroke(.white.opacity(0.05), lineWidth: 1)
         )
     }
 }
