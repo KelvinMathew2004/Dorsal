@@ -1,73 +1,222 @@
 import SwiftUI
 
 struct DreamDetailView: View {
-    let dream: SavedDream
+    @ObservedObject var store: DreamStore
+    let dream: Dream
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text(dream.title)
-                    .font(.largeTitle)
-                    .bold()
-                
-                HStack {
-                    Text(dream.sentiment)
-                        .padding(8)
-                        .background(.blue.opacity(0.1))
-                        .cornerRadius(8)
+        ZStack {
+            Theme.gradientBackground.ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 24) {
+                    // 1. Image Header (Visual)
+                    DreamImageHeader(dream: dream)
                     
-                    Text(dream.date, style: .date)
-                        .foregroundStyle(.secondary)
+                    // 2. Deep Analysis (Foundation Models)
+                    DreamDeepAnalysisCard(dream: dream)
+                    
+                    // 3. Advice (Therapeutic)
+                    DreamAdviceCard(dream: dream)
+                    
+                    // 4. Tone & Voice Stats
+                    VoiceAnalysisCard(dream: dream)
+                    
+                    // 5. Context Tags
+                    DreamContextSection(dream: dream, store: store)
+                    
+                    // 6. Transcript
+                    DreamTranscriptSection(dream: dream)
                 }
-                
-                Divider()
-                
-                Text("Interpretation")
-                    .font(.headline)
-                
-                Text(dream.interpretation)
-                    .font(.body)
-                
-                Divider()
-                
-                Text("Themes")
-                    .font(.headline)
-                
-                // Using TagLayout to avoid 'FlowLayout' redeclaration conflict
-                TagLayout(items: dream.themes) { theme in
-                    Text(theme)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(.purple.opacity(0.1))
-                        .cornerRadius(20)
-                }
-                
-                Divider()
-                
-                Text("Original Recording")
-                    .font(.headline)
-                
-                Text(dream.rawText)
-                    .font(.body)
-                    .italic()
-                    .foregroundStyle(.secondary)
+                .padding(.top)
+                .padding(.bottom, 50)
             }
-            .padding()
         }
+        .navigationTitle(dream.date.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-// Renamed to TagLayout to fix "Invalid redeclaration of FlowLayout"
-struct TagLayout<Content: View>: View {
-    let items: [String]
-    let content: (String) -> Content
+// MARK: - COMPONENTS
+
+struct DreamImageHeader: View {
+    let dream: Dream
     
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 10) {
-            ForEach(items, id: \.self) { item in
-                content(item)
+        ZStack(alignment: .bottomLeading) {
+            if let imageData = dream.generatedImageData, let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 380)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 32))
+            } else {
+                Rectangle()
+                    .fill(Color(hex: dream.generatedImageHex ?? "#000").gradient)
+                    .frame(height: 380)
+                    .clipShape(RoundedRectangle(cornerRadius: 32))
+            }
+            
+            // Badge
+            HStack(spacing: 6) {
+                Image(systemName: "apple.intelligence")
+                    .symbolEffect(.pulse)
+                Text("Foundation Models")
+                    .font(.caption.weight(.semibold))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+            .padding(20)
+        }
+        .padding(.horizontal)
+        .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+    }
+}
+
+struct DreamDeepAnalysisCard: View {
+    let dream: Dream
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("Interpretation", systemImage: "sparkles.rectangle.stack")
+                    .font(.headline)
+                    .foregroundStyle(Theme.accent)
+                Spacer()
+                Text(dream.tone)
+                    .font(.caption.bold())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.1), in: Capsule())
+            }
+            
+            Text(dream.interpretation)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .lineSpacing(4)
+            
+            Divider().background(Color.white.opacity(0.2))
+            
+            HStack {
+                Text("Summary")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            
+            Text(dream.smartSummary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(24)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal)
+    }
+}
+
+struct DreamAdviceCard: View {
+    let dream: Dream
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Actionable Advice", systemImage: "brain.head.profile")
+                .font(.headline)
+                .foregroundStyle(.green)
+            
+            Text(dream.actionableAdvice)
+                .font(.callout)
+                .foregroundStyle(.white)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.green.opacity(0.3), lineWidth: 1))
+        }
+        .padding(24)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal)
+    }
+}
+
+struct VoiceAnalysisCard: View {
+    let dream: Dream
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Voice Analysis", systemImage: "waveform")
+                .font(.headline)
+                .foregroundStyle(.orange)
+            
+            HStack(spacing: 20) {
+                VStack(alignment: .leading) {
+                    Text("Fatigue Level")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(String(format: "%.0f%%", dream.voiceFatigue * 100))
+                        .font(.title3.bold())
+                }
+                
+                VStack(alignment: .leading) {
+                    Text("Detected Tone")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(dream.tone.isEmpty ? "Neutral" : dream.tone)
+                        .font(.title3.bold())
+                }
+                
+                Spacer()
             }
         }
+        .padding(24)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal)
+    }
+}
+
+struct DreamContextSection: View {
+    let dream: Dream
+    @ObservedObject var store: DreamStore
+    
+    var body: some View {
+        if !dream.keyEntities.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Entities")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                
+                FlowLayout {
+                    ForEach(dream.keyEntities, id: \.self) { tag in
+                        Button(tag) { store.jumpToFilter(type: "tag", value: tag) }
+                            .buttonStyle(.bordered)
+                            .tint(.secondary)
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+}
+
+struct DreamTranscriptSection: View {
+    let dream: Dream
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Transcript")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            
+            Text(dream.rawTranscript)
+                .font(.callout.monospaced())
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(24)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal)
     }
 }
