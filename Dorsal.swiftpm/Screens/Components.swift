@@ -45,16 +45,7 @@ struct TagPill: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .foregroundStyle(isSelected ? .black : .secondary)
-        
-        if #available(iOS 26, *) {
-            content
-                .glassEffect(isSelected ? .regular.tint(Theme.accent) : .clear, in: .capsule)
-        } else {
-            content
-                .background(isSelected ? Theme.accent : .clear, in: Capsule())
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().stroke(.white.opacity(0.1), lineWidth: 0.5))
-        }
+            .glassEffect(isSelected ? .regular.tint(Theme.accent) : .clear, in: .capsule)
     }
 }
 

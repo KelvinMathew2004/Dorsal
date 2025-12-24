@@ -267,8 +267,9 @@ struct RecommendationPill: View {
             .font(.caption)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color.white.opacity(0.15), in: Capsule())
-            .foregroundStyle(.white.opacity(0.9))
+//            .background(Color.white.opacity(0.15), in: Capsule())
+//            .foregroundStyle(.white.opacity(0.9))
+            .glassEffect()
     }
 }
 

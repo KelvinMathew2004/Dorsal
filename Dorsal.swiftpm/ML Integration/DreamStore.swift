@@ -117,6 +117,7 @@ class DreamStore: ObservableObject {
     private func startMockRecording() {
         currentTranscript = ""; setupChecklist(); withAnimation { isRecording = true; isPaused = false }
         
+        // 10 Detailed Mock Narratives
         let mockSequences = [
             // 1. Deep Ocean (Dorsal Theme)
             [
@@ -133,13 +134,13 @@ class DreamStore: ObservableObject {
                 "My Mom and Dad were in the front row watching.",
                 "I looked down and my notes were soaking wet.",
                 "Then my teeth started feeling loose and wobbly.",
-                "I spit one out and it was a white seashell.",
+                "I spit one out and it was a white Seashell.",
                 "Everyone stared at me in silence."
             ],
             // 3. Glass Forest Chase
             [
                 "I was running through a dense Forest at night.",
-                "The trees were made of transparent, sharp glass.",
+                "The trees were made of transparent, sharp Glass.",
                 "Something was chasing me but I couldn't look back.",
                 "I reached my Childhood Home but the door was locked.",
                 "Then the glass trees started shattering behind me.",
@@ -148,26 +149,25 @@ class DreamStore: ObservableObject {
             // 4. Flying over City
             [
                 "I was flying over a huge futuristic City.",
-                "The wind felt amazing, I was so free.",
+                "The Wind felt amazing, I was so free.",
                 "I saw my Brother waving from a skyscraper roof.",
                 "I tried to land but gravity stopped working.",
-                "I just kept floating higher into the clouds.",
+                "I just kept floating higher into the Sky.",
                 "It was peaceful but a little lonely."
             ],
             // 5. The Empty Mall
             [
                 "I was walking through a massive shopping Mall.",
                 "But it was completely empty, no people anywhere.",
-                "Just smooth jazz playing over the speakers.",
-                "I went into a store and all the mannequins turned to look at me.",
+                "I went into a store and all the Mannequins turned to look at me.",
                 "They didn't have faces, just smooth plastic.",
                 "I felt like I wasn't supposed to be there."
             ],
             // 6. Teeth Falling Out (Variant)
             [
                 "I was at a dinner party with my Boss.",
-                "I tried to eat an apple but my teeth crumbled like chalk.",
-                "I tried to hide it but my mouth was full of dust.",
+                "I tried to eat an Apple but my teeth crumbled like chalk.",
+                "I tried to hide it but my mouth was full of Dust.",
                 "My Boss asked me a question and I couldn't speak.",
                 "I felt so embarrassed and helpless."
             ],
@@ -175,7 +175,7 @@ class DreamStore: ObservableObject {
             [
                 "I realized I had a math final Exam in 5 minutes.",
                 "But I was in a Hotel on the other side of town.",
-                "I tried to run but my legs were moving in slow motion.",
+                "I tried to run but my Legs were moving in slow motion.",
                 "The hallway kept stretching longer and longer.",
                 "I knew I was going to fail and ruin everything."
             ],
@@ -183,15 +183,15 @@ class DreamStore: ObservableObject {
             [
                 "I was in my Kitchen making breakfast.",
                 "A large brown Bear walked in and sat at the table.",
-                "He asked me for coffee in perfect English.",
-                "I wasn't scared, it felt totally normal.",
+                "He asked me for Coffee in perfect English.",
+                "I wasn't scared, it felt totally Normal.",
                 "We talked about the weather and my job.",
                 "He told me I need to rest more."
             ],
             // 9. Tornado
             [
                 "I was standing in a flat open Field.",
-                "The sky turned green and huge tornados formed.",
+                "The sky turned green and huge Tornados formed.",
                 "I tried to find shelter but there was nowhere to hide.",
                 "The wind was deafening, roaring like a train.",
                 "I held onto a fence post as the storm hit.",
@@ -200,11 +200,11 @@ class DreamStore: ObservableObject {
             // 10. Impossible House
             [
                 "I discovered a new room in my Apartment.",
-                "It was huge, like a ballroom with chandeliers.",
+                "It was huge, like a Ballroom with chandeliers.",
                 "I couldn't believe I lived here and didn't know.",
-                "But then the doors started disappearing.",
+                "But then the Doors started disappearing.",
                 "I got lost in my own house, trapping me inside.",
-                "Every door led to a brick wall."
+                "Every door led to a brick Wall."
             ]
         ]
         
@@ -254,9 +254,9 @@ class DreamStore: ObservableObject {
     
     private func setupChecklist() {
         var pool = [
-            ChecklistItem(question: "Who was there?", keywords: ["mom", "dad", "friend", "brother", "sister", "people", "sarah", "boss", "bear"], triggerKeywords: ["saw", "met", "with"]),
-            ChecklistItem(question: "Where did it take place?", keywords: ["home", "school", "work", "outside", "forest", "room", "office", "beach", "city", "mall", "hotel", "kitchen", "field", "apartment"], triggerKeywords: ["at", "in", "went"]),
-            ChecklistItem(question: "How did you feel?", keywords: ["scared", "happy", "anxious", "calm", "weird", "heavy", "free", "helpless", "lonely"], triggerKeywords: ["felt", "was"])
+            ChecklistItem(question: "Who was there?", keywords: ["mom", "dad", "friend", "brother", "sister", "people", "sarah"], triggerKeywords: ["saw", "met"]),
+            ChecklistItem(question: "Where did it take place?", keywords: ["home", "school", "work", "outside", "forest", "room", "office", "beach"], triggerKeywords: ["at", "in", "went"]),
+            ChecklistItem(question: "How did you feel?", keywords: ["scared", "happy", "anxious", "calm", "weird", "heavy"], triggerKeywords: ["felt", "was"])
         ]
         activeQuestion = pool.removeFirst(); remainingQuestions = pool; isQuestionSatisfied = false
     }
@@ -278,6 +278,8 @@ class DreamStore: ObservableObject {
         let artPrompt = try! await DreamAnalyzer.shared.generateArtPrompt(transcript: text)
         let (imageData, imageHex) = try! await ImageCreator.shared.generateImage(llmPrompt: artPrompt, style: .illustration)
         
+        // NOW USING FOUNDATION MODELS to extract (Mocked via Guide.swift)
+        // No manual IntelligenceService call here.
         let extracted = try! await DreamAnalyzer.shared.extractEntities(
             transcript: text,
             existingPeople: self.allPeople,
@@ -295,6 +297,7 @@ class DreamStore: ObservableObject {
             tone: insight.tone,
             sentimentScore: 0.5,
             voiceFatigue: Double.random(in: 0.1...0.9),
+            // Use extracted data
             keyEntities: extracted.keyEntities,
             people: extracted.people,
             places: extracted.places,

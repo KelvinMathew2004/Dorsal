@@ -153,9 +153,11 @@ struct RemovablePill: View {
         Button(action: action) {
             HStack(spacing: 6) { Image(systemName: icon).font(.caption); Text(text).font(.caption.bold()); Image(systemName: "xmark").font(.caption2) }
                 .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 8)
-                .background(color.opacity(0.3), in: Capsule())
-                .overlay(Capsule().stroke(color.opacity(0.5), lineWidth: 1))
+//                .background(color.opacity(0.3), in: Capsule())
+//                .overlay(Capsule().stroke(color.opacity(0.5), lineWidth: 1))
         }
+        .buttonStyle(.glassProminent)
+        .tint(color)
     }
 }
 

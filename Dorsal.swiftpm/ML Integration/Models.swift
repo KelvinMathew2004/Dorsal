@@ -4,7 +4,6 @@ import NaturalLanguage
 import UIKit
 
 // MARK: - SHARED DATA MODELS
-// Updated to ensure all Generable models are Codable & Sendable
 
 // 1. Dream Model
 struct Dream: Identifiable, Codable, Hashable, Sendable {
@@ -23,7 +22,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     let sentimentScore: Double
     let voiceFatigue: Double
     
-    // Context
+    // Context (Extracted via Foundation Model)
     let keyEntities: [String]
     let people: [String]
     let places: [String]
@@ -46,7 +45,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
-// 2. Dream Insight (Generable)
+// 2. Dream Insight
 struct DreamInsight: Codable, Sendable {
     @Guide(description: "The primary emotion felt during the dream.")
     var emotion: String = ""
@@ -92,7 +91,7 @@ struct DreamEntities: Codable, Sendable {
     }
 }
 
-// 4. Therapeutic Insight (Generable)
+// 4. Therapeutic Insight
 struct TherapeuticInsight: Identifiable, Codable, Sendable {
     var id: UUID = UUID()
     
@@ -114,7 +113,7 @@ struct TherapeuticInsight: Identifiable, Codable, Sendable {
     init() {}
 }
 
-// 5. Image Prompt (Generable)
+// 5. Image Prompt
 public struct ImagePrompt: Codable, Sendable {
     @Guide(description: "A vivid visual description for the image generator.")
     public var visualDescription: String = ""
