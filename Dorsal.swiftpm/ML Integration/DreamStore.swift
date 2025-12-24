@@ -117,42 +117,103 @@ class DreamStore: ObservableObject {
     private func startMockRecording() {
         currentTranscript = ""; setupChecklist(); withAnimation { isRecording = true; isPaused = false }
         
-        // RESTORED: Long, detailed mock sequences for better demonstration
         let mockSequences = [
-            // Dream 1: The "Dorsal" Theme
+            // 1. Deep Ocean (Dorsal Theme)
             [
-                "I was swimming. Deep underwater.",
-                "No scuba gear, just... breathing water. It felt natural.",
-                "At first. Then I looked down and there was no bottom.",
-                "Just infinite blue darkness. Miles of it.",
-                "And I looked up and the surface was... a tiny speck of light.",
-                "I realized I was... sinking? No, being pulled.",
-                "Something heavy was tied to my ankle. An anchor?",
-                "No... it was a clock. A grandfather clock.",
-                "Ticking underwater. Tick. Tock. Loud.",
-                "I tried to untie it but my fingers were numb.",
-                "I wasn't scared though. I just felt... heavy. So heavy.",
-                "I just felt like I wanted to sleep down there."
+                "I was swimming deep underwater with Sarah.",
+                "No scuba gear, just breathing water naturally.",
+                "Just infinite blue darkness for miles.",
+                "I realized I was sinking, pulled by a heavy Anchor.",
+                "I wasn't scared, just felt heavy and sleepy.",
+                "I saw a Clock ticking underwater."
             ],
-            // Dream 2: High School / Anxiety
+            // 2. High School Anxiety
             [
-                "Um, okay, so... I was back in high school?",
-                "But it wasn't school, it was also my office. Weird.",
-                "And I had to give this presentation about... I think it was about water safety? Ironically.",
-                "And, uh, I looked down and my notes were just... soaking wet.",
-                "Like, dripping onto the floor. Ruined.",
-                "I tried to speak but my... my teeth felt loose.",
-                "Yeah, wobbly. I spit one out into my hand...",
-                "and it was... it was a seashell? A tiny white seashell.",
-                "And everyone just stared at me. No one said a word.",
-                "Ah, I felt so small. Just... disappearing into the floor."
+                "I was back in High School giving a presentation.",
+                "My Mom and Dad were in the front row watching.",
+                "I looked down and my notes were soaking wet.",
+                "Then my teeth started feeling loose and wobbly.",
+                "I spit one out and it was a white seashell.",
+                "Everyone stared at me in silence."
+            ],
+            // 3. Glass Forest Chase
+            [
+                "I was running through a dense Forest at night.",
+                "The trees were made of transparent, sharp glass.",
+                "Something was chasing me but I couldn't look back.",
+                "I reached my Childhood Home but the door was locked.",
+                "Then the glass trees started shattering behind me.",
+                "I woke up terrified just as the shards hit me."
+            ],
+            // 4. Flying over City
+            [
+                "I was flying over a huge futuristic City.",
+                "The wind felt amazing, I was so free.",
+                "I saw my Brother waving from a skyscraper roof.",
+                "I tried to land but gravity stopped working.",
+                "I just kept floating higher into the clouds.",
+                "It was peaceful but a little lonely."
+            ],
+            // 5. The Empty Mall
+            [
+                "I was walking through a massive shopping Mall.",
+                "But it was completely empty, no people anywhere.",
+                "Just smooth jazz playing over the speakers.",
+                "I went into a store and all the mannequins turned to look at me.",
+                "They didn't have faces, just smooth plastic.",
+                "I felt like I wasn't supposed to be there."
+            ],
+            // 6. Teeth Falling Out (Variant)
+            [
+                "I was at a dinner party with my Boss.",
+                "I tried to eat an apple but my teeth crumbled like chalk.",
+                "I tried to hide it but my mouth was full of dust.",
+                "My Boss asked me a question and I couldn't speak.",
+                "I felt so embarrassed and helpless."
+            ],
+            // 7. Late for Exam
+            [
+                "I realized I had a math final Exam in 5 minutes.",
+                "But I was in a Hotel on the other side of town.",
+                "I tried to run but my legs were moving in slow motion.",
+                "The hallway kept stretching longer and longer.",
+                "I knew I was going to fail and ruin everything."
+            ],
+            // 8. Talking Animal
+            [
+                "I was in my Kitchen making breakfast.",
+                "A large brown Bear walked in and sat at the table.",
+                "He asked me for coffee in perfect English.",
+                "I wasn't scared, it felt totally normal.",
+                "We talked about the weather and my job.",
+                "He told me I need to rest more."
+            ],
+            // 9. Tornado
+            [
+                "I was standing in a flat open Field.",
+                "The sky turned green and huge tornados formed.",
+                "I tried to find shelter but there was nowhere to hide.",
+                "The wind was deafening, roaring like a train.",
+                "I held onto a fence post as the storm hit.",
+                "I woke up heart pounding."
+            ],
+            // 10. Impossible House
+            [
+                "I discovered a new room in my Apartment.",
+                "It was huge, like a ballroom with chandeliers.",
+                "I couldn't believe I lived here and didn't know.",
+                "But then the doors started disappearing.",
+                "I got lost in my own house, trapping me inside.",
+                "Every door led to a brick wall."
             ]
         ]
         
-        let phrases = mockSequences[mockDreamIndex % mockSequences.count]; mockDreamIndex += 1; var phraseIndex = 0
+        let phrases = mockSequences[mockDreamIndex % mockSequences.count]
+        mockDreamIndex += 1
+        var phraseIndex = 0
         
         mockTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            guard let self = self, !self.isPaused else { return } // Handle pause in timer
+            guard let self = self, !self.isPaused else { return }
             Task { @MainActor in
                 if phraseIndex < phrases.count {
                     self.currentTranscript += (self.currentTranscript.isEmpty ? "" : " ") + phrases[phraseIndex]
@@ -179,7 +240,6 @@ class DreamStore: ObservableObject {
                 await MainActor.run { self.isProcessing = false; selectedTab = 1; navigationPath = NavigationPath(); navigationPath.append(newDream) }
             }
         } else if !save {
-            // Reset transcript if cancelled
             currentTranscript = ""
         }
     }
@@ -194,30 +254,35 @@ class DreamStore: ObservableObject {
     
     private func setupChecklist() {
         var pool = [
-            ChecklistItem(question: "Who was there?", keywords: ["mom", "dad", "friend", "brother", "sister", "people"], triggerKeywords: ["saw", "met"]),
-            ChecklistItem(question: "Where did it take place?", keywords: ["home", "school", "work", "outside", "forest", "room"], triggerKeywords: ["at", "in", "went"]),
-            ChecklistItem(question: "How did you feel?", keywords: ["scared", "happy", "anxious", "calm", "weird"], triggerKeywords: ["felt", "was"])
+            ChecklistItem(question: "Who was there?", keywords: ["mom", "dad", "friend", "brother", "sister", "people", "sarah", "boss", "bear"], triggerKeywords: ["saw", "met", "with"]),
+            ChecklistItem(question: "Where did it take place?", keywords: ["home", "school", "work", "outside", "forest", "room", "office", "beach", "city", "mall", "hotel", "kitchen", "field", "apartment"], triggerKeywords: ["at", "in", "went"]),
+            ChecklistItem(question: "How did you feel?", keywords: ["scared", "happy", "anxious", "calm", "weird", "heavy", "free", "helpless", "lonely"], triggerKeywords: ["felt", "was"])
         ]
         activeQuestion = pool.removeFirst(); remainingQuestions = pool; isQuestionSatisfied = false
     }
     
-    // Helper to get past data recommendations
     func getRecommendations(for question: ChecklistItem) -> [String] {
         let lowerQuestion = question.question.lowercased()
         if lowerQuestion.contains("who") {
-            return self.allPeople.prefix(5).map { $0 }
+            return self.allPeople.isEmpty ? ["Mom", "Dad", "Friend"] : Array(self.allPeople.prefix(5)).map { $0.capitalized }
         } else if lowerQuestion.contains("where") {
-            return self.allPlaces.prefix(5).map { $0 }
+            return self.allPlaces.isEmpty ? ["Home", "School", "Work"] : Array(self.allPlaces.prefix(5)).map { $0.capitalized }
         }
         return []
     }
     
     private func createAndSaveDream() async -> Dream {
         let text = currentTranscript
+        
         let insight = try! await DreamAnalyzer.shared.analyze(transcript: text)
         let artPrompt = try! await DreamAnalyzer.shared.generateArtPrompt(transcript: text)
         let (imageData, imageHex) = try! await ImageCreator.shared.generateImage(llmPrompt: artPrompt, style: .illustration)
-        let entities = IntelligenceService.extractEntities(text: text, existingTags: self.allTags)
+        
+        let extracted = try! await DreamAnalyzer.shared.extractEntities(
+            transcript: text,
+            existingPeople: self.allPeople,
+            existingPlaces: self.allPlaces
+        )
         
         let newDream = Dream(
             id: UUID(),
@@ -230,10 +295,10 @@ class DreamStore: ObservableObject {
             tone: insight.tone,
             sentimentScore: 0.5,
             voiceFatigue: Double.random(in: 0.1...0.9),
-            keyEntities: entities,
-            people: [],
-            places: [],
-            emotions: [insight.emotion],
+            keyEntities: extracted.keyEntities,
+            people: extracted.people,
+            places: extracted.places,
+            emotions: extracted.emotions,
             generatedImageHex: imageHex,
             generatedImageData: imageData
         )

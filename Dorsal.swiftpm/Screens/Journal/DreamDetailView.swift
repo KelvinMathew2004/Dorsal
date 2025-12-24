@@ -13,17 +13,17 @@ struct DreamDetailView: View {
                     // 1. Image Header (Visual)
                     DreamImageHeader(dream: dream)
                     
-                    // 2. Deep Analysis (Foundation Models)
+                    // 2. Context Tags (People, Places, Emotions, Tags) - Moved here as requested
+                    DreamContextSection(dream: dream, store: store)
+                    
+                    // 3. Deep Analysis (Foundation Models)
                     DreamDeepAnalysisCard(dream: dream)
                     
-                    // 3. Advice (Therapeutic)
+                    // 4. Advice (Therapeutic)
                     DreamAdviceCard(dream: dream)
                     
-                    // 4. Tone & Voice Stats
+                    // 5. Tone & Voice Stats
                     VoiceAnalysisCard(dream: dream)
-                    
-                    // 5. Context Tags
-                    DreamContextSection(dream: dream, store: store)
                     
                     // 6. Transcript
                     DreamTranscriptSection(dream: dream)
@@ -76,6 +76,96 @@ struct DreamImageHeader: View {
     }
 }
 
+struct DreamContextSection: View {
+    let dream: Dream
+    @ObservedObject var store: DreamStore
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            
+            // People
+            if !dream.people.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(dream.people, id: \.self) { person in
+                            Button { store.jumpToFilter(type: "person", value: person) } label: {
+                                Label(person, systemImage: "person.fill")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.blue.opacity(0.2), in: Capsule())
+                                    .foregroundStyle(.blue)
+                                    .overlay(Capsule().stroke(Color.blue.opacity(0.4), lineWidth: 1))
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+            
+            // Places
+            if !dream.places.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(dream.places, id: \.self) { place in
+                            Button { store.jumpToFilter(type: "place", value: place) } label: {
+                                Label(place, systemImage: "map.fill")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.green.opacity(0.2), in: Capsule())
+                                    .foregroundStyle(.green)
+                                    .overlay(Capsule().stroke(Color.green.opacity(0.4), lineWidth: 1))
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+            
+            // Emotions
+            if !dream.emotions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(dream.emotions, id: \.self) { emotion in
+                            Button { store.jumpToFilter(type: "emotion", value: emotion) } label: {
+                                Label(emotion, systemImage: "heart.fill")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.pink.opacity(0.2), in: Capsule())
+                                    .foregroundStyle(.pink)
+                                    .overlay(Capsule().stroke(Color.pink.opacity(0.4), lineWidth: 1))
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+            
+            // Tags / Symbols
+            if !dream.keyEntities.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Symbols")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal)
+                    
+                    FlowLayout {
+                        ForEach(dream.keyEntities, id: \.self) { tag in
+                            Button(tag) { store.jumpToFilter(type: "tag", value: tag) }
+                                .buttonStyle(.bordered)
+                                .tint(.secondary)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        }
+    }
+}
+
 struct DreamDeepAnalysisCard: View {
     let dream: Dream
     
@@ -113,6 +203,7 @@ struct DreamDeepAnalysisCard: View {
         }
         .padding(24)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 1))
         .padding(.horizontal)
     }
 }
@@ -136,6 +227,7 @@ struct DreamAdviceCard: View {
         }
         .padding(24)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 1))
         .padding(.horizontal)
     }
 }
@@ -171,33 +263,8 @@ struct VoiceAnalysisCard: View {
         }
         .padding(24)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 1))
         .padding(.horizontal)
-    }
-}
-
-struct DreamContextSection: View {
-    let dream: Dream
-    @ObservedObject var store: DreamStore
-    
-    var body: some View {
-        if !dream.keyEntities.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Entities")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
-                
-                FlowLayout {
-                    ForEach(dream.keyEntities, id: \.self) { tag in
-                        Button(tag) { store.jumpToFilter(type: "tag", value: tag) }
-                            .buttonStyle(.bordered)
-                            .tint(.secondary)
-                            .clipShape(Capsule())
-                    }
-                }
-                .padding(.horizontal)
-            }
-        }
     }
 }
 
@@ -217,6 +284,7 @@ struct DreamTranscriptSection: View {
         }
         .padding(24)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 1))
         .padding(.horizontal)
     }
 }

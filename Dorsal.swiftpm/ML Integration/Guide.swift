@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - FOUNDATION MODELS API SHIM
-// Updated to handle Concurrency/Sendable requirements
+// Updated to handle Concurrency/Sendable requirements as requested.
 
 @attached(member, names: arbitrary)
 public macro Generable() = #externalMacro(module: "FoundationModelsMacros", type: "GenerableMacro")
@@ -39,8 +39,6 @@ public struct Guide<T: Codable & Sendable>: Codable, Sendable {
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        // Ensure T is decoded as T.self.
-        // Codable includes Decodable, so this should satisfy the requirement.
         self.wrappedValue = try container.decode(T.self)
         self.description = ""
     }
@@ -60,7 +58,7 @@ public actor LanguageModelSession {
     
     // Non-streaming response
     public func respond<T: Codable & Sendable>(to prompt: String, generating type: T.Type) async throws -> GenerationResponse<T> {
-        let mock = try createMock(for: type)
+        let mock = try createMock(for: type, prompt: prompt)
         return GenerationResponse(content: mock)
     }
     
@@ -70,7 +68,7 @@ public actor LanguageModelSession {
             Task {
                 do {
                     try await Task.sleep(nanoseconds: 500_000_000)
-                    let mock = try createMock(for: type)
+                    let mock = try createMock(for: type, prompt: prompt)
                     continuation.yield(mock)
                     continuation.finish()
                 } catch {
@@ -80,23 +78,58 @@ public actor LanguageModelSession {
         }
     }
     
-    private func createMock<T: Codable & Sendable>(for type: T.Type) throws -> T {
+    private func createMock<T: Codable & Sendable>(for type: T.Type, prompt: String = "") throws -> T {
         let typeString = String(describing: type)
+        let lowerPrompt = prompt.lowercased()
         
         if typeString.contains("DreamInsight") {
-            let json = """
-            {
-                "title": "The Underwater Clock",
-                "summary": "A dream about deep water and time pressure.",
-                "interpretation": "This dream symbolizes a fear of running out of time while feeling overwhelmed by emotions (water). The clock represents societal pressure.",
-                "actionableAdvice": "Try to schedule 'worry time' so it doesn't bleed into your rest.",
-                "sentiment": "Anxiety",
-                "emotion": "Anxiety",
-                "tone": "Mysterious",
-                "themes": ["Time", "Ocean", "Pressure", "Silence"]
+            // Dynamic Mock Data based on keywords in the prompt
+            if lowerPrompt.contains("swimming") || lowerPrompt.contains("underwater") {
+                let json = """
+                {
+                    "summary": "A vivid dream about swimming deep underwater without gear, feeling a heavy anchor or clock.",
+                    "interpretation": "Water often represents the subconscious. The ability to breathe suggests comfort with deep emotions, but the heavy object implies a burden or deadline you feel dragging you down.",
+                    "actionableAdvice": "Consider what 'weight' you are carrying in waking life. Is there a deadline or emotional burden you can release?",
+                    "emotion": "Reflective",
+                    "tone": "Calm"
+                }
+                """
+                return try JSONDecoder().decode(T.self, from: json.data(using: .utf8)!)
+            } else if lowerPrompt.contains("school") || lowerPrompt.contains("presentation") {
+                let json = """
+                {
+                    "summary": "Being back in a school setting to give a presentation, but encountering obstacles like wet notes and loose teeth.",
+                    "interpretation": "A classic anxiety dream. School settings often represent social performance. Loose teeth typically symbolize a fear of powerlessness or losing face in public.",
+                    "actionableAdvice": "Practice self-compassion. Remind yourself of your competence and that one mistake does not define you.",
+                    "emotion": "Anxious",
+                    "tone": "Tense"
+                }
+                """
+                return try JSONDecoder().decode(T.self, from: json.data(using: .utf8)!)
+            } else if lowerPrompt.contains("forest") || lowerPrompt.contains("chase") {
+                 let json = """
+                {
+                    "summary": "Running through a dark forest with glass trees while being chased.",
+                    "interpretation": "The forest represents the unknown. Glass trees suggest fragility—perhaps a situation in your life feels dangerous and easily broken. Being chased indicates avoidance of a confronting issue.",
+                    "actionableAdvice": "Identify what you are running from. Facing the fear directly often diminishes its power.",
+                    "emotion": "Fear",
+                    "tone": "Urgent"
+                }
+                """
+                return try JSONDecoder().decode(T.self, from: json.data(using: .utf8)!)
+            } else {
+                // Generic fallback
+                let json = """
+                {
+                    "summary": "A complex dream sequence with varied imagery.",
+                    "interpretation": "Your mind is processing recent events. The imagery suggests a mix of curiosity and uncertainty about the future.",
+                    "actionableAdvice": "Keep a dream journal to spot recurring patterns over time.",
+                    "emotion": "Neutral",
+                    "tone": "Observational"
+                }
+                """
+                return try JSONDecoder().decode(T.self, from: json.data(using: .utf8)!)
             }
-            """
-            return try JSONDecoder().decode(T.self, from: json.data(using: .utf8)!)
         }
         else if typeString.contains("ImagePrompt") {
              let json = """
@@ -108,6 +141,30 @@ public actor LanguageModelSession {
             """
             return try JSONDecoder().decode(T.self, from: json.data(using: .utf8)!)
         }
+        else if typeString.contains("DreamEntities") {
+             let json = """
+            {
+                "people": ["Mom", "Sarah"],
+                "places": ["School", "Ocean"],
+                "emotions": ["Fear", "Calm"],
+                "keyEntities": ["Clock", "Anchor"]
+            }
+            """
+            return try JSONDecoder().decode(T.self, from: json.data(using: .utf8)!)
+        }
+        else if typeString.contains("TherapeuticInsight") {
+             let json = """
+            [
+                {
+                    "title": "Recurring Water Theme",
+                    "observation": "You dream of water often.",
+                    "suggestion": "Consider what water means to you."
+                }
+            ]
+            """
+            // Note: If T is [TherapeuticInsight], we need to handle array decoding
+            return try JSONDecoder().decode(T.self, from: json.data(using: .utf8)!)
+        }
         
         throw NSError(domain: "FoundationModels", code: 404, userInfo: [NSLocalizedDescriptionKey: "Mock not found for type \(type)"])
     }
@@ -115,16 +172,4 @@ public actor LanguageModelSession {
 
 public struct GenerationResponse<T: Sendable>: Sendable {
     public let content: T
-}
-
-// Ensure Helper Types are Sendable & Codable
-public struct ImagePrompt: Codable, Sendable {
-    @Guide(description: "A vivid visual description for the image generator.")
-    public var visualDescription: String = ""
-    
-    @Guide(description: "Keywords defining the mood.")
-    public var moodKeywords: String = ""
-    
-    @Guide(description: "Color palette suggestions.")
-    public var colorPalette: String = ""
 }

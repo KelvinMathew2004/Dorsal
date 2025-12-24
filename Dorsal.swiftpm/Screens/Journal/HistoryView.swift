@@ -9,18 +9,16 @@ struct HistoryView: View {
                 Theme.gradientBackground.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Filter Bar (Removed gray background)
+                    // Filter Bar
                     FilterBar(store: store)
                         .padding(.vertical, 10)
                         .padding(.horizontal)
-                        // .background(.ultraThinMaterial) <-- REMOVED
                     
                     // Active Filters
                     if !store.activeFilter.isEmpty {
                         ActiveFiltersView(store: store)
                             .padding(.horizontal)
                             .padding(.bottom, 8)
-                            // .background(.ultraThinMaterial) <-- REMOVED
                     }
                     
                     // List
@@ -77,20 +75,22 @@ struct HistoryView: View {
     }
 }
 
-// Reuse helper views (FilterBar, etc.) - No changes needed to logic, just context
+// MARK: - Subviews
+
 struct FilterBar: View {
     @ObservedObject var store: DreamStore
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-                FilterDropdown(title: "People", icon: "person.2", options: store.allPeople, selected: store.activeFilter.people) { store.togglePersonFilter($0) }
-                FilterDropdown(title: "Places", icon: "map", options: store.allPlaces, selected: store.activeFilter.places) { store.togglePlaceFilter($0) }
-                FilterDropdown(title: "Emotions", icon: "heart", options: store.allEmotions, selected: store.activeFilter.emotions) { store.toggleEmotionFilter($0) }
-                FilterDropdown(title: "Tags", icon: "tag", options: store.allTags, selected: store.activeFilter.tags) { store.toggleTagFilter($0) }
+                // Dropdowns with ICON ONLY (empty title string) as requested
+                FilterDropdown(title: "", icon: "person.2", options: store.allPeople, selected: store.activeFilter.people) { store.togglePersonFilter($0) }
+                FilterDropdown(title: "", icon: "map", options: store.allPlaces, selected: store.activeFilter.places) { store.togglePlaceFilter($0) }
+                FilterDropdown(title: "", icon: "heart", options: store.allEmotions, selected: store.activeFilter.emotions) { store.toggleEmotionFilter($0) }
+                FilterDropdown(title: "", icon: "tag", options: store.allTags, selected: store.activeFilter.tags) { store.toggleTagFilter($0) }
                 
                 if !store.activeFilter.isEmpty {
-                    Button("Clear All", role: .destructive) { withAnimation { store.clearFilter() } }
+                    Button("Clear", role: .destructive) { withAnimation { store.clearFilter() } }
                     .font(.caption.bold())
                     .buttonStyle(.bordered)
                     .tint(.red)
@@ -102,16 +102,36 @@ struct FilterBar: View {
 }
 
 struct FilterDropdown: View {
-    let title: String; let icon: String; let options: [String]; let selected: Set<String>; let onSelect: (String) -> Void
+    let title: String
+    let icon: String
+    let options: [String]
+    let selected: Set<String>
+    let onSelect: (String) -> Void
+    
     var body: some View {
         Menu {
             ForEach(options, id: \.self) { option in
                 Button { onSelect(option) } label: { HStack { Text(option); if selected.contains(option) { Image(systemName: "checkmark") } } }
             }
         } label: {
-            HStack(spacing: 6) { Image(systemName: icon); Text(title); Image(systemName: "chevron.down").font(.caption2) }
-                .font(.subheadline.bold()).foregroundStyle(.white).padding(.horizontal, 16).padding(.vertical, 10).backgroundWrapper(cornerRadius: 12)
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.body)
+                if !title.isEmpty {
+                    Text(title)
+                }
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+            }
+            .font(.subheadline.bold())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+//            .background(.ultraThinMaterial, in: Capsule())
+//            .overlay(Capsule().stroke(.white.opacity(0.1), lineWidth: 1))
+            .glassEffect(.regular)
         }
+        .menuActionDismissBehavior(.disabled)
     }
 }
 
@@ -132,7 +152,9 @@ struct RemovablePill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) { Image(systemName: icon).font(.caption); Text(text).font(.caption.bold()); Image(systemName: "xmark").font(.caption2) }
-                .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 8).background(color.opacity(0.3), in: Capsule()).overlay(Capsule().stroke(color.opacity(0.5), lineWidth: 1))
+                .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 8)
+                .background(color.opacity(0.3), in: Capsule())
+                .overlay(Capsule().stroke(color.opacity(0.5), lineWidth: 1))
         }
     }
 }
@@ -155,5 +177,6 @@ struct DreamRow: View {
         }
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.1), lineWidth: 1))
     }
 }

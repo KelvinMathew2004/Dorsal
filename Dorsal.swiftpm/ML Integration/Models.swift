@@ -4,9 +4,10 @@ import NaturalLanguage
 import UIKit
 
 // MARK: - SHARED DATA MODELS
+// Updated to ensure all Generable models are Codable & Sendable
 
 // 1. Dream Model
-struct Dream: Identifiable, Codable, Hashable {
+struct Dream: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let date: Date
     let rawTranscript: String
@@ -45,7 +46,7 @@ struct Dream: Identifiable, Codable, Hashable {
     }
 }
 
-// 2. Dream Insight (Renamed from DreamAnalysis to match user snippet)
+// 2. Dream Insight (Generable)
 struct DreamInsight: Codable, Sendable {
     @Guide(description: "The primary emotion felt during the dream.")
     var emotion: String = ""
@@ -69,7 +70,29 @@ struct DreamInsight: Codable, Sendable {
     init() {}
 }
 
-// 3. Therapeutic Insight
+// 3. Entity Extraction (Generable)
+struct DreamEntities: Codable, Sendable {
+    @Guide(description: "List of people identified in the dream.")
+    var people: [String] = []
+    
+    @Guide(description: "List of places identified.")
+    var places: [String] = []
+    
+    @Guide(description: "List of distinct emotions felt or described.")
+    var emotions: [String] = []
+    
+    @Guide(description: "List of significant symbols or objects.")
+    var keyEntities: [String] = []
+    
+    init(people: [String] = [], places: [String] = [], emotions: [String] = [], keyEntities: [String] = []) {
+        self.people = people
+        self.places = places
+        self.emotions = emotions
+        self.keyEntities = keyEntities
+    }
+}
+
+// 4. Therapeutic Insight (Generable)
 struct TherapeuticInsight: Identifiable, Codable, Sendable {
     var id: UUID = UUID()
     
@@ -77,7 +100,7 @@ struct TherapeuticInsight: Identifiable, Codable, Sendable {
     var title: String = ""
     
     @Guide(description: "Observation of the user's recent dream themes.")
-    var observation: String = "" // Keeping 'observation' to match UI usage, can map to 'description' if needed
+    var observation: String = ""
     
     @Guide(description: "Suggestion for the user.")
     var suggestion: String = ""
@@ -91,8 +114,26 @@ struct TherapeuticInsight: Identifiable, Codable, Sendable {
     init() {}
 }
 
-// 4. Checklist Item
-struct ChecklistItem: Identifiable, Hashable {
+// 5. Image Prompt (Generable)
+public struct ImagePrompt: Codable, Sendable {
+    @Guide(description: "A vivid visual description for the image generator.")
+    public var visualDescription: String = ""
+    
+    @Guide(description: "Keywords defining the mood.")
+    public var moodKeywords: String = ""
+    
+    @Guide(description: "Color palette suggestions.")
+    public var colorPalette: String = ""
+    
+    public init(visualDescription: String = "", moodKeywords: String = "", colorPalette: String = "") {
+        self.visualDescription = visualDescription
+        self.moodKeywords = moodKeywords
+        self.colorPalette = colorPalette
+    }
+}
+
+// 6. Checklist Item
+struct ChecklistItem: Identifiable, Hashable, Sendable {
     let id = UUID()
     let question: String
     let keywords: [String]
@@ -100,7 +141,7 @@ struct ChecklistItem: Identifiable, Hashable {
     var triggerKeywords: [String] = []
 }
 
-// 5. Image Creator Support
+// 7. Image Creator Support
 enum ImageStyle: String, Codable {
     case animation, illustration, sketch, photo
 }
@@ -131,25 +172,5 @@ class ImageCreator {
         }
         
         return (image.jpegData(compressionQuality: 0.8), hex)
-    }
-}
-
-// 6. Intelligence Service Helper
-class IntelligenceService {
-    static func extractEntities(text: String, existingTags: [String]) -> [String] {
-        let words = text.components(separatedBy: .punctuationCharacters).joined().components(separatedBy: .whitespaces)
-        return Array(Set(words.filter { $0.count > 4 && $0.first?.isUppercase == true })).prefix(5).sorted()
-    }
-    
-    static func extractPeople(from text: String) -> [String] {
-        ["mom", "dad", "friend", "brother", "sister"].filter { text.lowercased().contains($0) }
-    }
-    
-    static func extractPlaces(from text: String) -> [String] {
-        ["home", "school", "work", "beach", "forest"].filter { text.lowercased().contains($0) }
-    }
-    
-    static func extractEmotions(from text: String) -> [String] {
-        ["happy", "sad", "scared", "anxious", "calm"].filter { text.lowercased().contains($0) }
     }
 }

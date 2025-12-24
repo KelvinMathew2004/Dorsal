@@ -14,8 +14,36 @@ struct RecordView: View {
                     
                     // MARK: - Smart Checklist / Prompt Overlay
                     if store.isRecording {
-                        ChecklistOverlay(store: store)
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                        if store.activeQuestion == nil {
+                            // ENCOURAGING TEXT (All questions answered)
+                            VStack(spacing: 12) {
+                                Image(systemName: "mic.circle.fill")
+                                    .font(.system(size: 50))
+                                    .foregroundStyle(.green)
+                                    .symbolEffect(.pulse)
+                                
+                                Text("Listening...")
+                                    .font(.title2.bold())
+                                    .foregroundStyle(.white)
+                                
+                                Text("You're doing great. Describe any other details you remember.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white.opacity(0.8))
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(24)
+                            .frame(maxWidth: .infinity)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 24)
+                                    .stroke(Color.green.opacity(0.5), lineWidth: 2)
+                            )
+                            .padding(.horizontal, 30)
+                            .transition(.scale.combined(with: .opacity))
+                        } else {
+                            ChecklistOverlay(store: store)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
                     } else {
                         // Welcome State
                         VStack(spacing: 16) {
@@ -46,7 +74,6 @@ struct RecordView: View {
                     
                     // MARK: - Controls
                     HStack(spacing: 40) {
-                        // PAUSE BUTTON (Restored)
                         if store.isRecording {
                             Button {
                                 store.pauseRecording()
@@ -65,9 +92,7 @@ struct RecordView: View {
                             .transition(.scale.combined(with: .opacity))
                         }
                         
-                        // RECORD / STOP BUTTON
                         ZStack {
-                            // Pulse Effect
                             if store.isRecording && !store.isPaused {
                                 Circle()
                                     .stroke(Theme.accent.opacity(0.3), lineWidth: 2)
@@ -102,7 +127,6 @@ struct RecordView: View {
                             .disabled(store.isProcessing)
                         }
                         
-                        // CANCEL BUTTON (Hidden initially)
                         if store.isRecording {
                             Button {
                                 store.stopRecording(save: false)
@@ -145,6 +169,12 @@ struct RecordView: View {
             } message: {
                 Text(store.permissionError ?? "Please enable microphone access in settings.")
             }
+            // Reset logic: ensure path is clear when entering this tab
+            .onChange(of: store.selectedTab) { newValue in
+                if newValue == 0 {
+                    store.navigationPath = NavigationPath()
+                }
+            }
         }
     }
 }
@@ -158,43 +188,64 @@ struct ChecklistOverlay: View {
         VStack(spacing: 16) {
             if let question = store.activeQuestion {
                 VStack(spacing: 12) {
-                    Text(question.question)
-                        .font(.title3.weight(.semibold))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.white)
-                        .id(question.id)
-                        .transition(.push(from: .bottom))
+                    HStack {
+                        Text(question.question)
+                            .font(.title3.weight(.semibold))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(store.isQuestionSatisfied ? .green : .white)
+                            .fixedSize(horizontal: false, vertical: true)
+                        
+                        if store.isQuestionSatisfied {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .id(question.id)
+                    .transition(.push(from: .bottom))
                     
-                    // DYNAMIC RECOMMENDATIONS
-                    // We check if the question relates to people/places and show past data
-                    if !store.getRecommendations(for: question).isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack {
-                                ForEach(store.getRecommendations(for: question), id: \.self) { item in
-                                    Text(item)
-                                        .font(.caption)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
-                                        .background(Color.white.opacity(0.15), in: Capsule())
-                                        .foregroundStyle(.white.opacity(0.9))
+                    // DYNAMIC RECOMMENDATIONS with Better Centering Logic
+                    let recommendations = store.getRecommendations(for: question)
+                    
+                    if !recommendations.isEmpty {
+                        // Using a GeometryReader to determine if we should scroll or just center
+                        GeometryReader { geometry in
+                            let totalWidth = recommendations.reduce(0) { $0 + CGFloat($1.count * 8 + 30) } // Rough estimate
+                            
+                            if totalWidth < geometry.size.width {
+                                // Content fits -> Center it without scrolling
+                                HStack(spacing: 8) {
+                                    Spacer()
+                                    ForEach(recommendations, id: \.self) { item in
+                                        RecommendationPill(text: item.capitalized)
+                                    }
+                                    Spacer()
+                                }
+                            } else {
+                                // Content overflows -> Scrollable
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(recommendations, id: \.self) { item in
+                                            RecommendationPill(text: item.capitalized)
+                                        }
+                                    }
+                                    .padding(.horizontal, 20)
                                 }
                             }
                         }
                         .frame(height: 30)
                     } else {
-                        // Fallback generic keywords if no history
-                        HStack {
+                        // Fallback generic keywords
+                        HStack(alignment: .center, spacing: 8) {
                             ForEach(question.keywords.prefix(3), id: \.self) { keyword in
-                                Text(keyword)
-                                    .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.white.opacity(0.2), in: Capsule())
+                                RecommendationPill(text: keyword.capitalized)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
                 .padding(24)
+                .frame(maxWidth: .infinity)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
                 .overlay(
                     RoundedRectangle(cornerRadius: 24)
@@ -208,16 +259,28 @@ struct ChecklistOverlay: View {
     }
 }
 
+struct RecommendationPill: View {
+    let text: String
+    
+    var body: some View {
+        Text(text)
+            .font(.caption)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.white.opacity(0.15), in: Capsule())
+            .foregroundStyle(.white.opacity(0.9))
+    }
+}
+
 struct AudioVisualizer: View {
     var power: Float
-    let bars = 30 // Increased bar count for better look
+    let bars = 30
     
     var body: some View {
         HStack(spacing: 4) {
             ForEach(0..<bars, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Theme.accent.gradient)
-                    // Create a wave effect by varying height based on index and power
                     .frame(width: 4, height: 10 + (CGFloat(power) * CGFloat.random(in: 10...80)))
                     .animation(.easeInOut(duration: 0.1), value: power)
             }
