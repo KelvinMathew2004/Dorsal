@@ -10,7 +10,7 @@ import AppleProductTypes
 let package = Package(
     name: "Dorsal",
     platforms: [
-        .iOS("18.1")
+        .iOS("26.0")
     ],
     products: [
         .iOSApplication(
@@ -33,8 +33,8 @@ let package = Package(
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
             ],
             capabilities: [
-                .microphone(purposeString: "Enable the ability to record your dreams"),
-                .speechRecognition(purposeString: "To analyze the recordings and generate transcripts")
+                .microphone(purposeString: "We need your microphone to record dreams"),
+                .speechRecognition(purposeString: "We need speech recognition to transcribe dreams")
             ],
             appCategory: .healthcareFitness
         )
