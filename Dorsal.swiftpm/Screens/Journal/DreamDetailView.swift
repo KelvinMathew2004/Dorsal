@@ -63,7 +63,7 @@ struct DreamImageHeader: View {
             HStack(spacing: 6) {
                 Image(systemName: "apple.intelligence")
                     .symbolEffect(.pulse)
-                Text("Foundation Models")
+                Text("Dream Visualizer")
                     .font(.caption.weight(.semibold))
             }
             .padding(.horizontal, 12)
@@ -82,67 +82,76 @@ struct DreamContextSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            
+
             // People
             if !dream.people.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(dream.people, id: \.self) { person in
-                            Button { store.jumpToFilter(type: "person", value: person) } label: {
-                                Label(person, systemImage: "person.fill")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.blue.opacity(0.2), in: Capsule())
-                                    .foregroundStyle(.blue)
-                                    .overlay(Capsule().stroke(Color.blue.opacity(0.4), lineWidth: 1))
+                    GlassEffectContainer {
+                        HStack {
+                            ForEach(dream.people, id: \.self) { person in
+                                Button {
+                                    store.jumpToFilter(type: "person", value: person)
+                                } label: {
+                                    Label(person, systemImage: "person.fill")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.blue)
+                                }
+                                .tint(.blue.opacity(0.2))
+                                .buttonStyle(.glassProminent)
                             }
                         }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
+                .scrollClipDisabled()
             }
-            
+
             // Places
             if !dream.places.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(dream.places, id: \.self) { place in
-                            Button { store.jumpToFilter(type: "place", value: place) } label: {
-                                Label(place, systemImage: "map.fill")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.green.opacity(0.2), in: Capsule())
-                                    .foregroundStyle(.green)
-                                    .overlay(Capsule().stroke(Color.green.opacity(0.4), lineWidth: 1))
+                    GlassEffectContainer {
+                        HStack {
+                            ForEach(dream.places, id: \.self) { place in
+                                Button {
+                                    store.jumpToFilter(type: "place", value: place)
+                                } label: {
+                                    Label(place, systemImage: "map.fill")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.green)
+                                }
+                                .tint(.green.opacity(0.2))
+                                .buttonStyle(.glassProminent)
                             }
                         }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
+                .scrollClipDisabled()
             }
-            
+
             // Emotions
             if !dream.emotions.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(dream.emotions, id: \.self) { emotion in
-                            Button { store.jumpToFilter(type: "emotion", value: emotion) } label: {
-                                Label(emotion, systemImage: "heart.fill")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.pink.opacity(0.2), in: Capsule())
-                                    .foregroundStyle(.pink)
-                                    .overlay(Capsule().stroke(Color.pink.opacity(0.4), lineWidth: 1))
+                    GlassEffectContainer {
+                        HStack {
+                            ForEach(dream.emotions, id: \.self) { emotion in
+                                Button {
+                                    store.jumpToFilter(type: "emotion", value: emotion)
+                                } label: {
+                                    Label(emotion, systemImage: "heart.fill")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.pink)
+                                }
+                                .tint(.pink.opacity(0.2))
+                                .buttonStyle(.glassProminent)
                             }
                         }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
+                .scrollClipDisabled()
             }
-            
+
             // Tags / Symbols
             if !dream.keyEntities.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -150,16 +159,20 @@ struct DreamContextSection: View {
                         .font(.caption.bold())
                         .foregroundStyle(.secondary)
                         .padding(.horizontal)
-                    
-                    FlowLayout {
-                        ForEach(dream.keyEntities, id: \.self) { tag in
-                            Button(tag) { store.jumpToFilter(type: "tag", value: tag) }
-                                .buttonStyle(.bordered)
-                                .tint(.secondary)
-                                .clipShape(Capsule())
+
+                    GlassEffectContainer {
+                        FlowLayout {
+                            ForEach(dream.keyEntities, id: \.self) { tag in
+                                Button(tag) {
+                                    store.jumpToFilter(type: "tag", value: tag)
+                                }
+                                .buttonStyle(.glassProminent)
+                                .foregroundColor(.secondary)
+                                .tint(.secondary.opacity(0.2))
+                            }
                         }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
             }
         }
@@ -180,7 +193,7 @@ struct DreamDeepAnalysisCard: View {
                     .font(.caption.bold())
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.1), in: Capsule())
+                    .glassEffect(.regular.tint(Color.white.opacity(0.1)))
             }
             
             Text(dream.interpretation)
@@ -202,8 +215,7 @@ struct DreamDeepAnalysisCard: View {
                 .foregroundStyle(.secondary)
         }
         .padding(24)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
-        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 1))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .padding(.horizontal)
     }
 }
@@ -219,15 +231,12 @@ struct DreamAdviceCard: View {
             
             Text(dream.actionableAdvice)
                 .font(.callout)
-                .foregroundStyle(.white)
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.green.opacity(0.3), lineWidth: 1))
+                .glassEffect(.regular.tint(Color.green.opacity(0.1)), in: RoundedRectangle(cornerRadius: 16))
         }
         .padding(24)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
-        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 1))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .padding(.horizontal)
     }
 }
@@ -262,8 +271,7 @@ struct VoiceAnalysisCard: View {
             }
         }
         .padding(24)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
-        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 1))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .padding(.horizontal)
     }
 }
@@ -283,8 +291,7 @@ struct DreamTranscriptSection: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(24)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
-        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 1))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .padding(.horizontal)
     }
 }

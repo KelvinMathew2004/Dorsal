@@ -19,6 +19,7 @@ struct HistoryView: View {
                         ActiveFiltersView(store: store)
                             .padding(.horizontal)
                             .padding(.bottom, 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     
                     // List
@@ -52,11 +53,15 @@ struct HistoryView: View {
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
+                                    .labelStyle(.iconOnly)
+                                    .tint(.red)
                                 }
                             }
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        // This ensures the rows animate smoothly when filtered
+                        .animation(.default, value: store.filteredDreams)
                     }
                 }
             }
@@ -84,16 +89,28 @@ struct FilterBar: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 // Dropdowns with ICON ONLY (empty title string) as requested
-                FilterDropdown(title: "", icon: "person.2", options: store.allPeople, selected: store.activeFilter.people) { store.togglePersonFilter($0) }
-                FilterDropdown(title: "", icon: "map", options: store.allPlaces, selected: store.activeFilter.places) { store.togglePlaceFilter($0) }
-                FilterDropdown(title: "", icon: "heart", options: store.allEmotions, selected: store.activeFilter.emotions) { store.toggleEmotionFilter($0) }
-                FilterDropdown(title: "", icon: "tag", options: store.allTags, selected: store.activeFilter.tags) { store.toggleTagFilter($0) }
+                // Wrapped in withAnimation for smooth list transitions
+                FilterDropdown(title: "", icon: "person.2", options: store.allPeople, selected: store.activeFilter.people) { item in
+                    withAnimation { store.togglePersonFilter(item) }
+                }
+                FilterDropdown(title: "", icon: "map", options: store.allPlaces, selected: store.activeFilter.places) { item in
+                    withAnimation { store.togglePlaceFilter(item) }
+                }
+                FilterDropdown(title: "", icon: "heart", options: store.allEmotions, selected: store.activeFilter.emotions) { item in
+                    withAnimation { store.toggleEmotionFilter(item) }
+                }
+                FilterDropdown(title: "", icon: "tag", options: store.allTags, selected: store.activeFilter.tags) { item in
+                    withAnimation { store.toggleTagFilter(item) }
+                }
                 
                 if !store.activeFilter.isEmpty {
-                    Button("Clear", role: .destructive) { withAnimation { store.clearFilter() } }
+                    Button("Clear", role: .destructive) {
+                        withAnimation { store.clearFilter() }
+                    }
                     .font(.caption.bold())
-                    .buttonStyle(.bordered)
-                    .tint(.red)
+                    .foregroundColor(.red)
+                    .tint(.red.opacity(0.2))
+                    .buttonStyle(.glassProminent)
                 }
             }
             .padding(.vertical, 4)
@@ -127,8 +144,6 @@ struct FilterDropdown: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-//            .background(.ultraThinMaterial, in: Capsule())
-//            .overlay(Capsule().stroke(.white.opacity(0.1), lineWidth: 1))
             .glassEffect(.regular)
         }
         .menuActionDismissBehavior(.disabled)
@@ -139,10 +154,19 @@ struct ActiveFiltersView: View {
     @ObservedObject var store: DreamStore
     var body: some View {
         FlowLayout {
-            ForEach(Array(store.activeFilter.people), id: \.self) { item in RemovablePill(text: item, icon: "person.fill", color: .blue) { store.togglePersonFilter(item) } }
-            ForEach(Array(store.activeFilter.places), id: \.self) { item in RemovablePill(text: item, icon: "map.fill", color: .green) { store.togglePlaceFilter(item) } }
-            ForEach(Array(store.activeFilter.emotions), id: \.self) { item in RemovablePill(text: item, icon: "heart.fill", color: .pink) { store.toggleEmotionFilter(item) } }
-            ForEach(Array(store.activeFilter.tags), id: \.self) { item in RemovablePill(text: item, icon: "tag.fill", color: .purple) { store.toggleTagFilter(item) } }
+            // Wrapped removal actions in withAnimation
+            ForEach(Array(store.activeFilter.people), id: \.self) { item in
+                RemovablePill(text: item, icon: "person.fill", color: .blue) { withAnimation { store.togglePersonFilter(item) } }
+            }
+            ForEach(Array(store.activeFilter.places), id: \.self) { item in
+                RemovablePill(text: item, icon: "map.fill", color: .green) { withAnimation { store.togglePlaceFilter(item) } }
+            }
+            ForEach(Array(store.activeFilter.emotions), id: \.self) { item in
+                RemovablePill(text: item, icon: "heart.fill", color: .pink) { withAnimation { store.toggleEmotionFilter(item) } }
+            }
+            ForEach(Array(store.activeFilter.tags), id: \.self) { item in
+                RemovablePill(text: item, icon: "tag.fill", color: .purple) { withAnimation { store.toggleTagFilter(item) } }
+            }
         }
     }
 }
@@ -152,12 +176,10 @@ struct RemovablePill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) { Image(systemName: icon).font(.caption); Text(text).font(.caption.bold()); Image(systemName: "xmark").font(.caption2) }
-                .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 8)
-//                .background(color.opacity(0.3), in: Capsule())
-//                .overlay(Capsule().stroke(color.opacity(0.5), lineWidth: 1))
+                .foregroundStyle(.white)
         }
         .buttonStyle(.glassProminent)
-        .tint(color)
+        .tint(color.opacity(0.3))
     }
 }
 
@@ -178,7 +200,6 @@ struct DreamRow: View {
             Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
         }
         .padding(16)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.1), lineWidth: 1))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
     }
 }

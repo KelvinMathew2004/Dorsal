@@ -104,7 +104,7 @@ struct SentimentChart: View {
             }
         }
         .padding(24)
-        content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
             .padding(.horizontal)
     }
 }
@@ -115,13 +115,17 @@ struct RecurringThemes: View {
     var body: some View {
         VStack(alignment: .leading) {
             Text("Recurring Symbols").font(.headline).foregroundStyle(.secondary).padding(.horizontal)
-            FlowLayout {
-                ForEach(tags, id: \.self) { tag in
-                    Button(tag) { onSelect(tag) }
-                        .buttonStyle(.bordered).tint(.secondary).clipShape(Capsule())
+            GlassEffectContainer {
+                FlowLayout {
+                    ForEach(tags, id: \.self) { tag in
+                        Button(tag) { onSelect(tag) }
+                        .buttonStyle(.glassProminent)
+                        .foregroundColor(.secondary)
+                        .tint(.secondary.opacity(0.2))
+                    }
                 }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
         }
     }
 }

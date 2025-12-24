@@ -7,19 +7,19 @@ struct ContentView: View {
         TabView(selection: $store.selectedTab) {
             RecordView(store: store)
                 .tabItem {
-                    Label("Record", systemImage: "mic.fill")
+                    Label("Record", systemImage: "sparkles")
                 }
                 .tag(0)
             
             HistoryView(store: store)
                 .tabItem {
-                    Label("Journal", systemImage: "book.fill")
+                    Label("Journal", systemImage: "book.pages.fill")
                 }
                 .tag(1)
             
             StatsView(store: store)
                 .tabItem {
-                    Label("Insights", systemImage: "chart.bar.fill")
+                    Label("Insights", systemImage: "chart.xyaxis.line")
                 }
                 .tag(2)
         }
