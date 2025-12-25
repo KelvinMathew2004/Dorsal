@@ -65,20 +65,22 @@ struct StatCard: View {
     let color: Color
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) { // Increased spacing
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(color)
-                .padding(8)
+                .frame(width: 44, height: 44) // Fixed frame for alignment
                 .background(color.opacity(0.15), in: Circle())
             
-            Text(value)
-                .font(.title.bold())
-                .foregroundStyle(.white)
-            
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
+            VStack(alignment: .leading, spacing: 4) { // Tight spacing for text
+                Text(value)
+                    .font(.title.bold())
+                    .foregroundStyle(.white)
+                
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()

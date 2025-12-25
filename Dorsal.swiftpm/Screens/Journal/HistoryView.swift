@@ -24,13 +24,17 @@ struct HistoryView: View {
                     
                     // List
                     if store.filteredDreams.isEmpty {
-                        ContentUnavailableView(
-                            "No Dreams Found",
-                            systemImage: "moon.zzz",
-                            description: Text("Try adjusting your filters or recording a new dream.")
-                        )
-                        .padding(.top, 50)
-                        Spacer()
+                        VStack(spacing: 20) {
+                            Color.clear.frame(height: 10)
+                            
+                            ContentUnavailableView(
+                                "No Dreams Found",
+                                systemImage: "moon.zzz",
+                                description: Text("Try adjusting your filters or recording a new dream.")
+                            )
+                            
+                            Spacer()
+                        }
                     } else {
                         List {
                             ForEach(store.filteredDreams) { dream in
@@ -60,7 +64,6 @@ struct HistoryView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
-                        // This ensures the rows animate smoothly when filtered
                         .animation(.default, value: store.filteredDreams)
                     }
                 }
@@ -81,36 +84,23 @@ struct HistoryView: View {
 }
 
 // MARK: - Subviews
-
+// (Keeping existing definitions intact)
 struct FilterBar: View {
     @ObservedObject var store: DreamStore
-    
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-                // Dropdowns with ICON ONLY (empty title string) as requested
-                // Wrapped in withAnimation for smooth list transitions
-                FilterDropdown(title: "", icon: "person.2", options: store.allPeople, selected: store.activeFilter.people) { item in
-                    withAnimation { store.togglePersonFilter(item) }
-                }
-                FilterDropdown(title: "", icon: "map", options: store.allPlaces, selected: store.activeFilter.places) { item in
-                    withAnimation { store.togglePlaceFilter(item) }
-                }
-                FilterDropdown(title: "", icon: "heart", options: store.allEmotions, selected: store.activeFilter.emotions) { item in
-                    withAnimation { store.toggleEmotionFilter(item) }
-                }
-                FilterDropdown(title: "", icon: "tag", options: store.allTags, selected: store.activeFilter.tags) { item in
-                    withAnimation { store.toggleTagFilter(item) }
-                }
+                FilterDropdown(title: "", icon: "person.2", options: store.allPeople, selected: store.activeFilter.people) { item in withAnimation { store.togglePersonFilter(item) } }
+                FilterDropdown(title: "", icon: "map", options: store.allPlaces, selected: store.activeFilter.places) { item in withAnimation { store.togglePlaceFilter(item) } }
+                FilterDropdown(title: "", icon: "heart", options: store.allEmotions, selected: store.activeFilter.emotions) { item in withAnimation { store.toggleEmotionFilter(item) } }
+                FilterDropdown(title: "", icon: "tag", options: store.allTags, selected: store.activeFilter.tags) { item in withAnimation { store.toggleTagFilter(item) } }
                 
                 if !store.activeFilter.isEmpty {
-                    Button("Clear", role: .destructive) {
-                        withAnimation { store.clearFilter() }
-                    }
-                    .font(.caption.bold())
-                    .foregroundColor(.red)
-                    .tint(.red.opacity(0.2))
-                    .buttonStyle(.glassProminent)
+                    Button("Clear", role: .destructive) { withAnimation { store.clearFilter() } }
+                        .font(.caption.bold())
+                        .foregroundColor(.red)
+                        .tint(.red.opacity(0.2))
+                        .buttonStyle(.glassProminent)
                 }
             }
             .padding(.vertical, 4)
@@ -119,12 +109,7 @@ struct FilterBar: View {
 }
 
 struct FilterDropdown: View {
-    let title: String
-    let icon: String
-    let options: [String]
-    let selected: Set<String>
-    let onSelect: (String) -> Void
-    
+    let title: String; let icon: String; let options: [String]; let selected: Set<String>; let onSelect: (String) -> Void
     var body: some View {
         Menu {
             ForEach(options, id: \.self) { option in
@@ -132,21 +117,16 @@ struct FilterDropdown: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.body)
-                if !title.isEmpty {
-                    Text(title)
-                }
-                Image(systemName: "chevron.down")
-                    .font(.caption2)
+                Image(systemName: icon).font(.body)
+                if !title.isEmpty { Text(title) }
+                Image(systemName: "chevron.down").font(.caption2)
             }
             .font(.subheadline.bold())
             .foregroundStyle(.white)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .glassEffect(.regular)
+            .glassEffect(.regular, in: Capsule())
         }
-        .menuActionDismissBehavior(.disabled)
     }
 }
 
@@ -154,19 +134,10 @@ struct ActiveFiltersView: View {
     @ObservedObject var store: DreamStore
     var body: some View {
         FlowLayout {
-            // Wrapped removal actions in withAnimation
-            ForEach(Array(store.activeFilter.people), id: \.self) { item in
-                RemovablePill(text: item, icon: "person.fill", color: .blue) { withAnimation { store.togglePersonFilter(item) } }
-            }
-            ForEach(Array(store.activeFilter.places), id: \.self) { item in
-                RemovablePill(text: item, icon: "map.fill", color: .green) { withAnimation { store.togglePlaceFilter(item) } }
-            }
-            ForEach(Array(store.activeFilter.emotions), id: \.self) { item in
-                RemovablePill(text: item, icon: "heart.fill", color: .pink) { withAnimation { store.toggleEmotionFilter(item) } }
-            }
-            ForEach(Array(store.activeFilter.tags), id: \.self) { item in
-                RemovablePill(text: item, icon: "tag.fill", color: .purple) { withAnimation { store.toggleTagFilter(item) } }
-            }
+            ForEach(Array(store.activeFilter.people), id: \.self) { item in RemovablePill(text: item, icon: "person.fill", color: .blue) { withAnimation { store.togglePersonFilter(item) } } }
+            ForEach(Array(store.activeFilter.places), id: \.self) { item in RemovablePill(text: item, icon: "map.fill", color: .green) { withAnimation { store.togglePlaceFilter(item) } } }
+            ForEach(Array(store.activeFilter.emotions), id: \.self) { item in RemovablePill(text: item, icon: "heart.fill", color: .pink) { withAnimation { store.toggleEmotionFilter(item) } } }
+            ForEach(Array(store.activeFilter.tags), id: \.self) { item in RemovablePill(text: item, icon: "tag.fill", color: .purple) { withAnimation { store.toggleTagFilter(item) } } }
         }
     }
 }
@@ -190,7 +161,7 @@ struct DreamRow: View {
             if let imageData = dream.generatedImageData, let uiImage = UIImage(data: imageData) {
                 Image(uiImage: uiImage).resizable().aspectRatio(contentMode: .fill).frame(width: 50, height: 50).clipShape(RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1)))
             } else {
-                RoundedRectangle(cornerRadius: 12).fill(Color(hex: dream.generatedImageHex ?? "#333").gradient).frame(width: 50, height: 50).overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1)))
+                RoundedRectangle(cornerRadius: 12).fill(Color.gray.gradient).frame(width: 50, height: 50).overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1)))
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(dream.date.formatted(date: .abbreviated, time: .shortened)).font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)

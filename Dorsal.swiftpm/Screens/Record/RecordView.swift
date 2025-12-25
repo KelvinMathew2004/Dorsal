@@ -1,10 +1,14 @@
 import SwiftUI
+import FoundationModels
 
 struct RecordView: View {
     @ObservedObject var store: DreamStore
     @State private var showRipple = false
-    
     @Namespace private var namespace
+    
+    private let model = SystemLanguageModel.default
+    @State private var showAvailabilityAlert = false
+    @State private var availabilityMessage = ""
     
     var body: some View {
         NavigationStack(path: $store.navigationPath) {
@@ -14,10 +18,10 @@ struct RecordView: View {
                 VStack {
                     Spacer()
                     
-                    // MARK: - Smart Checklist / Prompt Overlay
+                    // MARK: - Prompts
                     if store.isRecording {
                         if store.activeQuestion == nil {
-                            // ENCOURAGING TEXT (All questions answered)
+                            // ENCOURAGING TEXT
                             VStack(spacing: 12) {
                                 Image(systemName: "mic.circle.fill")
                                     .font(.system(size: 50))
@@ -43,8 +47,12 @@ struct RecordView: View {
                             .padding(.horizontal, 30)
                             .transition(.scale.combined(with: .opacity))
                         } else {
+                            // QUESTIONS
                             ChecklistOverlay(store: store)
-                                .transition(.move(edge: .top).combined(with: .opacity))
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                ))
                         }
                     } else {
                         // Welcome State
@@ -72,15 +80,14 @@ struct RecordView: View {
                             .frame(height: 100)
                             .padding(.bottom, 40)
                             .opacity(store.isPaused ? 0.5 : 1.0)
+                            .animation(.linear(duration: 0.1), value: store.audioPower)
                     }
                     
                     // MARK: - Controls
-                    // Restored GlassEffectContainer for the "capsule" look
                     GlassEffectContainer(spacing: 0) {
-                        // Dynamic spacing: buttons get closer (20) when paused, further (40) when recording
                         HStack(spacing: store.isPaused ? 20 : 40) {
                             
-                            // 1. Pause Button (Left)
+                            // 1. Pause Button
                             if store.isRecording {
                                 Button {
                                     store.pauseRecording()
@@ -96,13 +103,9 @@ struct RecordView: View {
                                 .glassEffectID("pauseButton", in: namespace)
                             }
                             
-                            // 2. Main Record/Stop Button (Center)
+                            // 2. Record/Stop
                             Button {
-                                if store.isRecording {
-                                    store.stopRecording(save: true)
-                                } else {
-                                    store.startRecording()
-                                }
+                                handleRecordButtonTap()
                             } label: {
                                 Image(systemName: store.isRecording ? "stop.fill" : "mic.fill")
                                     .contentTransition(.symbolEffect(.replace))
@@ -110,9 +113,8 @@ struct RecordView: View {
                             }
                             .font(.title)
                             .foregroundStyle(.white)
-                            .frame(width: 80, height: 80) // Fixed layout size prevents jumping
+                            .frame(width: 80, height: 80)
                             .background {
-                                // Ripple in background: visible but doesn't affect layout flow
                                 if store.isRecording && !store.isPaused {
                                     Circle()
                                         .stroke(.red.opacity(0.5), lineWidth: 2)
@@ -131,7 +133,7 @@ struct RecordView: View {
                             .disabled(store.isProcessing)
                             .glassEffectID("recordButton", in: namespace)
                             
-                            // 3. Cancel Button (Right)
+                            // 3. Cancel
                             if store.isRecording {
                                 Button {
                                     store.stopRecording(save: false)
@@ -147,7 +149,6 @@ struct RecordView: View {
                             }
                         }
                     }
-                    // Dynamic padding: Moves the controls up (80) when recording actively, settles down (40) when paused or idle
                     .padding(.bottom, (store.isRecording && !store.isPaused) ? 80 : 40)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isRecording)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isPaused)
@@ -168,17 +169,40 @@ struct RecordView: View {
             .navigationDestination(for: Dream.self) { dream in
                 DreamDetailView(store: store, dream: dream)
             }
-            .alert("Microphone Access", isPresented: $store.showPermissionAlert) {
-                Button("Open Settings", role: .none) { store.openSettings() }
-                Button("Cancel", role: .cancel) { }
+            .alert("Feature Unavailable", isPresented: $showAvailabilityAlert) {
+                Button("OK", role: .cancel) { }
             } message: {
-                Text(store.permissionError ?? "Please enable microphone access in settings.")
+                Text(availabilityMessage)
             }
-            // Reset logic: ensure path is clear when entering this tab
             .onChange(of: store.selectedTab) { newValue in
                 if newValue == 0 {
                     store.navigationPath = NavigationPath()
                 }
+            }
+        }
+    }
+    
+    func handleRecordButtonTap() {
+        if store.isRecording {
+            store.stopRecording(save: true)
+        } else {
+            switch model.availability {
+            case .available:
+                store.startRecording()
+            case .unavailable(let reason):
+                switch reason {
+                case .appleIntelligenceNotEnabled:
+                    availabilityMessage = "This feature requires Apple Intelligence to be enabled in Settings."
+                case .modelNotReady:
+                    availabilityMessage = "The on-device model isn't ready yet. Please try again later."
+                case .deviceNotEligible:
+                    availabilityMessage = "Your device doesn’t support this feature."
+                @unknown default:
+                    availabilityMessage = "Foundation Models are currently unavailable."
+                }
+                showAvailabilityAlert = true
+            @unknown default:
+                store.startRecording()
             }
         }
     }
@@ -194,12 +218,14 @@ struct ChecklistOverlay: View {
             if let question = store.activeQuestion {
                 QuestionCard(
                     questionText: question.question,
-                    keywords: question.keywords,
                     isSatisfied: store.isQuestionSatisfied,
                     recommendations: store.getRecommendations(for: question)
                 )
                 .id(question.id)
-                .transition(.push(from: .bottom))
+                .transition(.asymmetric(
+                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
             }
         }
     }
@@ -207,7 +233,6 @@ struct ChecklistOverlay: View {
 
 private struct QuestionCard: View {
     let questionText: String
-    let keywords: [String]
     let isSatisfied: Bool
     let recommendations: [String]
     
@@ -227,69 +252,70 @@ private struct QuestionCard: View {
                 }
             }
             
-            // DYNAMIC RECOMMENDATIONS with Better Centering Logic
             if !recommendations.isEmpty {
-                // Using a GeometryReader to determine if we should scroll or just center
-                GeometryReader { geometry in
-                    let totalWidth = recommendations.reduce(0) { $0 + CGFloat($1.count * 8 + 30) } // Rough estimate
-                    
-                    if totalWidth < geometry.size.width {
-                        // Content fits -> Center it without scrolling
-                        HStack(spacing: 8) {
-                            Spacer()
-                            ForEach(recommendations, id: \.self) { item in
-                                RecommendationPill(text: item.capitalized)
-                            }
-                            Spacer()
-                        }
-                    } else {
-                        // Content overflows -> Scrollable
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(recommendations, id: \.self) { item in
-                                    RecommendationPill(text: item.capitalized)
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                        }
-                    }
-                }
-                .frame(height: 30)
-            } else {
-                // Fallback generic keywords
-                HStack(alignment: .center, spacing: 8) {
-                    ForEach(keywords.prefix(3), id: \.self) { keyword in
-                        RecommendationPill(text: keyword.capitalized)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
+                // Simplified to standard wrapped HStacks for robustness and centering
+                // This replaces the complex flow layout that was causing alignment issues
+                SimpleWrappedPills(items: recommendations)
             }
         }
         .padding(24)
         .frame(maxWidth: .infinity)
-        .glassEffect(.clear.tint(isSatisfied ? Color.green.opacity(0.2) : .clear), in: RoundedRectangle(cornerRadius: 24))
+        .glassEffect(
+            .regular.tint(isSatisfied ? Color.green.opacity(0.15) : .clear),
+            in: RoundedRectangle(cornerRadius: 24)
+        )
         .padding(.horizontal, 30)
         .offset(y: isSatisfied ? -20 : 0)
         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isSatisfied)
     }
 }
 
+// Simple wrapping helper that respects center alignment preference better than standard flow
+struct SimpleWrappedPills: View {
+    let items: [String]
+    
+    var body: some View {
+        // Since we usually have 3-5 items, a simple centered ViewBuilder logic or just FlowLayout
+        // If items < 4, HStack is fine. If more, wrap.
+        if items.count <= 4 {
+            HStack(spacing: 8) {
+                ForEach(items, id: \.self) { item in
+                    RecommendationPill(text: item.capitalized)
+                }
+            }
+        } else {
+            // For >4 items, we split into two rows to ensure centering
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    ForEach(items.prefix(3), id: \.self) { item in
+                        RecommendationPill(text: item.capitalized)
+                    }
+                }
+                HStack(spacing: 8) {
+                    ForEach(items.dropFirst(3), id: \.self) { item in
+                        RecommendationPill(text: item.capitalized)
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct RecommendationPill: View {
     let text: String
-    
     var body: some View {
         Text(text)
             .font(.caption)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .glassEffect(.regular.tint(.secondary.opacity(0.2)))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .glassEffect(.regular.tint(.secondary.opacity(0.2)), in: Capsule())
+            .fixedSize(horizontal: true, vertical: false)
     }
 }
 
 struct AudioVisualizer: View {
     var power: Float
     let bars = 30
-    
     var body: some View {
         HStack(spacing: 4) {
             ForEach(0..<bars, id: \.self) { index in
