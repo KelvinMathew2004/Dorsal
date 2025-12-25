@@ -6,11 +6,11 @@ struct StatsView: View {
     
     // Computed Metrics
     var totalDreams: Int { store.dreams.count }
-    var positiveDreams: Int { store.dreams.filter { $0.analysis.sentimentScore > 60 }.count }
-    var nightmareCount: Int { store.dreams.filter { $0.analysis.isNightmare }.count }
+    var positiveDreams: Int { store.dreams.filter { ($0.extras?.sentimentScore ?? 50) > 60 }.count }
+    var nightmareCount: Int { store.dreams.filter { $0.extras?.isNightmare ?? false }.count }
     var avgLucidity: Double {
         guard !store.dreams.isEmpty else { return 0 }
-        let total = store.dreams.reduce(0) { $0 + $1.analysis.lucidityScore }
+        let total = store.dreams.reduce(0) { $0 + ($1.extras?.lucidityScore ?? 0) }
         return Double(total) / Double(store.dreams.count)
     }
     var recentFatigue: [Dream] { store.dreams.prefix(7).reversed() }
@@ -22,6 +22,16 @@ struct StatsView: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
+                        
+                        // Header Title (Big, not inline)
+                        HStack {
+                            Text("Insights")
+                                .font(.largeTitle.bold())
+                                .foregroundStyle(.white)
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 20)
                         
                         if store.dreams.isEmpty {
                             ContentUnavailableView(
@@ -41,17 +51,18 @@ struct StatsView: View {
                                     
                                     MagicCard(title: "Period Summary", icon: "calendar", color: .indigo) {
                                         VStack(alignment: .leading, spacing: 12) {
-                                            Text(insights.periodOverview)
+                                            // FIX: Unwrap optionals
+                                            Text(insights.periodOverview ?? "Generating summary...")
                                                 .fixedSize(horizontal: false, vertical: true)
                                             
                                             Divider().background(.white.opacity(0.2))
                                             
                                             HStack {
-                                                Label(insights.dominantTheme, systemImage: "crown.fill")
+                                                Label(insights.dominantTheme ?? "Theme", systemImage: "crown.fill")
                                                     .font(.caption.bold())
                                                     .foregroundStyle(.yellow)
                                                 Spacer()
-                                                Text(insights.mentalHealthTrend)
+                                                Text(insights.mentalHealthTrend ?? "Trend Analysis")
                                                     .font(.caption)
                                                     .foregroundStyle(.white.opacity(0.7))
                                             }
@@ -59,7 +70,7 @@ struct StatsView: View {
                                     }
                                     
                                     MagicCard(title: "Strategic Advice", icon: "lightbulb.fill", color: .yellow) {
-                                        Text(insights.strategicAdvice)
+                                        Text(insights.strategicAdvice ?? "No advice available.")
                                             .italic()
                                     }
                                 }
@@ -79,7 +90,7 @@ struct StatsView: View {
                                 .padding(.horizontal)
                             }
                             
-                            // MARK: - Mental Health Trends (Graph moved up)
+                            // MARK: - Mental Health Trends
                             VStack(alignment: .leading, spacing: 12) {
                                 Label("Mental Health Trends", systemImage: "brain.head.profile")
                                     .font(.headline)
@@ -91,14 +102,14 @@ struct StatsView: View {
                                         ForEach(recentFatigue) { dream in
                                             LineMark(
                                                 x: .value("Date", dream.date, unit: .day),
-                                                y: .value("Anxiety", dream.analysis.anxietyLevel)
+                                                y: .value("Anxiety", dream.extras?.anxietyLevel ?? 0)
                                             )
                                             .foregroundStyle(.pink)
                                             .interpolationMethod(.catmullRom)
                                             
                                             LineMark(
                                                 x: .value("Date", dream.date, unit: .day),
-                                                y: .value("Sentiment", dream.analysis.sentimentScore)
+                                                y: .value("Sentiment", dream.extras?.sentimentScore ?? 50)
                                             )
                                             .foregroundStyle(.green)
                                             .interpolationMethod(.catmullRom)
@@ -115,7 +126,7 @@ struct StatsView: View {
                                 }
                             }
                             
-                            // MARK: - Key Stats (Grid moved down)
+                            // MARK: - Key Stats
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                                 StatCard(title: "Total Entries", value: "\(totalDreams)", icon: "book.fill", color: .blue)
                                 StatCard(title: "Nightmares", value: "\(nightmareCount)", icon: "exclamationmark.triangle.fill", color: .purple)
@@ -136,9 +147,9 @@ struct StatsView: View {
                                         ForEach(recentFatigue) { dream in
                                             BarMark(
                                                 x: .value("Date", dream.date, unit: .day),
-                                                y: .value("Fatigue", dream.analysis.voiceFatigue)
+                                                y: .value("Fatigue", dream.core?.voiceFatigue ?? 0)
                                             )
-                                            .foregroundStyle(gradient(for: dream.analysis.voiceFatigue))
+                                            .foregroundStyle(gradient(for: dream.core?.voiceFatigue ?? 0))
                                         }
                                     }
                                     .frame(height: 180)
@@ -155,8 +166,8 @@ struct StatsView: View {
                                     .padding(.horizontal)
                                 
                                 HStack(spacing: 16) {
-                                    RingView(percentage: Double(avgMetric { $0.vividnessScore }), title: "Vividness", color: .orange)
-                                    RingView(percentage: Double(avgMetric { $0.coherenceScore }), title: "Coherence", color: .teal)
+                                    RingView(percentage: Double(avgMetric { $0.extras?.vividnessScore ?? 0 }), title: "Vividness", color: .orange)
+                                    RingView(percentage: Double(avgMetric { $0.extras?.coherenceScore ?? 0 }), title: "Coherence", color: .teal)
                                 }
                                 .padding(.horizontal)
                             }
@@ -167,8 +178,7 @@ struct StatsView: View {
                     .padding(.top)
                 }
             }
-            .navigationTitle("Insights") // Use standard navigation title
-            .navigationBarTitleDisplayMode(.large) // Ensure it's large
+            .navigationBarHidden(true)
             .onAppear {
                 if store.weeklyInsight == nil && !store.dreams.isEmpty {
                     Task { await store.refreshWeeklyInsights() }
@@ -178,9 +188,9 @@ struct StatsView: View {
     }
     
     // Helpers
-    func avgMetric(_ keyPath: (DreamAnalysisResult) -> Int) -> Int {
+    func avgMetric(_ keyPath: (Dream) -> Int) -> Int {
         guard !store.dreams.isEmpty else { return 0 }
-        let total = store.dreams.reduce(0) { $0 + keyPath($1.analysis) }
+        let total = store.dreams.reduce(0) { $0 + keyPath($1) }
         return total / store.dreams.count
     }
     

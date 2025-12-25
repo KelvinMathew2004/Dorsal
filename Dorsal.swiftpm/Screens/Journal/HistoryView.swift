@@ -24,8 +24,9 @@ struct HistoryView: View {
                     
                     // List
                     if store.filteredDreams.isEmpty {
+                        // NO DREAMS FOUND - FIXED AT TOP
                         VStack(spacing: 20) {
-                            Color.clear.frame(height: 10)
+                            Color.clear.frame(height: 20)
                             
                             ContentUnavailableView(
                                 "No Dreams Found",

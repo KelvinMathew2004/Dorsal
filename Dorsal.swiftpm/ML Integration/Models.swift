@@ -3,154 +3,165 @@ import SwiftUI
 import FoundationModels
 import ImagePlayground
 
-// MARK: - GENERABLE MODELS (FOUNDATION FRAMEWORK)
-
+// MARK: - TIER 1: CORE ANALYSIS
 @Generable
-struct DreamAnalysisResult: Codable, Sendable, Hashable { // Added Hashable
-    
-    @Guide(description: "A concise, engaging title for the dream (3-6 words).")
-    var title: String = ""
+struct DreamCoreAnalysis: Codable, Sendable, Hashable {
+    @Guide(description: "A concise, engaging title for the dream.")
+    var title: String?
     
     @Guide(description: "A 1-2 sentence summary of the dream's narrative flow.")
-    var summary: String = ""
+    var summary: String?
     
-    @Guide(description: "A deep, empathetic psychological interpretation acting as a friendly therapist.")
-    var interpretation: String = ""
+    // Changing 'emotion' to 'primaryEmotion' to clarify vs 'emotions' list if both needed
+    // But user asked for "emotions" list in Core.
+    // I will add 'primaryEmotion' for the single label use case if needed by UI
+    @Guide(description: "The primary emotion felt.")
+    var primaryEmotion: String?
     
-    @Guide(description: "Actionable advice based on the dream's themes.")
-    var actionableAdvice: String = ""
+    @Guide(description: "List of people or characters.")
+    var people: [String]?
     
-    // Entities
-    @Guide(description: "List of people or characters identified.")
-    var people: [String] = []
-    
-    @Guide(description: "List of specific locations or settings.")
-    var places: [String] = []
+    @Guide(description: "List of locations or settings.")
+    var places: [String]?
     
     @Guide(description: "List of distinct emotions felt.")
-    var emotions: [String] = []
+    var emotions: [String]?
     
-    @Guide(description: "List of key objects, animals, or symbols.")
-    var symbols: [String] = []
+    @Guide(description: "List of key symbols, objects, or animals.")
+    var symbols: [String]?
     
-    // MARK: - Advanced Metrics (Mental Health & Sleep)
+    @Guide(description: "A deep, empathetic psychological interpretation.")
+    var interpretation: String?
     
-    @Guide(description: "Analysis of the speaker's tone.")
-    var tone: ToneAnalysis = ToneAnalysis()
+    @Guide(description: "Actionable advice based on the dream's themes.")
+    var actionableAdvice: String?
     
-    @Guide(description: "Voice fatigue level based on speech patterns (0=Fresh, 100=Exhausted).", .range(0...100))
-    var voiceFatigue: Int = 0
+    @Guide(description: "Voice fatigue (0-100).", .range(0...100))
+    var voiceFatigue: Int?
     
-    @Guide(description: "Overall sentiment (0=Negative, 100=Positive).", .range(0...100))
-    var sentimentScore: Int = 50
-    
-    @Guide(description: "Lucidity score: likelihood the dreamer knew they were dreaming.", .range(0...100))
-    var lucidityScore: Int = 0
-    
-    @Guide(description: "Vividness score: how sensory-rich and clear the memory is.", .range(0...100))
-    var vividnessScore: Int = 0
-    
-    @Guide(description: "Anxiety level detected in the narrative.", .range(0...100))
-    var anxietyLevel: Int = 0
-    
-    @Guide(description: "Narrative coherence: how structured the memory is (Memory Health).", .range(0...100))
-    var coherenceScore: Int = 50
-    
-    @Guide(description: "Is this dream considered a nightmare?")
-    var isNightmare: Bool = false
-    
-    @Guide(description: "Detailed art prompt for the dream.")
-    var imagePrompt: String = ""
+    var tone: ToneAnalysis?
 }
 
-// MARK: - NEW: WEEKLY INSIGHTS MODEL
-
+// MARK: - TIER 2: EXTRA ANALYSIS
 @Generable
-struct WeeklyInsightResult: Codable, Sendable, Hashable { // Added Hashable
+struct DreamExtraAnalysis: Codable, Sendable, Hashable {
+    @Guide(description: "Sentiment score (0-100).", .range(0...100))
+    var sentimentScore: Int?
     
-    @Guide(description: "A holistic summary of the user's dreaming patterns over the selected period.")
-    var periodOverview: String = ""
+    @Guide(description: "Is this a nightmare?")
+    var isNightmare: Bool?
     
-    @Guide(description: "The most dominant recurring theme or symbol found across multiple dreams.")
-    var dominantTheme: String = ""
+    @Guide(description: "Lucidity score (0-100).", .range(0...100))
+    var lucidityScore: Int?
     
-    @Guide(description: "Analysis of the user's mental health trend based on dream content (e.g., 'Increasing Anxiety', 'Finding Peace').")
-    var mentalHealthTrend: String = ""
+    @Guide(description: "Vividness score (0-100).", .range(0...100))
+    var vividnessScore: Int?
     
-    @Guide(description: "An observation about the user's sleep quality trend inferred from fatigue and vividness scores.")
-    var sleepQualityObservation: String = ""
+    @Guide(description: "Coherence score (0-100).", .range(0...100))
+    var coherenceScore: Int?
     
-    @Guide(description: "Strategic, therapeutic advice for the upcoming week based on these aggregated insights.")
-    var strategicAdvice: String = ""
-    
-    @Guide(description: "Three keywords that define this period.")
-    var keywords: [String] = []
+    @Guide(description: "Anxiety level (0-100).", .range(0...100))
+    var anxietyLevel: Int?
 }
 
 @Generable
-struct ToneAnalysis: Codable, Sendable, Hashable { // Added Hashable
-    @Guide(description: "The dominant tone label.")
-    var label: String = ""
-    
-    @Guide(description: "Confidence percentage.", .range(0...100))
-    var confidence: Int = 0
+struct ToneAnalysis: Codable, Sendable, Hashable {
+    var label: String?
+    var confidence: Int?
 }
 
 @Generable
-struct ImagePrompt: Codable, Sendable {
-    @Guide(description: "A detailed visual description of the scene to be generated.")
-    var visualDescription: String = ""
-    
-    @Guide(description: "Mood keywords to influence the atmosphere (e.g. 'Mysterious', 'Joyful').")
-    var moodKeywords: String = ""
-    
-    @Guide(description: "The artistic style or color palette (e.g. 'Dreamlike', 'Cyberpunk', 'Watercolor').")
-    var colorPalette: String = ""
+struct WeeklyInsightResult: Codable, Sendable, Hashable {
+    var periodOverview: String?
+    var dominantTheme: String?
+    var mentalHealthTrend: String?
+    var strategicAdvice: String?
 }
 
-
-// MARK: - APP DOMAIN MODELS
-
+// MARK: - APP DOMAIN MODEL
 struct Dream: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let date: Date
     let rawTranscript: String
     
-    // Analysis
-    var analysis: DreamAnalysisResult
-    
-    // Generated Asset
+    var core: DreamCoreAnalysis?
+    var extras: DreamExtraAnalysis?
     var generatedImageData: Data?
     
-    // Computed Helpers for Charts & Legacy View Compatibility
-    var sentimentScore: Double { Double(analysis.sentimentScore) }
-    var anxietyScore: Double { Double(analysis.anxietyLevel) }
-    var fatigueScore: Double { Double(analysis.voiceFatigue) }
+    // Legacy Helpers
+    var smartSummary: String { core?.summary ?? "Processing..." }
+    var interpretation: String { core?.interpretation ?? "Generating analysis..." }
+    var actionableAdvice: String { core?.actionableAdvice ?? "" }
+    var tone: String { core?.tone?.label ?? "Neutral" }
     
-    // Legacy properties to fix HistoryView/DetailView errors
-    var smartSummary: String { analysis.summary }
-    var interpretation: String { analysis.interpretation }
-    var actionableAdvice: String { analysis.actionableAdvice }
-    var emotion: String { analysis.emotions.joined(separator: ", ") }
-    var tone: String { analysis.tone.label }
-    var keyEntities: [String] { analysis.symbols } // Mapping symbols to old "keyEntities"
-    var people: [String] { analysis.people }
-    var places: [String] { analysis.places }
-    var emotions: [String] { analysis.emotions }
-    var voiceFatigue: Double { Double(analysis.voiceFatigue) / 100.0 } // Normalize for legacy views if they expect 0.0-1.0
-    var generatedImageHex: String? { nil } // Deprecated
+    var people: [String] { core?.people ?? [] }
+    var places: [String] { core?.places ?? [] }
+    var emotions: [String] {
+        var all = core?.emotions ?? []
+        // If primaryEmotion is present, ensure it's in the list
+        if let primary = core?.primaryEmotion, !all.contains(primary) {
+            all.insert(primary, at: 0)
+        }
+        return all
+    }
+    var keyEntities: [String] { core?.symbols ?? [] }
+    
+    var analysis: DreamAnalysisResult {
+        DreamAnalysisResult(
+            title: core?.title ?? "New Dream",
+            summary: core?.summary ?? "",
+            interpretation: core?.interpretation ?? "",
+            actionableAdvice: core?.actionableAdvice ?? "",
+            people: core?.people ?? [],
+            places: core?.places ?? [],
+            emotions: emotions,
+            symbols: core?.symbols ?? [],
+            tone: core?.tone ?? ToneAnalysis(label: "Neutral", confidence: 0),
+            voiceFatigue: core?.voiceFatigue ?? 0,
+            sentimentScore: extras?.sentimentScore ?? 50,
+            lucidityScore: extras?.lucidityScore ?? 0,
+            vividnessScore: extras?.vividnessScore ?? 0,
+            anxietyLevel: extras?.anxietyLevel ?? 0,
+            coherenceScore: extras?.coherenceScore ?? 0,
+            isNightmare: extras?.isNightmare ?? false,
+            imagePrompt: core?.summary ?? ""
+        )
+    }
     
     init(
         id: UUID = UUID(),
         date: Date = Date(),
         rawTranscript: String,
-        analysis: DreamAnalysisResult,
+        core: DreamCoreAnalysis? = nil,
+        extras: DreamExtraAnalysis? = nil,
         generatedImageData: Data? = nil
     ) {
         self.id = id
         self.date = date
         self.rawTranscript = rawTranscript
-        self.analysis = analysis
+        self.core = core
+        self.extras = extras
         self.generatedImageData = generatedImageData
     }
+}
+
+// Helper Struct
+struct DreamAnalysisResult: Hashable, Codable, Sendable {
+    var title: String
+    var summary: String
+    var interpretation: String
+    var actionableAdvice: String
+    var people: [String]
+    var places: [String]
+    var emotions: [String]
+    var symbols: [String]
+    var tone: ToneAnalysis
+    var voiceFatigue: Int
+    var sentimentScore: Int
+    var lucidityScore: Int
+    var vividnessScore: Int
+    var anxietyLevel: Int
+    var coherenceScore: Int
+    var isNightmare: Bool
+    var imagePrompt: String
 }

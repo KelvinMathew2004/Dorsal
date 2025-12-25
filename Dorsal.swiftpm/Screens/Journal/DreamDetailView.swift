@@ -4,35 +4,102 @@ struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
     let dream: Dream
     
+    var liveDream: Dream {
+        store.dreams.first(where: { $0.id == dream.id }) ?? dream
+    }
+    
     var body: some View {
         ZStack {
             Theme.gradientBackground.ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 24) {
-                    // 1. Image Header (Visual)
-                    DreamImageHeader(dream: dream)
+                    // 1. Image Header
+                    DreamImageHeader(dream: liveDream)
                     
-                    // 2. Context Tags (People, Places, Emotions, Tags)
-                    DreamContextSection(dream: dream, store: store)
+                    // 2. Summary (Core)
+                    if let summary = liveDream.core?.summary {
+                        Text(summary)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                            .transition(.opacity)
+                    }
                     
-                    // 3. Deep Analysis (Foundation Models)
-                    DreamDeepAnalysisCard(dream: dream)
+                    // 3. Core Analysis (Context Tags, Emotion)
+                    // FIX: Pass the concrete 'core' object.
+                    if let core = liveDream.core {
+                        DreamContextSection(core: core)
+                            .transition(.opacity)
+                    }
                     
-                    // 4. Advice (Therapeutic)
-                    DreamAdviceCard(dream: dream)
+                    // 4. Interpretation & Advice (Core now)
+                    if let interp = liveDream.core?.interpretation {
+                        MagicCard(title: "Interpretation", icon: "sparkles.rectangle.stack", color: .purple) {
+                            Text(interp)
+                                .lineSpacing(4)
+                        }
+                        .padding(.horizontal)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                     
-                    // 5. Tone & Voice Stats
-                    VoiceAnalysisCard(dream: dream)
+                    if let advice = liveDream.core?.actionableAdvice {
+                        MagicCard(title: "Actionable Advice", icon: "brain.head.profile", color: .green) {
+                            Text(advice)
+                                .italic()
+                        }
+                        .padding(.horizontal)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                     
-                    // 6. Transcript
-                    DreamTranscriptSection(dream: dream)
+                    // 5. Voice/Tone (Core)
+                    if let fatigue = liveDream.core?.voiceFatigue {
+                        HStack(spacing: 16) {
+                            MagicCard(title: "Voice Fatigue", icon: "battery.50", color: .red) {
+                                VStack(alignment: .leading) {
+                                    Text("\(fatigue)%")
+                                        .font(.title3.bold())
+                                    ProgressView(value: Double(fatigue), total: 100).tint(.red)
+                                }
+                            }
+                            
+                            if let tone = liveDream.core?.tone?.label {
+                                MagicCard(title: "Tone", icon: "waveform", color: .orange) {
+                                    VStack(alignment: .leading) {
+                                        Text(tone).font(.title3.bold())
+                                        if let conf = liveDream.core?.tone?.confidence {
+                                            Text("\(conf)% Confidence").font(.caption).foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    
+                    // 6. Loading State for Extras
+                    if store.isProcessing && liveDream.id == store.currentDreamID && liveDream.extras == nil {
+                        HStack {
+                            ProgressView()
+                            Text("Analyzing deeper metrics...")
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .transition(.opacity)
+                    }
+                    
+                    // 7. Transcript
+                    DreamTranscriptSection(transcript: liveDream.rawTranscript)
                 }
                 .padding(.top)
                 .padding(.bottom, 50)
+                .animation(.default, value: liveDream.core) // Re-render when core updates
+                .animation(.default, value: liveDream.extras) // Re-render when extras updates
             }
         }
-        .navigationTitle(dream.date.formatted(date: .abbreviated, time: .shortened))
+        .navigationTitle(liveDream.core?.title ?? liveDream.date.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -53,16 +120,18 @@ struct DreamImageHeader: View {
                     .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 32))
             } else {
-                // Skeleton/Loading State if image isn't ready
                 Rectangle()
                     .fill(.ultraThinMaterial)
                     .frame(height: 380)
-                    .redacted(reason: .placeholder)
-                    .shimmering()
                     .clipShape(RoundedRectangle(cornerRadius: 32))
+                    .overlay {
+                        if dream.core == nil {
+                            // Show shimmer only if we don't have core data yet (waiting for prompt)
+                            Rectangle().fill(.clear).shimmering()
+                        }
+                    }
             }
             
-            // Badge
             HStack(spacing: 6) {
                 Image(systemName: "apple.intelligence")
                     .symbolEffect(.pulse)
@@ -80,191 +149,50 @@ struct DreamImageHeader: View {
 }
 
 struct DreamContextSection: View {
-    let dream: Dream
-    @ObservedObject var store: DreamStore
+    // FIX: Updated type to DreamCoreAnalysis (concrete) instead of PartiallyGenerated
+    let core: DreamCoreAnalysis
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-
-            // People
-            if !dream.analysis.people.isEmpty {
+            if let people = core.people, !people.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack {
-                        ForEach(dream.analysis.people, id: \.self) { person in
-                            Button {
-                                // store.jumpToFilter(type: "person", value: person)
-                            } label: {
-                                Label(person, systemImage: "person.fill")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.blue)
-                            }
-                            .tint(.blue.opacity(0.2))
-                            .buttonStyle(.borderedProminent) // Using standard styles compatible with glass context
-                            .glassEffect(.regular.tint(.blue.opacity(0.2)), in: Capsule())
+                        ForEach(people, id: \.self) { person in
+                            TagPill(text: person).glassEffect(.regular.tint(.blue.opacity(0.2)))
                         }
                     }
                     .padding(.horizontal)
                 }
-                .scrollClipDisabled()
             }
-
-            // Places
-            if !dream.analysis.places.isEmpty {
+            if let places = core.places, !places.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack {
-                        ForEach(dream.analysis.places, id: \.self) { place in
-                            Button {
-                                // store.jumpToFilter(type: "place", value: place)
-                            } label: {
-                                Label(place, systemImage: "map.fill")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.green)
-                            }
-                            .tint(.green.opacity(0.2))
-                            .buttonStyle(.borderedProminent)
-                            .glassEffect(.regular.tint(.green.opacity(0.2)), in: Capsule())
+                        ForEach(places, id: \.self) { place in
+                            TagPill(text: place).glassEffect(.regular.tint(.green.opacity(0.2)))
                         }
                     }
                     .padding(.horizontal)
                 }
-                .scrollClipDisabled()
             }
-
-            // Emotions
-            if !dream.analysis.emotions.isEmpty {
+            if let emotions = core.emotions, !emotions.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack {
-                        ForEach(dream.analysis.emotions, id: \.self) { emotion in
-                            Button {
-                                // store.jumpToFilter(type: "emotion", value: emotion)
-                            } label: {
-                                Label(emotion, systemImage: "heart.fill")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.pink)
-                            }
-                            .tint(.pink.opacity(0.2))
-                            .buttonStyle(.borderedProminent)
-                            .glassEffect(.regular.tint(.pink.opacity(0.2)), in: Capsule())
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                .scrollClipDisabled()
-            }
-
-            // Tags / Symbols
-            if !dream.analysis.symbols.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Symbols")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-
-                    FlowLayout {
-                        ForEach(dream.analysis.symbols, id: \.self) { tag in
-                            Button(tag) {
-                                // store.jumpToFilter(type: "tag", value: tag)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .glassEffect(.regular, in: Capsule())
-                            .foregroundColor(.secondary)
+                        ForEach(emotions, id: \.self) { emotion in
+                            TagPill(text: emotion).glassEffect(.regular.tint(.pink.opacity(0.2)))
                         }
                     }
                     .padding(.horizontal)
                 }
             }
         }
-    }
-}
-
-struct DreamDeepAnalysisCard: View {
-    let dream: Dream
-    
-    var body: some View {
-        MagicCard(title: "Interpretation", icon: "sparkles.rectangle.stack", color: Theme.accent) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Spacer()
-                    Text(dream.analysis.tone.label)
-                        .font(.caption.bold())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .glassEffect(.regular.tint(Color.white.opacity(0.1)), in: Capsule())
-                }
-                
-                Text(dream.analysis.interpretation)
-                    .lineSpacing(4)
-                
-                Divider().background(Color.white.opacity(0.2))
-                
-                HStack {
-                    Text("Summary")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                
-                Text(dream.analysis.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal)
-    }
-}
-
-struct DreamAdviceCard: View {
-    let dream: Dream
-    
-    var body: some View {
-        MagicCard(title: "Actionable Advice", icon: "brain.head.profile", color: .green) {
-            Text(dream.analysis.actionableAdvice)
-                .italic()
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular.tint(Color.green.opacity(0.1)), in: RoundedRectangle(cornerRadius: 16))
-        }
-        .padding(.horizontal)
-    }
-}
-
-struct VoiceAnalysisCard: View {
-    let dream: Dream
-    
-    var body: some View {
-        MagicCard(title: "Voice Analysis", icon: "waveform", color: .orange) {
-            HStack(spacing: 20) {
-                VStack(alignment: .leading) {
-                    Text("Fatigue Level")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(String(format: "%d%%", dream.analysis.voiceFatigue))
-                        .font(.title3.bold())
-                }
-                
-                VStack(alignment: .leading) {
-                    Text("Detected Tone")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(dream.analysis.tone.label.isEmpty ? "Neutral" : dream.analysis.tone.label)
-                        .font(.title3.bold())
-                }
-                
-                Spacer()
-            }
-        }
-        .padding(.horizontal)
     }
 }
 
 struct DreamTranscriptSection: View {
-    let dream: Dream
-    
+    let transcript: String
     var body: some View {
         MagicCard(title: "Transcript", icon: "quote.opening", color: .secondary) {
-            Text(dream.rawTranscript)
+            Text(transcript)
                 .font(.callout.monospaced())
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

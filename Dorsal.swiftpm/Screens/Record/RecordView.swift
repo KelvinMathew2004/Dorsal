@@ -130,7 +130,7 @@ struct RecordView: View {
                             }
                             .contentShape(Circle())
                             .glassEffect(.clear.interactive().tint(store.isRecording ? .red : Theme.accent), in: Circle())
-                            .disabled(store.isProcessing)
+                            .disabled(store.isProcessing) // Disable when processing
                             .glassEffectID("recordButton", in: namespace)
                             
                             // 3. Cancel
@@ -153,16 +153,7 @@ struct RecordView: View {
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isRecording)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isPaused)
                     
-                    if store.isProcessing {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .tint(.white)
-                            Text("Analyzing with Foundation Models...")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.bottom, 20)
-                    }
+                    // Loading text REMOVED as requested
                 }
             }
             .navigationTitle("Record")
@@ -183,6 +174,7 @@ struct RecordView: View {
     }
     
     func handleRecordButtonTap() {
+        if store.isProcessing { return } // Double check guard
         if store.isRecording {
             store.stopRecording(save: true)
         } else {
@@ -208,6 +200,7 @@ struct RecordView: View {
     }
 }
 
+// ... (Subviews remain unchanged)
 // MARK: - Subviews
 
 struct ChecklistOverlay: View {
@@ -253,8 +246,6 @@ private struct QuestionCard: View {
             }
             
             if !recommendations.isEmpty {
-                // Simplified to standard wrapped HStacks for robustness and centering
-                // This replaces the complex flow layout that was causing alignment issues
                 SimpleWrappedPills(items: recommendations)
             }
         }
@@ -270,13 +261,10 @@ private struct QuestionCard: View {
     }
 }
 
-// Simple wrapping helper that respects center alignment preference better than standard flow
 struct SimpleWrappedPills: View {
     let items: [String]
     
     var body: some View {
-        // Since we usually have 3-5 items, a simple centered ViewBuilder logic or just FlowLayout
-        // If items < 4, HStack is fine. If more, wrap.
         if items.count <= 4 {
             HStack(spacing: 8) {
                 ForEach(items, id: \.self) { item in
@@ -284,7 +272,6 @@ struct SimpleWrappedPills: View {
                 }
             }
         } else {
-            // For >4 items, we split into two rows to ensure centering
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
                     ForEach(items.prefix(3), id: \.self) { item in
