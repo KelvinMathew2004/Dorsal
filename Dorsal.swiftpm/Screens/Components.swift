@@ -34,78 +34,125 @@ extension Color {
 }
 
 // MARK: - SHARED COMPONENTS
+
+/// A generic glass card container used for Analysis, Advice, etc.
+struct MagicCard<Content: View>: View {
+    let title: String
+    let icon: String
+    let color: Color
+    @ViewBuilder let content: Content
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label(title, systemImage: icon)
+                .font(.headline)
+                .foregroundStyle(color)
+            
+            content
+                .font(.body)
+                .foregroundStyle(.primary)
+        }
+        .padding(24)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+    }
+}
+
+/// A smaller card for key-value statistics (e.g. Total Dreams)
+struct StatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(color)
+                .padding(8)
+                .background(color.opacity(0.15), in: Circle())
+            
+            Text(value)
+                .font(.title.bold())
+                .foregroundStyle(.white)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+/// A container for Charts in the Insights view
+struct ChartCard<Content: View, Caption: View>: View {
+    @ViewBuilder var content: Content
+    @ViewBuilder var caption: Caption
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content
+            caption
+        }
+        .padding(20)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
+    }
+}
+
+/// A circular progress ring for metrics like Lucidty/Vividness
+struct RingView: View {
+    let percentage: Double
+    let title: String
+    let color: Color
+    
+    var body: some View {
+        VStack {
+            ZStack {
+                // Background Track
+                Circle()
+                    .stroke(.white.opacity(0.1), lineWidth: 10)
+                
+                // Progress
+                Circle()
+                    .trim(from: 0, to: percentage / 100)
+                    .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                
+                Text("\(Int(percentage))%")
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+            }
+            .frame(height: 100)
+            
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(.white.opacity(0.8))
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+/// Standard Tag Pill with Glass Effect
 struct TagPill: View {
     let text: String
     var isSelected: Bool = false
     
     var body: some View {
-        let content = Text("#\(text)")
+        Text("#\(text)")
             .font(.caption.bold())
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .foregroundStyle(isSelected ? .black : .secondary)
-            .glassEffect(isSelected ? .regular.tint(Theme.accent) : .clear, in: .capsule)
+            .glassEffect(isSelected ? .regular.tint(Theme.accent) : .regular, in: .capsule)
     }
 }
 
-struct StatBox: View {
-    let icon: String
-    let title: String
-    let value: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(color)
-                .frame(width: 45, height: 45)
-                .background(color.opacity(0.15), in: Circle())
-            
-            VStack(spacing: 2) {
-                Text(value)
-                    .font(.title3.bold())
-                    .foregroundStyle(.white)
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(.gray)
-                    .textCase(.uppercase)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
-        .backgroundWrapper(cornerRadius: 16)
-    }
-}
-
-struct GlassCard<Content: View>: View {
-    var content: Content
-    
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-    
-    var body: some View {
-        content
-            .padding()
-            .backgroundWrapper(cornerRadius: 20)
-    }
-}
-
-// Helper to keep the `if #available` logic clean for standard rounded rect backgrounds
-extension View {
-    @ViewBuilder
-    func backgroundWrapper(cornerRadius: CGFloat) -> some View {
-        if #available(iOS 26, *) {
-            self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
-        } else {
-            self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
-                .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(.white.opacity(0.1), lineWidth: 1))
-                .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
-        }
-    }
-}
+// MARK: - LAYOUT HELPERS
 
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
@@ -148,5 +195,39 @@ struct FlowLayout: Layout {
             maxHeight = max(maxHeight, size.height)
             x += size.width + spacing
         }
+    }
+}
+
+// Shimmer Effect for loading states
+struct ShimmerEffect: ViewModifier {
+    @State private var phase: CGFloat = 0
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.clear, .white.opacity(0.1), .clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .rotationEffect(.degrees(30))
+                        .offset(x: -geo.size.width + (geo.size.width * 2 * phase))
+                }
+            )
+            .mask(content)
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    phase = 1
+                }
+            }
+    }
+}
+
+extension View {
+    func shimmering() -> some View {
+        modifier(ShimmerEffect())
     }
 }

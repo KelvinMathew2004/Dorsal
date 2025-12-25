@@ -4,6 +4,17 @@ import Charts
 struct StatsView: View {
     @ObservedObject var store: DreamStore
     
+    // Computed Metrics
+    var totalDreams: Int { store.dreams.count }
+    var positiveDreams: Int { store.dreams.filter { $0.analysis.sentimentScore > 60 }.count }
+    var nightmareCount: Int { store.dreams.filter { $0.analysis.isNightmare }.count }
+    var avgLucidity: Double {
+        guard !store.dreams.isEmpty else { return 0 }
+        let total = store.dreams.reduce(0) { $0 + $1.analysis.lucidityScore }
+        return Double(total) / Double(store.dreams.count)
+    }
+    var recentFatigue: [Dream] { store.dreams.prefix(7).reversed() }
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -12,120 +23,173 @@ struct StatsView: View {
                 ScrollView {
                     VStack(spacing: 24) {
                         
-                        // NEW: Therapeutic Insights Section
-                        if !store.insights.isEmpty {
+                        // MARK: - AI Weekly Overview
+                        if let insights = store.weeklyInsight {
                             VStack(alignment: .leading, spacing: 16) {
-                                Label("Therapeutic Insights", systemImage: "brain.head.profile")
+                                Label("Weekly Overview", systemImage: "sparkles.rectangle.stack")
                                     .font(.headline)
-                                    .foregroundStyle(.purple)
-                                    .padding(.horizontal)
+                                    .foregroundStyle(.white)
                                 
-                                ForEach(store.insights) { insight in
-                                    InsightCard(insight: insight)
+                                MagicCard(title: "Period Summary", icon: "calendar", color: .indigo) {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        Text(insights.periodOverview)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                        
+                                        Divider().background(.white.opacity(0.2))
+                                        
+                                        HStack {
+                                            Label(insights.dominantTheme, systemImage: "crown.fill")
+                                                .font(.caption.bold())
+                                                .foregroundStyle(.yellow)
+                                            Spacer()
+                                            Text(insights.mentalHealthTrend)
+                                                .font(.caption)
+                                                .foregroundStyle(.white.opacity(0.7))
+                                        }
+                                    }
                                 }
+                                
+                                MagicCard(title: "Strategic Advice", icon: "lightbulb.fill", color: .yellow) {
+                                    Text(insights.strategicAdvice)
+                                        .italic()
+                                }
+                            }
+                            .padding(.horizontal)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        } else if store.isGeneratingInsights {
+                             HStack {
+                                ProgressView()
+                                    .tint(.white)
+                                Text("Analyzing weekly trends...")
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.8))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal)
+                        } else if !store.dreams.isEmpty {
+                            Button {
+                                Task { await store.refreshWeeklyInsights() }
+                            } label: {
+                                Label("Generate Weekly Insights", systemImage: "wand.and.stars")
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                                    .foregroundStyle(.white)
+                            }
+                            .padding(.horizontal)
+                        }
+                        
+                        // MARK: - Header Stats
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                            StatCard(title: "Total Entries", value: "\(totalDreams)", icon: "book.fill", color: .blue)
+                            StatCard(title: "Nightmares", value: "\(nightmareCount)", icon: "exclamationmark.triangle.fill", color: .purple)
+                            StatCard(title: "Avg Lucidity", value: "\(Int(avgLucidity))%", icon: "eye.fill", color: .cyan)
+                            StatCard(title: "Positive Dreams", value: "\(positiveDreams)", icon: "hand.thumbsup.fill", color: .green)
+                        }
+                        .padding(.horizontal)
+                        
+                        // MARK: - Mental Health Trends
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Mental Health Trends", systemImage: "brain.head.profile")
+                                .font(.headline)
+                                .foregroundStyle(.white.opacity(0.8))
+                                .padding(.horizontal)
+                            
+                            ChartCard {
+                                Chart {
+                                    ForEach(recentFatigue) { dream in
+                                        LineMark(
+                                            x: .value("Date", dream.date, unit: .day),
+                                            y: .value("Anxiety", dream.analysis.anxietyLevel)
+                                        )
+                                        .foregroundStyle(.pink)
+                                        .interpolationMethod(.catmullRom)
+                                        
+                                        LineMark(
+                                            x: .value("Date", dream.date, unit: .day),
+                                            y: .value("Sentiment", dream.analysis.sentimentScore)
+                                        )
+                                        .foregroundStyle(.green)
+                                        .interpolationMethod(.catmullRom)
+                                    }
+                                }
+                                .chartYScale(domain: 0...100)
+                                .frame(height: 200)
+                            } caption: {
+                                HStack(spacing: 16) {
+                                    Label("Anxiety", systemImage: "circle.fill").foregroundStyle(.pink)
+                                    Label("Sentiment", systemImage: "circle.fill").foregroundStyle(.green)
+                                }
+                                .font(.caption)
                             }
                         }
                         
-                        SentimentChart(dreams: store.dreams)
-                        
-                        RecurringThemes(
-                            tags: Array(store.allTags.prefix(8)),
-                            onSelect: { tag in
-                                store.selectedTab = 1
-                                store.jumpToFilter(type: "tag", value: tag)
+                        // MARK: - Sleep Fatigue
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Sleep Fatigue", systemImage: "waveform.path.ecg")
+                                .font(.headline)
+                                .foregroundStyle(.white.opacity(0.8))
+                                .padding(.horizontal)
+                            
+                            ChartCard {
+                                Chart {
+                                    ForEach(recentFatigue) { dream in
+                                        BarMark(
+                                            x: .value("Date", dream.date, unit: .day),
+                                            y: .value("Fatigue", dream.analysis.voiceFatigue)
+                                        )
+                                        .foregroundStyle(gradient(for: dream.analysis.voiceFatigue))
+                                    }
+                                }
+                                .frame(height: 180)
+                            } caption: {
+                                Text("Higher bars indicate higher vocal fatigue.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
-                        )
+                        }
+                        
+                        // MARK: - Memory Health
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Memory Recall & Coherence", systemImage: "memorychip")
+                                .font(.headline)
+                                .foregroundStyle(.white.opacity(0.8))
+                                .padding(.horizontal)
+                            
+                            HStack(spacing: 16) {
+                                RingView(percentage: Double(avgMetric { $0.vividnessScore }), title: "Vividness", color: .orange)
+                                RingView(percentage: Double(avgMetric { $0.coherenceScore }), title: "Coherence", color: .teal)
+                            }
+                            .padding(.horizontal)
+                        }
+                        
+                        Spacer(minLength: 50)
                     }
-                    .padding(.vertical, 16)
+                    .padding(.top)
                 }
             }
             .navigationTitle("Insights")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .onAppear {
+                if store.weeklyInsight == nil && !store.dreams.isEmpty {
+                    Task { await store.refreshWeeklyInsights() }
+                }
+            }
         }
     }
-}
-
-struct InsightCard: View {
-    let insight: TherapeuticInsight
     
-    var body: some View {
-        let content = VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundStyle(.yellow)
-                Text(insight.title)
-                    .font(.headline)
-                Spacer()
-            }
-            
-            Text(insight.observation)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            
-            Text(insight.suggestion)
-                .font(.body)
-                .foregroundStyle(.primary)
-                .padding(.top, 4)
-        }
-        .padding(20)
-        
-        if #available(iOS 26, *) {
-            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
-                .padding(.horizontal)
-        } else {
-            content
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-                .padding(.horizontal)
-        }
+    // Helpers
+    func avgMetric(_ keyPath: (DreamAnalysisResult) -> Int) -> Int {
+        guard !store.dreams.isEmpty else { return 0 }
+        let total = store.dreams.reduce(0) { $0 + keyPath($1.analysis) }
+        return total / store.dreams.count
     }
-}
-
-// ... (Existing SentimentChart and RecurringThemes remain, ensuring they compile)
-struct SentimentChart: View {
-    let dreams: [Dream]
-    var body: some View {
-        let content = VStack(alignment: .leading, spacing: 20) {
-            Label("Sentiment Flow", systemImage: "waveform.path.ecg")
-                .font(.headline)
-                .foregroundStyle(Theme.accent)
-            
-            if dreams.isEmpty {
-                Text("Record more dreams to see data.")
-                    .foregroundStyle(.secondary)
-                    .frame(height: 200)
-                    .frame(maxWidth: .infinity)
-            } else {
-                Chart(dreams.sorted(by: { $0.date < $1.date })) { dream in
-                    LineMark(x: .value("Date", dream.date), y: .value("Sentiment", dream.sentimentScore))
-                        .interpolationMethod(.catmullRom)
-                        .foregroundStyle(Gradient(colors: [.pink, Theme.secondary]))
-                }
-                .frame(height: 200)
-                .chartYScale(domain: -1.0...1.0)
-            }
-        }
-        .padding(24)
-        content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-            .padding(.horizontal)
-    }
-}
-
-struct RecurringThemes: View {
-    let tags: [String]
-    let onSelect: (String) -> Void
-    var body: some View {
-        VStack(alignment: .leading) {
-            Text("Recurring Symbols").font(.headline).foregroundStyle(.secondary).padding(.horizontal)
-            GlassEffectContainer {
-                FlowLayout {
-                    ForEach(tags, id: \.self) { tag in
-                        Button(tag) { onSelect(tag) }
-                        .buttonStyle(.glassProminent)
-                        .foregroundColor(.secondary)
-                        .tint(.secondary.opacity(0.2))
-                    }
-                }
-                .padding(.horizontal)
-            }
-        }
+    
+    func gradient(for score: Int) -> LinearGradient {
+        let color = score > 70 ? Color.red : (score > 40 ? Color.yellow : Color.blue)
+        return LinearGradient(colors: [color.opacity(0.8), color.opacity(0.3)], startPoint: .top, endPoint: .bottom)
     }
 }

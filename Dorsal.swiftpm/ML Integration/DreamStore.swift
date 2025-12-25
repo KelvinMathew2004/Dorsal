@@ -1,317 +1,242 @@
 import SwiftUI
-import Speech
 import AVFoundation
+import ImagePlayground
+import FoundationModels
 
+// Filter State Model
 struct DreamFilter: Equatable {
-    var tags: Set<String> = []
     var people: Set<String> = []
     var places: Set<String> = []
     var emotions: Set<String> = []
-    var isEmpty: Bool { tags.isEmpty && people.isEmpty && places.isEmpty && emotions.isEmpty }
-    mutating func clear() { tags.removeAll(); people.removeAll(); places.removeAll(); emotions.removeAll() }
-}
-
-final class AudioEngineManager: @unchecked Sendable {
-    static let shared = AudioEngineManager()
-    private var engine: AVAudioEngine?
-    private let lock = NSLock()
-    private init() {}
-    func createEngine() -> AVAudioEngine { lock.lock(); defer { lock.unlock() }; destroyEngineUnsafe(); let new = AVAudioEngine(); engine = new; return new }
-    func destroyEngine() { lock.lock(); defer { lock.unlock() }; destroyEngineUnsafe() }
-    private func destroyEngineUnsafe() { if let existing = engine { if existing.isRunning { existing.stop() }; existing.inputNode.removeTap(onBus: 0) }; engine = nil }
-    func getEngine() -> AVAudioEngine? { lock.lock(); defer { lock.unlock() }; return engine }
+    var tags: Set<String> = []
+    
+    var isEmpty: Bool {
+        people.isEmpty && places.isEmpty && emotions.isEmpty && tags.isEmpty
+    }
 }
 
 @MainActor
-class DreamStore: ObservableObject {
+class DreamStore: NSObject, ObservableObject {
     @Published var dreams: [Dream] = []
-    @Published var insights: [TherapeuticInsight] = []
+    
+    // Filtering & Search
+    @Published var searchQuery: String = ""
+    @Published var activeFilter = DreamFilter()
+    
+    // New: Weekly Insights
+    @Published var weeklyInsight: WeeklyInsightResult?
+    @Published var isGeneratingInsights: Bool = false
+    
+    // UI State
     @Published var selectedTab: Int = 0
     @Published var navigationPath = NavigationPath()
-    @Published var activeFilter = DreamFilter()
-    @Published var searchQuery: String = ""
-    @Published var currentTranscript: String = ""
-    @Published var isRecording = false
-    @Published var isPaused = false
-    @Published var audioPower: Float = 0.0
-    @Published var permissionError: String? = nil
-    @Published var showPermissionAlert: Bool = false
     @Published var isProcessing: Bool = false
-    @Published var activeQuestion: ChecklistItem?
-    @Published var remainingQuestions: [ChecklistItem] = []
-    @Published var isQuestionSatisfied: Bool = false
+    @Published var permissionError: String?
+    @Published var showPermissionAlert: Bool = false
     
-    private var speechRecognizer: SFSpeechRecognizer?
-    private var recognitionTask: SFSpeechRecognitionTask?
+    // Recorder State
+    @Published var currentTranscript: String = ""
+    @Published var isRecording: Bool = false
+    @Published var isPaused: Bool = false
+    @Published var audioPower: Float = 0.0
+    
+    // Mock Data Helpers
     private var mockTimer: Timer?
-    private let useMockMode = true
-    private var mockDreamIndex = 0
+    private var mockIndex = 0
     
-    init() {
-        loadDreams()
-        setupChecklist()
-        Task { await refreshInsights() }
+    // Interactive Questions (for RecordView)
+    @Published var activeQuestion: ChecklistItem?
+    @Published var isQuestionSatisfied: Bool = false
+    struct ChecklistItem: Identifiable, Hashable {
+        let id = UUID(); let question: String; let keywords: [String]
     }
     
-    func openSettings() { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
+    override init() {
+        super.init()
+        loadDreams()
+    }
+    
+    // MARK: - COMPUTED PROPERTIES FOR VIEWS
     
     var filteredDreams: [Dream] {
-        var result = dreams
-        if !activeFilter.isEmpty {
-            result = result.filter { dream in
-                let matchesTags = activeFilter.tags.isEmpty || !activeFilter.tags.isDisjoint(with: dream.keyEntities)
-                let matchesPeople = activeFilter.people.isEmpty || !activeFilter.people.isDisjoint(with: dream.people)
-                let matchesPlaces = activeFilter.places.isEmpty || !activeFilter.places.isDisjoint(with: dream.places)
-                let matchesEmotions = activeFilter.emotions.isEmpty || !activeFilter.emotions.isDisjoint(with: dream.emotions)
-                return matchesTags && matchesPeople && matchesPlaces && matchesEmotions
-            }
+        dreams.filter { dream in
+            // Search Text
+            let matchesSearch = searchQuery.isEmpty ||
+                dream.rawTranscript.localizedCaseInsensitiveContains(searchQuery) ||
+                dream.analysis.title.localizedCaseInsensitiveContains(searchQuery) ||
+                dream.analysis.summary.localizedCaseInsensitiveContains(searchQuery)
+            
+            if !matchesSearch { return false }
+            
+            // Filters
+            if !activeFilter.people.isEmpty && !activeFilter.people.isSubset(of: Set(dream.analysis.people)) { return false }
+            if !activeFilter.places.isEmpty && !activeFilter.places.isSubset(of: Set(dream.analysis.places)) { return false }
+            if !activeFilter.emotions.isEmpty && !activeFilter.emotions.isSubset(of: Set(dream.analysis.emotions)) { return false }
+            if !activeFilter.tags.isEmpty && !activeFilter.tags.isSubset(of: Set(dream.analysis.symbols)) { return false }
+            
+            return true
         }
-        if !searchQuery.isEmpty {
-            result = result.filter {
-                $0.rawTranscript.localizedCaseInsensitiveContains(searchQuery) ||
-                $0.smartSummary.localizedCaseInsensitiveContains(searchQuery) ||
-                $0.keyEntities.contains(where: { $0.localizedCaseInsensitiveContains(searchQuery) })
-            }
-        }
-        return result
     }
     
-    var allTags: [String] { Array(Set(dreams.flatMap { $0.keyEntities })).sorted() }
-    var allPeople: [String] { Array(Set(dreams.flatMap { $0.people })).sorted() }
-    var allPlaces: [String] { Array(Set(dreams.flatMap { $0.places })).sorted() }
-    var allEmotions: [String] { Array(Set(dreams.flatMap { $0.emotions })).sorted() }
-    
-    func toggleTagFilter(_ tag: String) { if activeFilter.tags.contains(tag) { activeFilter.tags.remove(tag) } else { activeFilter.tags.insert(tag) } }
-    func togglePersonFilter(_ person: String) { if activeFilter.people.contains(person) { activeFilter.people.remove(person) } else { activeFilter.people.insert(person) } }
-    func togglePlaceFilter(_ place: String) { if activeFilter.places.contains(place) { activeFilter.places.remove(place) } else { activeFilter.places.insert(place) } }
-    func toggleEmotionFilter(_ emotion: String) { if activeFilter.emotions.contains(emotion) { activeFilter.emotions.remove(emotion) } else { activeFilter.emotions.insert(emotion) } }
-    
-    func jumpToFilter(type: String, value: String) {
-        activeFilter.clear()
-        switch type {
-        case "person": activeFilter.people.insert(value); case "place": activeFilter.places.insert(value); case "emotion": activeFilter.emotions.insert(value); case "tag": activeFilter.tags.insert(value); default: break
-        }
-        selectedTab = 1; navigationPath = NavigationPath()
+    var allPeople: [String] {
+        Array(Set(dreams.flatMap { $0.analysis.people })).sorted()
+    }
+    var allPlaces: [String] {
+        Array(Set(dreams.flatMap { $0.analysis.places })).sorted()
+    }
+    var allEmotions: [String] {
+        Array(Set(dreams.flatMap { $0.analysis.emotions })).sorted()
+    }
+    var allTags: [String] {
+        Array(Set(dreams.flatMap { $0.analysis.symbols })).sorted()
     }
     
-    func clearFilter() { activeFilter.clear(); searchQuery = "" }
+    // MARK: - INTENTS
     
     func deleteDream(_ dream: Dream) {
         if let index = dreams.firstIndex(where: { $0.id == dream.id }) {
             dreams.remove(at: index)
-            saveDreamsToDisk()
-            Task { await refreshInsights() }
+            saveToDisk()
         }
     }
     
-    func refreshInsights() async {
-        guard !dreams.isEmpty else { return }
-        do {
-            let newInsights = try await DreamAnalyzer.shared.generateInsights(recentDreams: dreams)
-            await MainActor.run { withAnimation { self.insights = newInsights } }
-        } catch { print("Insight generation failed: \(error)") }
+    func togglePersonFilter(_ item: String) {
+        if activeFilter.people.contains(item) { activeFilter.people.remove(item) } else { activeFilter.people.insert(item) }
+    }
+    func togglePlaceFilter(_ item: String) {
+        if activeFilter.places.contains(item) { activeFilter.places.remove(item) } else { activeFilter.places.insert(item) }
+    }
+    func toggleEmotionFilter(_ item: String) {
+        if activeFilter.emotions.contains(item) { activeFilter.emotions.remove(item) } else { activeFilter.emotions.insert(item) }
+    }
+    func toggleTagFilter(_ item: String) {
+        if activeFilter.tags.contains(item) { activeFilter.tags.remove(item) } else { activeFilter.tags.insert(item) }
+    }
+    func clearFilter() {
+        activeFilter = DreamFilter()
+    }
+    func jumpToFilter(type: String, value: String) {
+        clearFilter()
+        switch type {
+        case "person": activeFilter.people.insert(value)
+        case "place": activeFilter.places.insert(value)
+        case "emotion": activeFilter.emotions.insert(value)
+        case "tag": activeFilter.tags.insert(value)
+        default: break
+        }
+        selectedTab = 1 // Jump to Journal
     }
     
-    func startRecording() { guard !isRecording else { return }; if useMockMode { startMockRecording(); return } }
-    
-    private func startMockRecording() {
-        currentTranscript = ""; setupChecklist(); withAnimation { isRecording = true; isPaused = false }
-        
-        // 10 Detailed Mock Narratives
-        let mockSequences = [
-            // 1. Deep Ocean (Dorsal Theme)
-            [
-                "I was swimming deep underwater with Sarah.",
-                "No scuba gear, just breathing water naturally.",
-                "Just infinite blue darkness for miles.",
-                "I realized I was sinking, pulled by a heavy Anchor.",
-                "I wasn't scared, just felt heavy and sleepy.",
-                "I saw a Clock ticking underwater."
-            ],
-            // 2. High School Anxiety
-            [
-                "I was back in High School giving a presentation.",
-                "My Mom and Dad were in the front row watching.",
-                "I looked down and my notes were soaking wet.",
-                "Then my teeth started feeling loose and wobbly.",
-                "I spit one out and it was a white Seashell.",
-                "Everyone stared at me in silence."
-            ],
-            // 3. Glass Forest Chase
-            [
-                "I was running through a dense Forest at night.",
-                "The trees were made of transparent, sharp Glass.",
-                "Something was chasing me but I couldn't look back.",
-                "I reached my Childhood Home but the door was locked.",
-                "Then the glass trees started shattering behind me.",
-                "I woke up terrified just as the shards hit me."
-            ],
-            // 4. Flying over City
-            [
-                "I was flying over a huge futuristic City.",
-                "The Wind felt amazing, I was so free.",
-                "I saw my Brother waving from a skyscraper roof.",
-                "I tried to land but gravity stopped working.",
-                "I just kept floating higher into the Sky.",
-                "It was peaceful but a little lonely."
-            ],
-            // 5. The Empty Mall
-            [
-                "I was walking through a massive shopping Mall.",
-                "But it was completely empty, no people anywhere.",
-                "I went into a store and all the Mannequins turned to look at me.",
-                "They didn't have faces, just smooth plastic.",
-                "I felt like I wasn't supposed to be there."
-            ],
-            // 6. Teeth Falling Out (Variant)
-            [
-                "I was at a dinner party with my Boss.",
-                "I tried to eat an Apple but my teeth crumbled like chalk.",
-                "I tried to hide it but my mouth was full of Dust.",
-                "My Boss asked me a question and I couldn't speak.",
-                "I felt so embarrassed and helpless."
-            ],
-            // 7. Late for Exam
-            [
-                "I realized I had a math final Exam in 5 minutes.",
-                "But I was in a Hotel on the other side of town.",
-                "I tried to run but my Legs were moving in slow motion.",
-                "The hallway kept stretching longer and longer.",
-                "I knew I was going to fail and ruin everything."
-            ],
-            // 8. Talking Animal
-            [
-                "I was in my Kitchen making breakfast.",
-                "A large brown Bear walked in and sat at the table.",
-                "He asked me for Coffee in perfect English.",
-                "I wasn't scared, it felt totally Normal.",
-                "We talked about the weather and my job.",
-                "He told me I need to rest more."
-            ],
-            // 9. Tornado
-            [
-                "I was standing in a flat open Field.",
-                "The sky turned green and huge Tornados formed.",
-                "I tried to find shelter but there was nowhere to hide.",
-                "The wind was deafening, roaring like a train.",
-                "I held onto a fence post as the storm hit.",
-                "I woke up heart pounding."
-            ],
-            // 10. Impossible House
-            [
-                "I discovered a new room in my Apartment.",
-                "It was huge, like a Ballroom with chandeliers.",
-                "I couldn't believe I lived here and didn't know.",
-                "But then the Doors started disappearing.",
-                "I got lost in my own house, trapping me inside.",
-                "Every door led to a brick Wall."
-            ]
-        ]
-        
-        let phrases = mockSequences[mockDreamIndex % mockSequences.count]
-        mockDreamIndex += 1
-        var phraseIndex = 0
-        
-        mockTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            guard let self = self, !self.isPaused else { return }
-            Task { @MainActor in
-                if phraseIndex < phrases.count {
-                    self.currentTranscript += (self.currentTranscript.isEmpty ? "" : " ") + phrases[phraseIndex]
-                    self.audioPower = Float.random(in: 0.3...0.9)
-                    self.analyzeChecklist()
-                    phraseIndex += 1
-                } else {
-                    self.audioPower = 0.05
-                    self.mockTimer?.invalidate()
-                    self.mockTimer = nil
-                }
-            }
+    // MARK: - RECORDING (MOCK)
+    func startRecording() {
+        withAnimation { isRecording = true; isPaused = false }
+        currentTranscript = ""
+        // Mock logic...
+        mockTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.audioPower = Float.random(in: 0.1...0.8)
+            self.currentTranscript += " dream word"
         }
     }
-    
     func stopRecording(save: Bool) {
-        if useMockMode { mockTimer?.invalidate(); mockTimer = nil; audioPower = 0 }
+        mockTimer?.invalidate()
         withAnimation { isRecording = false; isPaused = false }
         if save && !currentTranscript.isEmpty {
-            Task {
-                await MainActor.run { self.isProcessing = true }
-                let newDream = await createAndSaveDream()
-                await refreshInsights()
-                await MainActor.run { self.isProcessing = false; selectedTab = 1; navigationPath = NavigationPath(); navigationPath.append(newDream) }
-            }
-        } else if !save {
-            currentTranscript = ""
+            processDream(transcript: currentTranscript)
         }
+        currentTranscript = ""
     }
-    
     func pauseRecording() {
         withAnimation { isPaused.toggle() }
     }
+    func openSettings() {}
+    func getRecommendations(for item: ChecklistItem) -> [String] { [] }
+
     
-    private func analyzeChecklist() { guard let current = activeQuestion, !isQuestionSatisfied else { return }; let lower = currentTranscript.lowercased(); for keyword in current.keywords { if lower.contains(keyword) { triggerSuccessAndAdvance(); return } } }
-    private func triggerSuccessAndAdvance() { withAnimation { isQuestionSatisfied = true }; DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.advanceQuestion() } }
-    private func advanceQuestion() { guard !remainingQuestions.isEmpty else { withAnimation { activeQuestion = nil }; return }; var nextIndex = 0; for (index, q) in remainingQuestions.enumerated() { for trigger in q.triggerKeywords { if currentTranscript.lowercased().contains(trigger) { nextIndex = index; break } } }; withAnimation { isQuestionSatisfied = false; activeQuestion = remainingQuestions.remove(at: nextIndex) } }
+    // MARK: - PROCESSING PIPELINE
     
-    private func setupChecklist() {
-        var pool = [
-            ChecklistItem(question: "Who was there?", keywords: ["mom", "dad", "friend", "brother", "sister", "people", "sarah"], triggerKeywords: ["saw", "met"]),
-            ChecklistItem(question: "Where did it take place?", keywords: ["home", "school", "work", "outside", "forest", "room", "office", "beach"], triggerKeywords: ["at", "in", "went"]),
-            ChecklistItem(question: "How did you feel?", keywords: ["scared", "happy", "anxious", "calm", "weird", "heavy"], triggerKeywords: ["felt", "was"])
-        ]
-        activeQuestion = pool.removeFirst(); remainingQuestions = pool; isQuestionSatisfied = false
-    }
-    
-    func getRecommendations(for question: ChecklistItem) -> [String] {
-        let lowerQuestion = question.question.lowercased()
-        if lowerQuestion.contains("who") {
-            return self.allPeople.isEmpty ? ["Mom", "Dad", "Friend"] : Array(self.allPeople.prefix(5)).map { $0.capitalized }
-        } else if lowerQuestion.contains("where") {
-            return self.allPlaces.isEmpty ? ["Home", "School", "Work"] : Array(self.allPlaces.prefix(5)).map { $0.capitalized }
+    private func processDream(transcript: String) {
+        Task {
+            isProcessing = true
+            
+            do {
+                // 1. Foundation Models Analysis
+                let analysis = try await DreamAnalyzer.shared.analyze(transcript: transcript)
+                
+                // 2. Image Generation
+                var generatedImageData: Data?
+                let creator = try await ImageCreator()
+                let concepts: [ImagePlaygroundConcept] = [.text(analysis.imagePrompt)]
+                let imageStream = creator.images(for: concepts, style: .illustration, limit: 1)
+                
+                for try await image in imageStream {
+                    // Correct for iOS 18.4: image.cgImage is non-optional
+                    let cgImage = image.cgImage
+                    let uiImage = UIImage(cgImage: cgImage)
+                    if let pngData = uiImage.pngData() {
+                        generatedImageData = pngData
+                        break
+                    }
+                }
+                
+                // 3. Create Model
+                let newDream = Dream(
+                    rawTranscript: transcript,
+                    analysis: analysis,
+                    generatedImageData: generatedImageData
+                )
+                
+                // 4. Save
+                dreams.insert(newDream, at: 0)
+                saveToDisk()
+                
+                // 5. Trigger Insights Update
+                Task { await refreshWeeklyInsights() }
+                
+                isProcessing = false
+                selectedTab = 1 // Switch to Journal
+                navigationPath = NavigationPath()
+                navigationPath.append(newDream)
+                
+            } catch {
+                print("Error processing dream: \(error)")
+                isProcessing = false
+            }
         }
-        return []
     }
     
-    private func createAndSaveDream() async -> Dream {
-        let text = currentTranscript
-        
-        let insight = try! await DreamAnalyzer.shared.analyze(transcript: text)
-        let artPrompt = try! await DreamAnalyzer.shared.generateArtPrompt(transcript: text)
-        let (imageData, imageHex) = try! await ImageCreator.shared.generateImage(llmPrompt: artPrompt, style: .illustration)
-        
-        // NOW USING FOUNDATION MODELS to extract (Mocked via Guide.swift)
-        // No manual IntelligenceService call here.
-        let extracted = try! await DreamAnalyzer.shared.extractEntities(
-            transcript: text,
-            existingPeople: self.allPeople,
-            existingPlaces: self.allPlaces
-        )
-        
-        let newDream = Dream(
-            id: UUID(),
-            date: Date(),
-            rawTranscript: text,
-            smartSummary: insight.summary,
-            interpretation: insight.interpretation,
-            actionableAdvice: insight.actionableAdvice,
-            emotion: insight.emotion,
-            tone: insight.tone,
-            sentimentScore: 0.5,
-            voiceFatigue: Double.random(in: 0.1...0.9),
-            // Use extracted data
-            keyEntities: extracted.keyEntities,
-            people: extracted.people,
-            places: extracted.places,
-            emotions: extracted.emotions,
-            generatedImageHex: imageHex,
-            generatedImageData: imageData
-        )
-        
-        dreams.insert(newDream, at: 0)
-        saveDreamsToDisk()
-        return newDream
+    // MARK: - INSIGHTS GENERATION
+    
+    func refreshWeeklyInsights() async {
+        guard !dreams.isEmpty else { return }
+        withAnimation { isGeneratingInsights = true }
+        do {
+            let recentDreams = dreams.filter { $0.date > Date().addingTimeInterval(-30*24*60*60) }
+            guard !recentDreams.isEmpty else { isGeneratingInsights = false; return }
+            
+            let insights = try await DreamAnalyzer.shared.analyzeWeeklyTrends(dreams: recentDreams)
+            self.weeklyInsight = insights
+        } catch {
+            print("Failed to generate insights: \(error)")
+        }
+        withAnimation { isGeneratingInsights = false }
     }
     
-    private func loadDreams() { guard let data = try? Data(contentsOf: dreamsURL), let decoded = try? JSONDecoder().decode([Dream].self, from: data) else { return }; dreams = decoded }
-    private func saveDreamsToDisk() { if let data = try? JSONEncoder().encode(dreams) { try? data.write(to: dreamsURL) } }
-    private var dreamsURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("dorsal_dreams_v8.json") }
+    // MARK: - PERSISTENCE
+    private var fileURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("dreams_v2.json")
+    }
+    
+    private func loadDreams() {
+        if let data = try? Data(contentsOf: fileURL),
+           let saved = try? JSONDecoder().decode([Dream].self, from: data) {
+            self.dreams = saved
+        }
+    }
+    
+    private func saveToDisk() {
+        if let data = try? JSONEncoder().encode(dreams) {
+            try? data.write(to: fileURL)
+        }
+    }
 }

@@ -1,175 +1,156 @@
 import Foundation
 import SwiftUI
-import NaturalLanguage
-import UIKit
+import FoundationModels
+import ImagePlayground
 
-// MARK: - SHARED DATA MODELS
+// MARK: - GENERABLE MODELS (FOUNDATION FRAMEWORK)
 
-// 1. Dream Model
+@Generable
+struct DreamAnalysisResult: Codable, Sendable, Hashable { // Added Hashable
+    
+    @Guide(description: "A concise, engaging title for the dream (3-6 words).")
+    var title: String = ""
+    
+    @Guide(description: "A 1-2 sentence summary of the dream's narrative flow.")
+    var summary: String = ""
+    
+    @Guide(description: "A deep, empathetic psychological interpretation acting as a friendly therapist.")
+    var interpretation: String = ""
+    
+    @Guide(description: "Actionable advice based on the dream's themes.")
+    var actionableAdvice: String = ""
+    
+    // Entities
+    @Guide(description: "List of people or characters identified.")
+    var people: [String] = []
+    
+    @Guide(description: "List of specific locations or settings.")
+    var places: [String] = []
+    
+    @Guide(description: "List of distinct emotions felt.")
+    var emotions: [String] = []
+    
+    @Guide(description: "List of key objects, animals, or symbols.")
+    var symbols: [String] = []
+    
+    // MARK: - Advanced Metrics (Mental Health & Sleep)
+    
+    @Guide(description: "Analysis of the speaker's tone.")
+    var tone: ToneAnalysis = ToneAnalysis()
+    
+    @Guide(description: "Voice fatigue level based on speech patterns (0=Fresh, 100=Exhausted).", .range(0...100))
+    var voiceFatigue: Int = 0
+    
+    @Guide(description: "Overall sentiment (0=Negative, 100=Positive).", .range(0...100))
+    var sentimentScore: Int = 50
+    
+    @Guide(description: "Lucidity score: likelihood the dreamer knew they were dreaming.", .range(0...100))
+    var lucidityScore: Int = 0
+    
+    @Guide(description: "Vividness score: how sensory-rich and clear the memory is.", .range(0...100))
+    var vividnessScore: Int = 0
+    
+    @Guide(description: "Anxiety level detected in the narrative.", .range(0...100))
+    var anxietyLevel: Int = 0
+    
+    @Guide(description: "Narrative coherence: how structured the memory is (Memory Health).", .range(0...100))
+    var coherenceScore: Int = 50
+    
+    @Guide(description: "Is this dream considered a nightmare?")
+    var isNightmare: Bool = false
+    
+    @Guide(description: "Detailed art prompt for the dream.")
+    var imagePrompt: String = ""
+}
+
+// MARK: - NEW: WEEKLY INSIGHTS MODEL
+
+@Generable
+struct WeeklyInsightResult: Codable, Sendable, Hashable { // Added Hashable
+    
+    @Guide(description: "A holistic summary of the user's dreaming patterns over the selected period.")
+    var periodOverview: String = ""
+    
+    @Guide(description: "The most dominant recurring theme or symbol found across multiple dreams.")
+    var dominantTheme: String = ""
+    
+    @Guide(description: "Analysis of the user's mental health trend based on dream content (e.g., 'Increasing Anxiety', 'Finding Peace').")
+    var mentalHealthTrend: String = ""
+    
+    @Guide(description: "An observation about the user's sleep quality trend inferred from fatigue and vividness scores.")
+    var sleepQualityObservation: String = ""
+    
+    @Guide(description: "Strategic, therapeutic advice for the upcoming week based on these aggregated insights.")
+    var strategicAdvice: String = ""
+    
+    @Guide(description: "Three keywords that define this period.")
+    var keywords: [String] = []
+}
+
+@Generable
+struct ToneAnalysis: Codable, Sendable, Hashable { // Added Hashable
+    @Guide(description: "The dominant tone label.")
+    var label: String = ""
+    
+    @Guide(description: "Confidence percentage.", .range(0...100))
+    var confidence: Int = 0
+}
+
+@Generable
+struct ImagePrompt: Codable, Sendable {
+    @Guide(description: "A detailed visual description of the scene to be generated.")
+    var visualDescription: String = ""
+    
+    @Guide(description: "Mood keywords to influence the atmosphere (e.g. 'Mysterious', 'Joyful').")
+    var moodKeywords: String = ""
+    
+    @Guide(description: "The artistic style or color palette (e.g. 'Dreamlike', 'Cyberpunk', 'Watercolor').")
+    var colorPalette: String = ""
+}
+
+
+// MARK: - APP DOMAIN MODELS
+
 struct Dream: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let date: Date
     let rawTranscript: String
     
-    // AI Analysis Fields
-    let smartSummary: String
-    let interpretation: String
-    let actionableAdvice: String
-    let emotion: String
-    let tone: String
+    // Analysis
+    var analysis: DreamAnalysisResult
     
-    // Metrics
-    let sentimentScore: Double
-    let voiceFatigue: Double
-    
-    // Context (Extracted via Foundation Model)
-    let keyEntities: [String]
-    let people: [String]
-    let places: [String]
-    let emotions: [String]
-    
-    // Generated Content
-    var generatedImageHex: String?
+    // Generated Asset
     var generatedImageData: Data?
     
-    var isPositive: Bool {
-        return sentimentScore >= 0.1
-    }
+    // Computed Helpers for Charts & Legacy View Compatibility
+    var sentimentScore: Double { Double(analysis.sentimentScore) }
+    var anxietyScore: Double { Double(analysis.anxietyLevel) }
+    var fatigueScore: Double { Double(analysis.voiceFatigue) }
     
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
+    // Legacy properties to fix HistoryView/DetailView errors
+    var smartSummary: String { analysis.summary }
+    var interpretation: String { analysis.interpretation }
+    var actionableAdvice: String { analysis.actionableAdvice }
+    var emotion: String { analysis.emotions.joined(separator: ", ") }
+    var tone: String { analysis.tone.label }
+    var keyEntities: [String] { analysis.symbols } // Mapping symbols to old "keyEntities"
+    var people: [String] { analysis.people }
+    var places: [String] { analysis.places }
+    var emotions: [String] { analysis.emotions }
+    var voiceFatigue: Double { Double(analysis.voiceFatigue) / 100.0 } // Normalize for legacy views if they expect 0.0-1.0
+    var generatedImageHex: String? { nil } // Deprecated
     
-    static func == (lhs: Dream, rhs: Dream) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
-// 2. Dream Insight
-struct DreamInsight: Codable, Sendable {
-    @Guide(description: "The primary emotion felt during the dream.")
-    var emotion: String = ""
-    
-    @Guide(description: "The speaking tone of the transcript.")
-    var tone: String = ""
-    
-    @Guide(description: "A concise summary of the dream narrative.")
-    var summary: String = ""
-    
-    @Guide(description: "A psychological interpretation of the dream's meaning.")
-    var interpretation: String = ""
-    
-    @Guide(description: "Actionable therapeutic advice for the user.")
-    var actionableAdvice: String = ""
-    
-    init(emotion: String, tone: String, summary: String, interpretation: String, actionableAdvice: String) {
-        self.emotion = emotion; self.tone = tone; self.summary = summary; self.interpretation = interpretation; self.actionableAdvice = actionableAdvice
-    }
-    
-    init() {}
-}
-
-// 3. Entity Extraction (Generable)
-struct DreamEntities: Codable, Sendable {
-    @Guide(description: "List of people identified in the dream.")
-    var people: [String] = []
-    
-    @Guide(description: "List of places identified.")
-    var places: [String] = []
-    
-    @Guide(description: "List of distinct emotions felt or described.")
-    var emotions: [String] = []
-    
-    @Guide(description: "List of significant symbols or objects.")
-    var keyEntities: [String] = []
-    
-    init(people: [String] = [], places: [String] = [], emotions: [String] = [], keyEntities: [String] = []) {
-        self.people = people
-        self.places = places
-        self.emotions = emotions
-        self.keyEntities = keyEntities
-    }
-}
-
-// 4. Therapeutic Insight
-struct TherapeuticInsight: Identifiable, Codable, Sendable {
-    var id: UUID = UUID()
-    
-    @Guide(description: "Title of the psychological pattern.")
-    var title: String = ""
-    
-    @Guide(description: "Observation of the user's recent dream themes.")
-    var observation: String = ""
-    
-    @Guide(description: "Suggestion for the user.")
-    var suggestion: String = ""
-    
-    init(title: String, observation: String, suggestion: String) {
-        self.title = title
-        self.observation = observation
-        self.suggestion = suggestion
-    }
-    
-    init() {}
-}
-
-// 5. Image Prompt
-public struct ImagePrompt: Codable, Sendable {
-    @Guide(description: "A vivid visual description for the image generator.")
-    public var visualDescription: String = ""
-    
-    @Guide(description: "Keywords defining the mood.")
-    public var moodKeywords: String = ""
-    
-    @Guide(description: "Color palette suggestions.")
-    public var colorPalette: String = ""
-    
-    public init(visualDescription: String = "", moodKeywords: String = "", colorPalette: String = "") {
-        self.visualDescription = visualDescription
-        self.moodKeywords = moodKeywords
-        self.colorPalette = colorPalette
-    }
-}
-
-// 6. Checklist Item
-struct ChecklistItem: Identifiable, Hashable, Sendable {
-    let id = UUID()
-    let question: String
-    let keywords: [String]
-    var isSatisfied: Bool = false
-    var triggerKeywords: [String] = []
-}
-
-// 7. Image Creator Support
-enum ImageStyle: String, Codable {
-    case animation, illustration, sketch, photo
-}
-
-@MainActor
-class ImageCreator {
-    static let shared = ImageCreator()
-    
-    func generateImage(llmPrompt: ImagePrompt, style: ImageStyle = .illustration) async throws -> (Data?, String) {
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        let hash = abs(llmPrompt.visualDescription.hashValue)
-        let hex = String(format: "#%06X", hash % 0xFFFFFF)
-        
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 1024, height: 1024))
-        let image = renderer.image { context in
-            let ctx = context.cgContext
-            let colorHash = abs(llmPrompt.colorPalette.hashValue)
-            let r = CGFloat((colorHash >> 16) & 0xFF) / 255.0
-            let g = CGFloat((colorHash >> 8) & 0xFF) / 255.0
-            let b = CGFloat(colorHash & 0xFF) / 255.0
-            let color = UIColor(red: r, green: g, blue: b, alpha: 1.0)
-            color.setFill()
-            ctx.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
-            
-            ctx.setBlendMode(.overlay)
-            UIColor.white.withAlphaComponent(0.2).setFill()
-            ctx.fillEllipse(in: CGRect(x: 200, y: 200, width: 600, height: 600))
-        }
-        
-        return (image.jpegData(compressionQuality: 0.8), hex)
+    init(
+        id: UUID = UUID(),
+        date: Date = Date(),
+        rawTranscript: String,
+        analysis: DreamAnalysisResult,
+        generatedImageData: Data? = nil
+    ) {
+        self.id = id
+        self.date = date
+        self.rawTranscript = rawTranscript
+        self.analysis = analysis
+        self.generatedImageData = generatedImageData
     }
 }
