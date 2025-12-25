@@ -227,6 +227,8 @@ class DreamStore: NSObject, ObservableObject {
         var newDream = Dream(id: newID, rawTranscript: transcript)
         dreams.insert(newDream, at: 0)
         
+        persistDream(newDream)
+        
         selectedTab = 1
         navigationPath = NavigationPath()
         navigationPath.append(newDream)
@@ -296,7 +298,6 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
-                // Save to SwiftData
                 if let finalDream = dreams.first(where: { $0.id == newID }) {
                     persistDream(finalDream)
                 }
@@ -307,13 +308,25 @@ class DreamStore: NSObject, ObservableObject {
             } catch {
                 print("Streaming failed: \(error)")
                 isProcessing = false
+                if let finalDream = dreams.first(where: { $0.id == newID }) {
+                    persistDream(finalDream)
+                }
             }
         }
     }
     
     func persistDream(_ dream: Dream) {
         guard let context = modelContext else { return }
-        // Using convenience init
+        
+        let id = dream.id
+        // Handle Upsert: Delete existing if present, then insert new
+        do {
+            try context.delete(model: SavedDream.self, where: #Predicate { $0.id == id })
+        } catch {
+            print("Delete error in persist: \(error)")
+        }
+        
+        // Insert
         let saved = SavedDream(from: dream)
         context.insert(saved)
         try? context.save()
