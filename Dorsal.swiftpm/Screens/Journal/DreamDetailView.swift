@@ -14,27 +14,54 @@ struct DreamDetailView: View {
             
             ScrollView {
                 VStack(spacing: 24) {
-                    // 1. Image Header
-                    DreamImageHeader(dream: liveDream)
                     
-                    // 2. Summary (Core)
-                    if let summary = liveDream.core?.summary {
-                        Text(summary)
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                            .transition(.opacity)
+                    // 1. Image Header + Summary Combined Container
+                    VStack(spacing: 0) {
+                        // Image
+                        if let imageData = liveDream.generatedImageData, let uiImage = UIImage(data: imageData) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(height: 350)
+                                .frame(maxWidth: .infinity)
+                                .clipped()
+                        } else {
+                            Rectangle()
+                                .fill(.ultraThinMaterial)
+                                .frame(height: 350)
+                                .overlay {
+                                    if liveDream.core == nil {
+                                        Rectangle().fill(.clear).shimmering()
+                                    }
+                                }
+                        }
+                        
+                        // Summary (Caption) - Left aligned below image
+                        if let summary = liveDream.core?.summary {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(summary)
+                                    .font(.body)
+                                    .foregroundStyle(.primary)
+                                    .multilineTextAlignment(.leading)
+                                    .padding(20)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.ultraThinMaterial)
+                        }
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: 32))
+                    .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+                    .padding(.horizontal)
                     
-                    // 3. Core Analysis (Context Tags, Emotion)
-                    // FIX: Pass the concrete 'core' object.
+                    // 3. Core Analysis (Context Tags)
                     if let core = liveDream.core {
-                        DreamContextSection(core: core)
+                        DreamContextSection(core: core, store: store)
                             .transition(.opacity)
                     }
                     
-                    // 4. Interpretation & Advice (Core now)
+                    // 4. Interpretation & Advice
+                    // The MagicCard component now enforces full width alignment internally,
+                    // so the text will fill the space even while streaming.
                     if let interp = liveDream.core?.interpretation {
                         MagicCard(title: "Interpretation", icon: "sparkles.rectangle.stack", color: .purple) {
                             Text(interp)
@@ -53,33 +80,45 @@ struct DreamDetailView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     
-                    // 5. Voice/Tone (Core)
+                    // 5. Voice/Tone (Equal Height)
                     if let fatigue = liveDream.core?.voiceFatigue {
                         HStack(spacing: 16) {
-                            MagicCard(title: "Voice Fatigue", icon: "battery.50", color: .red) {
-                                VStack(alignment: .leading) {
-                                    Text("\(fatigue)%")
-                                        .font(.title3.bold())
-                                    ProgressView(value: Double(fatigue), total: 100).tint(.red)
-                                }
+                            // Fatigue Block
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("Voice Fatigue", systemImage: "battery.50")
+                                    .font(.headline)
+                                    .foregroundStyle(.red)
+                                Spacer()
+                                Text("\(fatigue)%").font(.title3.bold())
+                                ProgressView(value: Double(fatigue), total: 100).tint(.red)
                             }
+                            .padding(20)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
                             
+                            // Tone Block
                             if let tone = liveDream.core?.tone?.label {
-                                MagicCard(title: "Tone", icon: "waveform", color: .orange) {
-                                    VStack(alignment: .leading) {
-                                        Text(tone).font(.title3.bold())
-                                        if let conf = liveDream.core?.tone?.confidence {
-                                            Text("\(conf)% Confidence").font(.caption).foregroundStyle(.secondary)
-                                        }
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Label("Tone", systemImage: "waveform")
+                                        .font(.headline)
+                                        .foregroundStyle(.orange)
+                                    Spacer()
+                                    Text(tone).font(.title3.bold())
+                                    if let conf = liveDream.core?.tone?.confidence {
+                                        Text("\(conf)% Confidence").font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
+                                .padding(20)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
                             }
                         }
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     
-                    // 6. Loading State for Extras
+                    // 6. Loading
                     if store.isProcessing && liveDream.id == store.currentDreamID && liveDream.extras == nil {
                         HStack {
                             ProgressView()
@@ -95,8 +134,8 @@ struct DreamDetailView: View {
                 }
                 .padding(.top)
                 .padding(.bottom, 50)
-                .animation(.default, value: liveDream.core) // Re-render when core updates
-                .animation(.default, value: liveDream.extras) // Re-render when extras updates
+                .animation(.default, value: liveDream.core)
+                .animation(.default, value: liveDream.extras)
             }
         }
         .navigationTitle(liveDream.core?.title ?? liveDream.date.formatted(date: .abbreviated, time: .shortened))
@@ -106,84 +145,70 @@ struct DreamDetailView: View {
 
 // MARK: - COMPONENTS
 
-struct DreamImageHeader: View {
-    let dream: Dream
-    
-    var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            if let imageData = dream.generatedImageData, let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 380)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 32))
-            } else {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .frame(height: 380)
-                    .clipShape(RoundedRectangle(cornerRadius: 32))
-                    .overlay {
-                        if dream.core == nil {
-                            // Show shimmer only if we don't have core data yet (waiting for prompt)
-                            Rectangle().fill(.clear).shimmering()
-                        }
-                    }
-            }
-            
-            HStack(spacing: 6) {
-                Image(systemName: "apple.intelligence")
-                    .symbolEffect(.pulse)
-                Text("Dream Visualizer")
-                    .font(.caption.weight(.semibold))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-            .padding(20)
-        }
-        .padding(.horizontal)
-        .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
-    }
-}
-
 struct DreamContextSection: View {
-    // FIX: Updated type to DreamCoreAnalysis (concrete) instead of PartiallyGenerated
     let core: DreamCoreAnalysis
+    @ObservedObject var store: DreamStore
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            
             if let people = core.people, !people.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(people, id: \.self) { person in
-                            TagPill(text: person).glassEffect(.regular.tint(.blue.opacity(0.2)))
-                        }
-                    }
-                    .padding(.horizontal)
+                ContextRow(title: "People", icon: "person.2.fill", color: .blue, items: people) { item in
+                    store.jumpToFilter(type: "person", value: item)
                 }
             }
+            
             if let places = core.places, !places.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(places, id: \.self) { place in
-                            TagPill(text: place).glassEffect(.regular.tint(.green.opacity(0.2)))
-                        }
-                    }
-                    .padding(.horizontal)
+                ContextRow(title: "Places", icon: "map.fill", color: .green, items: places) { item in
+                    store.jumpToFilter(type: "place", value: item)
                 }
             }
+            
             if let emotions = core.emotions, !emotions.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(emotions, id: \.self) { emotion in
-                            TagPill(text: emotion).glassEffect(.regular.tint(.pink.opacity(0.2)))
-                        }
-                    }
-                    .padding(.horizontal)
+                ContextRow(title: "Emotions", icon: "heart.fill", color: .pink, items: emotions) { item in
+                    store.jumpToFilter(type: "emotion", value: item)
                 }
             }
+            
+            if let symbols = core.symbols, !symbols.isEmpty {
+                ContextRow(title: "Symbols", icon: "star.fill", color: .yellow, items: symbols) { item in
+                    store.jumpToFilter(type: "tag", value: item)
+                }
+            }
+        }
+    }
+}
+
+struct ContextRow: View {
+    let title: String
+    let icon: String
+    let color: Color
+    let items: [String]
+    let action: (String) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: icon)
+                .font(.caption.bold())
+                .foregroundStyle(color)
+                .padding(.horizontal)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(items, id: \.self) { item in
+                        Button {
+                            action(item)
+                        } label: {
+                            Text(item.capitalized).font(.caption.bold())
+                        }
+                        .buttonStyle(.glassProminent)
+                        .tint(color.opacity(0.2)) // Glass-like tint
+                        .foregroundStyle(color) // Text color matches tint
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .scrollClipDisabled()
         }
     }
 }

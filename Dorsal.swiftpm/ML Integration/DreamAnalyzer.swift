@@ -15,13 +15,18 @@ class DreamAnalyzer {
             """)
     }
     
+    // Add Pre-warming to load model into memory early
+    func prewarm() {
+        session.prewarm()
+    }
+    
     // MARK: - Streaming Analysis
     
     // Stage 1: Core
     func streamCore(transcript: String) -> AsyncThrowingStream<DreamCoreAnalysis.PartiallyGenerated, Error> {
         let prompt = """
         Analyze this transcript. 
-        Provide a concise title, summary, primary emotion, people, places, emotions, symbols, interpretation, advice, fatigue, and tone.
+        Provide a concise title, summary, emotion, people, places, emotions, symbols, interpretation, advice, fatigue, and tone.
         Transcript: "\(transcript)"
         """
         
@@ -30,10 +35,6 @@ class DreamAnalyzer {
                 do {
                     let stream = session.streamResponse(to: prompt, generating: DreamCoreAnalysis.self)
                     for try await snapshot in stream {
-                        // Fix: Check if content exists directly without optional binding if it's already non-optional
-                        // However, API usually returns optional content in snapshot.
-                        // If compiler complains "Initializer for conditional binding must have Optional type",
-                        // it means snapshot.content is NON-OPTIONAL.
                         // So we just yield it directly.
                         continuation.yield(snapshot.content)
                     }
@@ -71,7 +72,7 @@ class DreamAnalyzer {
     // Weekly Insights
     func analyzeWeeklyTrends(dreams: [Dream]) async throws -> WeeklyInsightResult {
         let dreamSummaries = dreams.prefix(20).map { dream in
-            let emo = dream.core?.primaryEmotion ?? ""
+            let emo = dream.core?.emotion ?? ""
             return "- \(dream.date.formatted(date: .abbreviated, time: .omitted)): \(dream.core?.summary ?? "") (Emotion: \(emo))"
         }.joined(separator: "\n")
         

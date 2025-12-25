@@ -130,7 +130,7 @@ struct RecordView: View {
                             }
                             .contentShape(Circle())
                             .glassEffect(.clear.interactive().tint(store.isRecording ? .red : Theme.accent), in: Circle())
-                            .disabled(store.isProcessing) // Disable when processing
+                            .disabled(store.isProcessing)
                             .glassEffectID("recordButton", in: namespace)
                             
                             // 3. Cancel
@@ -152,8 +152,6 @@ struct RecordView: View {
                     .padding(.bottom, (store.isRecording && !store.isPaused) ? 80 : 40)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isRecording)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isPaused)
-                    
-                    // Loading text REMOVED as requested
                 }
             }
             .navigationTitle("Record")
@@ -174,7 +172,7 @@ struct RecordView: View {
     }
     
     func handleRecordButtonTap() {
-        if store.isProcessing { return } // Double check guard
+        if store.isProcessing { return }
         if store.isRecording {
             store.stopRecording(save: true)
         } else {
@@ -200,7 +198,6 @@ struct RecordView: View {
     }
 }
 
-// ... (Subviews remain unchanged)
 // MARK: - Subviews
 
 struct ChecklistOverlay: View {

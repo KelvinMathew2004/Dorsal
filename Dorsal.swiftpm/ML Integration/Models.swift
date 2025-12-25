@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import FoundationModels
 import ImagePlayground
+import SwiftData
 
 // MARK: - TIER 1: CORE ANALYSIS
 @Generable
@@ -12,11 +13,8 @@ struct DreamCoreAnalysis: Codable, Sendable, Hashable {
     @Guide(description: "A 1-2 sentence summary of the dream's narrative flow.")
     var summary: String?
     
-    // Changing 'emotion' to 'primaryEmotion' to clarify vs 'emotions' list if both needed
-    // But user asked for "emotions" list in Core.
-    // I will add 'primaryEmotion' for the single label use case if needed by UI
     @Guide(description: "The primary emotion felt.")
-    var primaryEmotion: String?
+    var emotion: String?
     
     @Guide(description: "List of people or characters.")
     var people: [String]?
@@ -98,8 +96,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     var places: [String] { core?.places ?? [] }
     var emotions: [String] {
         var all = core?.emotions ?? []
-        // If primaryEmotion is present, ensure it's in the list
-        if let primary = core?.primaryEmotion, !all.contains(primary) {
+        if let primary = core?.emotion, !all.contains(primary) {
             all.insert(primary, at: 0)
         }
         return all
@@ -142,6 +139,37 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.core = core
         self.extras = extras
         self.generatedImageData = generatedImageData
+    }
+    
+    // Init from SavedDream (SwiftData)
+    init(from saved: SavedDream) {
+        self.id = saved.id
+        self.date = saved.date
+        self.rawTranscript = saved.rawText
+        self.generatedImageData = saved.generatedImageData
+        
+        self.core = DreamCoreAnalysis(
+            title: saved.title,
+            summary: saved.summary,
+            emotion: saved.emotions.first, // Infer primary
+            people: saved.people,
+            places: saved.places,
+            emotions: saved.emotions,
+            symbols: saved.symbols,
+            interpretation: saved.interpretation,
+            actionableAdvice: saved.actionableAdvice,
+            voiceFatigue: saved.voiceFatigue,
+            tone: ToneAnalysis(label: saved.toneLabel, confidence: saved.toneConfidence)
+        )
+        
+        self.extras = DreamExtraAnalysis(
+            sentimentScore: saved.sentimentScore,
+            isNightmare: saved.isNightmare,
+            lucidityScore: saved.lucidityScore,
+            vividnessScore: saved.vividnessScore,
+            coherenceScore: saved.coherenceScore,
+            anxietyLevel: saved.anxietyLevel
+        )
     }
 }
 

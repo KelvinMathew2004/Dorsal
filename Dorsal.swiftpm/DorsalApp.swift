@@ -1,50 +1,45 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - App Entry Point
-
 @main
 struct DorsalApp: App {
-
-    @State private var analyzer = DreamAnalyzer()
     @StateObject private var store = DreamStore()
-
+    
     var body: some Scene {
         WindowGroup {
             ContentView(store: store)
-                .environment(analyzer)
-                .modelContainer(for: SavedDream.self)
+                // Register models for persistence
+                .modelContainer(for: [SavedDream.self, SavedWeeklyInsight.self])
         }
     }
 }
 
-// MARK: - Root View
-
 struct ContentView: View {
     @ObservedObject var store: DreamStore
-
+    @Environment(\.modelContext) var modelContext
+    
     var body: some View {
         TabView(selection: $store.selectedTab) {
-
             RecordView(store: store)
-                .tabItem {
-                    Label("Record", systemImage: "sparkles")
-                }
+                .tabItem { Label("Record", systemImage: "mic.fill") }
                 .tag(0)
-
+            
             HistoryView(store: store)
-                .tabItem {
-                    Label("Journal", systemImage: "book.pages.fill")
-                }
+                .tabItem { Label("Journal", systemImage: "book.fill") }
                 .tag(1)
-
+            
             StatsView(store: store)
-                .tabItem {
-                    Label("Insights", systemImage: "chart.xyaxis.line")
-                }
+                .tabItem { Label("Insights", systemImage: "chart.bar.fill") }
                 .tag(2)
         }
         .preferredColorScheme(.dark)
-        .tint(Theme.accent)
+        .onAppear {
+            store.setContext(modelContext)
+            
+            // Pre-warm the model
+            Task {
+                await DreamAnalyzer.shared.prewarm()
+            }
+        }
     }
 }

@@ -2,8 +2,9 @@ import SwiftUI
 import AVFoundation
 import ImagePlayground
 import FoundationModels
+import SwiftData
 
-// ... (Filter Structs same as before) ...
+// ... (Filter Structs) ...
 struct DreamFilter: Equatable {
     var people: Set<String> = []
     var places: Set<String> = []
@@ -16,6 +17,8 @@ struct DreamFilter: Equatable {
 class DreamStore: NSObject, ObservableObject {
     @Published var dreams: [Dream] = []
     @Published var currentDreamID: UUID?
+    
+    var modelContext: ModelContext?
     
     @Published var searchQuery: String = ""
     @Published var activeFilter = DreamFilter()
@@ -48,15 +51,40 @@ class DreamStore: NSObject, ObservableObject {
     ]
     private var updateStateTask: Task<Void, Never>?
     
-    private var fileURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("dreams_v2.json")
-    }
+    // Removing fileURL as we use SwiftData now
 
     override init() {
         super.init()
-        loadDreams()
     }
     
+    func setContext(_ context: ModelContext) {
+        self.modelContext = context
+        fetchAllData()
+    }
+    
+    func fetchAllData() {
+        guard let context = modelContext else { return }
+        do {
+            let descriptor = FetchDescriptor<SavedDream>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+            let savedDreams = try context.fetch(descriptor)
+            self.dreams = savedDreams.map { Dream(from: $0) }
+        } catch { print("Fetch error: \(error)") }
+        
+        do {
+            var descriptor = FetchDescriptor<SavedWeeklyInsight>(sortBy: [SortDescriptor(\.dateGenerated, order: .reverse)])
+            descriptor.fetchLimit = 1
+            if let latest = try context.fetch(descriptor).first {
+                self.weeklyInsight = WeeklyInsightResult(
+                    periodOverview: latest.periodOverview,
+                    dominantTheme: latest.dominantTheme,
+                    mentalHealthTrend: latest.mentalHealthTrend,
+                    strategicAdvice: latest.strategicAdvice
+                )
+            }
+        } catch { print("Insight fetch error: \(error)") }
+    }
+    
+    // ... Computed Props ...
     var filteredDreams: [Dream] {
         dreams.filter { dream in
             let matchesSearch = searchQuery.isEmpty || dream.rawTranscript.localizedCaseInsensitiveContains(searchQuery)
@@ -65,7 +93,6 @@ class DreamStore: NSObject, ObservableObject {
                 let dreamPeople = Set(dream.core?.people ?? [])
                 if !activeFilter.people.isSubset(of: dreamPeople) { return false }
             }
-            // ... similar for other filters ...
             return true
         }
     }
@@ -85,18 +112,9 @@ class DreamStore: NSObject, ObservableObject {
     private func generateRecommendations(for item: ChecklistItem) -> [String] {
         var recs: [String] = []
         switch item.contextType {
-        case "person":
-            recs = ["My Mom", "A Friend", "Stranger", "No one"]
-            let history = Array(Set(dreams.flatMap { $0.core?.people ?? [] })).prefix(3)
-            recs.insert(contentsOf: history, at: 0)
-        case "place":
-            recs = ["Home", "School", "Work", "Unknown"]
-            let history = Array(Set(dreams.flatMap { $0.core?.places ?? [] })).prefix(3)
-            recs.insert(contentsOf: history, at: 0)
-        case "emotion":
-            recs = ["Scared", "Happy", "Confused", "Calm"]
-            let history = Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })).prefix(3)
-            recs.insert(contentsOf: history, at: 0)
+        case "person": recs = ["My Mom", "A Friend", "Stranger", "No one"]; let history = Array(Set(dreams.flatMap { $0.core?.people ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
+        case "place": recs = ["Home", "School", "Work", "Unknown"]; let history = Array(Set(dreams.flatMap { $0.core?.places ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
+        case "emotion": recs = ["Scared", "Happy", "Confused", "Calm"]; let history = Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
         default: break
         }
         return Array(Set(recs))
@@ -134,7 +152,16 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
     
-    func deleteDream(_ dream: Dream) { if let index = dreams.firstIndex(where: { $0.id == dream.id }) { dreams.remove(at: index); saveToDisk() } }
+    func deleteDream(_ dream: Dream) {
+        if let index = dreams.firstIndex(where: { $0.id == dream.id }) {
+            dreams.remove(at: index)
+            if let context = modelContext {
+                let id = dream.id
+                try? context.delete(model: SavedDream.self, where: #Predicate { $0.id == id })
+                try? context.save()
+            }
+        }
+    }
     
     // Toggles...
     func togglePersonFilter(_ item: String) { if activeFilter.people.contains(item) { activeFilter.people.remove(item) } else { activeFilter.people.insert(item) } }
@@ -209,11 +236,13 @@ class DreamStore: NSObject, ObservableObject {
                 // Stream Core
                 for try await partialCore in DreamAnalyzer.shared.streamCore(transcript: transcript) {
                     if let index = dreams.firstIndex(where: { $0.id == newID }) {
-                        // Create concrete object from partial data
                         var currentCore = dreams[index].core ?? DreamCoreAnalysis()
                         
                         if let t = partialCore.title { currentCore.title = t }
                         if let s = partialCore.summary { currentCore.summary = s }
+                        
+                        // FIX: Ensure property name matches Models.swift ('emotion' vs 'primaryEmotion')
+                        if let e = partialCore.emotion { currentCore.emotion = e }
                         
                         if let p = partialCore.people { currentCore.people = p }
                         if let pl = partialCore.places { currentCore.places = pl }
@@ -241,7 +270,7 @@ class DreamStore: NSObject, ObservableObject {
                             let creator = try await ImageCreator()
                             let concepts: [ImagePlaygroundConcept] = [.text(manualPrompt)]
                             for try await image in creator.images(for: concepts, style: .illustration, limit: 1) {
-                                // FIX: image.cgImage is non-optional
+                                // iOS 18.4 API
                                 let cgImage = image.cgImage
                                 let uiImage = UIImage(cgImage: cgImage)
                                 if let pngData = uiImage.pngData() {
@@ -267,7 +296,11 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
-                saveToDisk()
+                // Save to SwiftData
+                if let finalDream = dreams.first(where: { $0.id == newID }) {
+                    persistDream(finalDream)
+                }
+                
                 isProcessing = false
                 Task { await refreshWeeklyInsights() }
                 
@@ -278,6 +311,26 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
     
+    func persistDream(_ dream: Dream) {
+        guard let context = modelContext else { return }
+        // Using convenience init
+        let saved = SavedDream(from: dream)
+        context.insert(saved)
+        try? context.save()
+    }
+    
+    func persistInsight(_ insight: WeeklyInsightResult) {
+        guard let context = modelContext else { return }
+        let saved = SavedWeeklyInsight(
+            periodOverview: insight.periodOverview ?? "",
+            dominantTheme: insight.dominantTheme ?? "",
+            mentalHealthTrend: insight.mentalHealthTrend ?? "",
+            strategicAdvice: insight.strategicAdvice ?? ""
+        )
+        context.insert(saved)
+        try? context.save()
+    }
+    
     func refreshWeeklyInsights() async {
         guard !dreams.isEmpty else { return }
         withAnimation { isGeneratingInsights = true }
@@ -286,10 +339,8 @@ class DreamStore: NSObject, ObservableObject {
             guard !recentDreams.isEmpty else { isGeneratingInsights = false; return }
             let insights = try await DreamAnalyzer.shared.analyzeWeeklyTrends(dreams: recentDreams)
             self.weeklyInsight = insights
+            persistInsight(insights)
         } catch { print("Insights error: \(error)") }
         withAnimation { isGeneratingInsights = false }
     }
-    
-    private func saveToDisk() { if let data = try? JSONEncoder().encode(dreams) { try? data.write(to: fileURL) } }
-    private func loadDreams() { if let data = try? Data(contentsOf: fileURL), let saved = try? JSONDecoder().decode([Dream].self, from: data) { self.dreams = saved } }
 }

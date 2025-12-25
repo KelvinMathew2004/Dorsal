@@ -35,7 +35,6 @@ extension Color {
 
 // MARK: - SHARED COMPONENTS
 
-/// A generic glass card container used for Analysis, Advice, etc.
 struct MagicCard<Content: View>: View {
     let title: String
     let icon: String
@@ -51,13 +50,13 @@ struct MagicCard<Content: View>: View {
             content
                 .font(.body)
                 .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(24)
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
-/// A smaller card for key-value statistics (e.g. Total Dreams)
 struct StatCard: View {
     let title: String
     let value: String
@@ -65,14 +64,14 @@ struct StatCard: View {
     let color: Color
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) { // Increased spacing
+        VStack(alignment: .leading, spacing: 12) {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(color)
-                .frame(width: 44, height: 44) // Fixed frame for alignment
+                .frame(width: 44, height: 44)
                 .background(color.opacity(0.15), in: Circle())
             
-            VStack(alignment: .leading, spacing: 4) { // Tight spacing for text
+            VStack(alignment: .leading, spacing: 4) {
                 Text(value)
                     .font(.title.bold())
                     .foregroundStyle(.white)
@@ -88,7 +87,6 @@ struct StatCard: View {
     }
 }
 
-/// A container for Charts in the Insights view
 struct ChartCard<Content: View, Caption: View>: View {
     @ViewBuilder var content: Content
     @ViewBuilder var caption: Caption
@@ -103,7 +101,6 @@ struct ChartCard<Content: View, Caption: View>: View {
     }
 }
 
-/// A circular progress ring for metrics like Lucidty/Vividness
 struct RingView: View {
     let percentage: Double
     let title: String
@@ -112,25 +109,14 @@ struct RingView: View {
     var body: some View {
         VStack {
             ZStack {
-                // Background Track
-                Circle()
-                    .stroke(.white.opacity(0.1), lineWidth: 10)
-                
-                // Progress
-                Circle()
-                    .trim(from: 0, to: percentage / 100)
+                Circle().stroke(.white.opacity(0.1), lineWidth: 10)
+                Circle().trim(from: 0, to: percentage / 100)
                     .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                
-                Text("\(Int(percentage))%")
-                    .font(.title3.bold())
-                    .foregroundStyle(.white)
+                Text("\(Int(percentage))%").font(.title3.bold()).foregroundStyle(.white)
             }
             .frame(height: 100)
-            
-            Text(title)
-                .font(.caption.bold())
-                .foregroundStyle(.white.opacity(0.8))
+            Text(title).font(.caption.bold()).foregroundStyle(.white.opacity(0.8))
         }
         .padding()
         .frame(maxWidth: .infinity)
@@ -138,13 +124,12 @@ struct RingView: View {
     }
 }
 
-/// Standard Tag Pill with Glass Effect
 struct TagPill: View {
     let text: String
     var isSelected: Bool = false
     
     var body: some View {
-        Text("#\(text)")
+        Text(text)
             .font(.caption.bold())
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 12)
@@ -200,7 +185,7 @@ struct FlowLayout: Layout {
     }
 }
 
-// Shimmer Effect for loading states
+// Shimmer Effect
 struct ShimmerEffect: ViewModifier {
     @State private var phase: CGFloat = 0
     func body(content: Content) -> some View {
@@ -208,28 +193,16 @@ struct ShimmerEffect: ViewModifier {
             .overlay(
                 GeometryReader { geo in
                     Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.clear, .white.opacity(0.1), .clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .fill(LinearGradient(colors: [.clear, .white.opacity(0.1), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
                         .rotationEffect(.degrees(30))
                         .offset(x: -geo.size.width + (geo.size.width * 2 * phase))
                 }
             )
             .mask(content)
-            .onAppear {
-                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
-            }
+            .onAppear { withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) { phase = 1 } }
     }
 }
 
 extension View {
-    func shimmering() -> some View {
-        modifier(ShimmerEffect())
-    }
+    func shimmering() -> some View { modifier(ShimmerEffect()) }
 }

@@ -3,11 +3,11 @@ import SwiftData
 
 @Model
 final class SavedDream {
-    var id: UUID
+    @Attribute(.unique) var id: UUID
     var date: Date
     var rawText: String
     
-    // Analysis Data (Now handling potential optionals from partial generation)
+    // Analysis Data
     var title: String
     var summary: String
     var interpretation: String
@@ -32,10 +32,11 @@ final class SavedDream {
     var coherenceScore: Int
     var isNightmare: Bool
     
-    // Image Generation Data
+    // Image Data
     var imagePrompt: String
     @Attribute(.externalStorage) var generatedImageData: Data?
     
+    // Designated Initializer
     init(
         id: UUID = UUID(),
         date: Date = Date(),
@@ -85,14 +86,13 @@ final class SavedDream {
     }
 }
 
-// Convenience Init from App Model
 extension SavedDream {
+    // FIX: Use convenience init instead of static factory to resolve call site confusion
     convenience init(from dream: Dream) {
         self.init(
             id: dream.id,
             date: dream.date,
             rawText: dream.rawTranscript,
-            // Unwrap optionals with defaults since SavedDream requires non-optionals
             title: dream.core?.title ?? "Untitled Dream",
             summary: dream.core?.summary ?? "No summary available.",
             interpretation: dream.core?.interpretation ?? "Analysis pending.",
@@ -110,9 +110,28 @@ extension SavedDream {
             anxietyLevel: dream.extras?.anxietyLevel ?? 0,
             coherenceScore: dream.extras?.coherenceScore ?? 0,
             isNightmare: dream.extras?.isNightmare ?? false,
-            // Image prompt is now manually derived if missing
             imagePrompt: dream.core?.summary ?? "",
             generatedImageData: dream.generatedImageData
         )
+    }
+}
+
+// SwiftData Model for Weekly Insights
+@Model
+final class SavedWeeklyInsight {
+    @Attribute(.unique) var id: UUID
+    var dateGenerated: Date
+    var periodOverview: String
+    var dominantTheme: String
+    var mentalHealthTrend: String
+    var strategicAdvice: String
+    
+    init(periodOverview: String, dominantTheme: String, mentalHealthTrend: String, strategicAdvice: String) {
+        self.id = UUID()
+        self.dateGenerated = Date()
+        self.periodOverview = periodOverview
+        self.dominantTheme = dominantTheme
+        self.mentalHealthTrend = mentalHealthTrend
+        self.strategicAdvice = strategicAdvice
     }
 }
