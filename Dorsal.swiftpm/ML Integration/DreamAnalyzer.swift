@@ -12,11 +12,12 @@ class DreamAnalyzer {
         self.session = LanguageModelSession(instructions: """
             You are a compassionate, insightful Dream Psychologist.
             Analyze dreams with empathy. Identify key symbols, emotions, and themes.
+            You MUST respond in U.S. English.
             """)
     }
     
     // Add Pre-warming to load model into memory early
-    func prewarm() {
+    func prewarm() async {
         session.prewarm()
     }
     
@@ -26,7 +27,6 @@ class DreamAnalyzer {
     func streamCore(transcript: String) -> AsyncThrowingStream<DreamCoreAnalysis.PartiallyGenerated, Error> {
         let prompt = """
         Analyze this transcript. 
-        Provide a concise title, summary, emotion, people, places, emotions, symbols, interpretation, advice, fatigue, and tone.
         Transcript: "\(transcript)"
         """
         
@@ -35,7 +35,6 @@ class DreamAnalyzer {
                 do {
                     let stream = session.streamResponse(to: prompt, generating: DreamCoreAnalysis.self)
                     for try await snapshot in stream {
-                        // So we just yield it directly.
                         continuation.yield(snapshot.content)
                     }
                     continuation.finish()
@@ -49,8 +48,7 @@ class DreamAnalyzer {
     // Stage 2: Extras
     func streamExtras(transcript: String) -> AsyncThrowingStream<DreamExtraAnalysis.PartiallyGenerated, Error> {
         let prompt = """
-        Analyze the remaining metrics: Sentiment, Nightmare status, Lucidity, Vividness, Coherence, and Anxiety.
-        Transcript: "\(transcript)"
+        Analyze the remaining metrics based on the transcript: "\(transcript)"
         """
         
         return AsyncThrowingStream { continuation in
@@ -58,7 +56,6 @@ class DreamAnalyzer {
                 do {
                     let stream = session.streamResponse(to: prompt, generating: DreamExtraAnalysis.self)
                     for try await snapshot in stream {
-                        // Same fix: Yield directly if non-optional
                         continuation.yield(snapshot.content)
                     }
                     continuation.finish()

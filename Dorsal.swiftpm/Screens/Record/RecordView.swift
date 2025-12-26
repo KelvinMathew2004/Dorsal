@@ -39,11 +39,7 @@ struct RecordView: View {
                             }
                             .padding(24)
                             .frame(maxWidth: .infinity)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 24)
-                                    .stroke(Color.green.opacity(0.5), lineWidth: 2)
-                            )
+                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
                             .padding(.horizontal, 30)
                             .transition(.scale.combined(with: .opacity))
                         } else {

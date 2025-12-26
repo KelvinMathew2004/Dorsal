@@ -15,17 +15,17 @@ struct DreamCoreAnalysis: Codable, Sendable, Hashable {
     
     @Guide(description: "The primary emotion felt.")
     var emotion: String?
-    
-    @Guide(description: "List of people or characters.")
+
+    @Guide(description: "List of people or characters. Use nouns only, no adjectives.")
     var people: [String]?
-    
-    @Guide(description: "List of locations or settings.")
+
+    @Guide(description: "List of locations or settings. Use nouns only, no adjectives.")
     var places: [String]?
-    
+
     @Guide(description: "List of distinct emotions felt.")
     var emotions: [String]?
-    
-    @Guide(description: "List of key symbols, objects, or animals.")
+
+    @Guide(description: "List of key objects, animals, or natural phenomena. Use nouns only, no adjectives. Exclude people and places.")
     var symbols: [String]?
     
     @Guide(description: "A deep, empathetic psychological interpretation.")
@@ -148,6 +148,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.rawTranscript = saved.rawText
         self.generatedImageData = saved.generatedImageData
         
+        // Reconstruct Core Analysis from flat properties
         self.core = DreamCoreAnalysis(
             title: saved.title,
             summary: saved.summary,
@@ -162,6 +163,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
             tone: ToneAnalysis(label: saved.toneLabel, confidence: saved.toneConfidence)
         )
         
+        // Reconstruct Extra Analysis from flat properties
         self.extras = DreamExtraAnalysis(
             sentimentScore: saved.sentimentScore,
             isNightmare: saved.isNightmare,

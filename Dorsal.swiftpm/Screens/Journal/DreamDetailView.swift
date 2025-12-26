@@ -24,10 +24,11 @@ struct DreamDetailView: View {
                                 .aspectRatio(contentMode: .fill)
                                 .frame(height: 350)
                                 .frame(maxWidth: .infinity)
-                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: 32))
                         } else {
                             Rectangle()
                                 .fill(.ultraThinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 32))
                                 .frame(height: 350)
                                 .overlay {
                                     if liveDream.core == nil {
@@ -38,18 +39,15 @@ struct DreamDetailView: View {
                         
                         // Summary (Caption) - Left aligned below image
                         if let summary = liveDream.core?.summary {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(summary)
-                                    .font(.body)
-                                    .foregroundStyle(.primary)
-                                    .multilineTextAlignment(.leading)
-                                    .padding(20)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.ultraThinMaterial)
+                            (Text("Summary: ").bold() + Text(summary))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 32))
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
                     .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
                     .padding(.horizontal)
                     
@@ -90,7 +88,12 @@ struct DreamDetailView: View {
                                     .foregroundStyle(.red)
                                 Spacer()
                                 Text("\(fatigue)%").font(.title3.bold())
-                                ProgressView(value: Double(fatigue), total: 100).tint(.red)
+                                ProgressView(value: Double(fatigue), total: 100)
+                                    .progressViewStyle(
+                                        LinearProgressViewStyle(tint: .red)
+                                    )
+                                    .frame(height: 8)
+                                    .scaleEffect(x: 1, y: 2, anchor: .center)
                             }
                             .padding(20)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -103,7 +106,7 @@ struct DreamDetailView: View {
                                         .font(.headline)
                                         .foregroundStyle(.orange)
                                     Spacer()
-                                    Text(tone).font(.title3.bold())
+                                    Text(tone.capitalized).font(.title3.bold())
                                     if let conf = liveDream.core?.tone?.confidence {
                                         Text("\(conf)% Confidence").font(.caption).foregroundStyle(.secondary)
                                     }

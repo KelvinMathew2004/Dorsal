@@ -54,7 +54,7 @@ struct StatsView: View {
                                 ProgressView().tint(.white).padding().frame(maxWidth: .infinity)
                             } else if !store.dreams.isEmpty {
                                 Button { Task { await store.refreshWeeklyInsights() } } label: {
-                                    Label("Generate Insights", systemImage: "wand.and.stars").frame(maxWidth: .infinity).padding().background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12)).foregroundStyle(.white)
+                                    Label("Generate Insights", systemImage: "wand.and.stars").frame(maxWidth: .infinity).padding().glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12)).foregroundStyle(.white)
                                 }.padding(.horizontal)
                             }
                             

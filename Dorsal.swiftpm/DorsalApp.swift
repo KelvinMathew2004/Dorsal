@@ -21,15 +21,15 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $store.selectedTab) {
             RecordView(store: store)
-                .tabItem { Label("Record", systemImage: "mic.fill") }
+                .tabItem { Label("Record", systemImage: "sparkles") }
                 .tag(0)
             
             HistoryView(store: store)
-                .tabItem { Label("Journal", systemImage: "book.fill") }
+                .tabItem { Label("Journal", systemImage: "book.pages.fill") }
                 .tag(1)
             
             StatsView(store: store)
-                .tabItem { Label("Insights", systemImage: "chart.bar.fill") }
+                .tabItem { Label("Insights", systemImage: "chart.xyaxis.line") }
                 .tag(2)
         }
         .preferredColorScheme(.dark)

@@ -51,8 +51,6 @@ class DreamStore: NSObject, ObservableObject {
     ]
     private var updateStateTask: Task<Void, Never>?
     
-    // Removing fileURL as we use SwiftData now
-
     override init() {
         super.init()
     }
@@ -91,7 +89,19 @@ class DreamStore: NSObject, ObservableObject {
             if !matchesSearch { return false }
             if !activeFilter.people.isEmpty {
                 let dreamPeople = Set(dream.core?.people ?? [])
-                if !activeFilter.people.isSubset(of: dreamPeople) { return false }
+                if activeFilter.people.isDisjoint(with: dreamPeople) { return false }
+            }
+            if !activeFilter.places.isEmpty {
+                let dreamPlaces = Set(dream.core?.places ?? [])
+                if activeFilter.places.isDisjoint(with: dreamPlaces) { return false }
+            }
+            if !activeFilter.emotions.isEmpty {
+                let dreamEmotions = Set(dream.core?.emotions ?? [])
+                if activeFilter.emotions.isDisjoint(with: dreamEmotions) { return false }
+            }
+            if !activeFilter.tags.isEmpty {
+                let dreamTags = Set(dream.core?.symbols ?? [])
+                if activeFilter.tags.isDisjoint(with: dreamTags) { return false }
             }
             return true
         }
@@ -169,7 +179,20 @@ class DreamStore: NSObject, ObservableObject {
     func toggleEmotionFilter(_ item: String) { if activeFilter.emotions.contains(item) { activeFilter.emotions.remove(item) } else { activeFilter.emotions.insert(item) } }
     func toggleTagFilter(_ item: String) { if activeFilter.tags.contains(item) { activeFilter.tags.remove(item) } else { activeFilter.tags.insert(item) } }
     func clearFilter() { activeFilter = DreamFilter() }
-    func jumpToFilter(type: String, value: String) { clearFilter(); selectedTab = 1 }
+    
+    // Logic updated to actually apply the filter
+    func jumpToFilter(type: String, value: String) {
+        clearFilter()
+        switch type {
+        case "person": activeFilter.people.insert(value)
+        case "place": activeFilter.places.insert(value)
+        case "emotion": activeFilter.emotions.insert(value)
+        case "tag": activeFilter.tags.insert(value)
+        default: break
+        }
+        selectedTab = 1
+        navigationPath = NavigationPath()
+    }
 
     // MARK: - RECORDING
     func startRecording() {

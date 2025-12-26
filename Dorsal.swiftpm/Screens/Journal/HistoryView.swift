@@ -114,7 +114,7 @@ struct FilterDropdown: View {
     var body: some View {
         Menu {
             ForEach(options, id: \.self) { option in
-                Button { onSelect(option) } label: { HStack { Text(option); if selected.contains(option) { Image(systemName: "checkmark") } } }
+                Button { onSelect(option) } label: { HStack { Text(option.capitalized); if selected.contains(option) { Image(systemName: "checkmark") } } }
             }
         } label: {
             HStack(spacing: 6) {
@@ -147,7 +147,7 @@ struct RemovablePill: View {
     let text: String; let icon: String; let color: Color; let action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) { Image(systemName: icon).font(.caption); Text(text).font(.caption.bold()); Image(systemName: "xmark").font(.caption2) }
+            HStack(spacing: 6) { Image(systemName: icon).font(.caption); Text(text.capitalized).font(.caption.bold()); Image(systemName: "xmark").font(.caption2) }
                 .foregroundStyle(.white)
         }
         .buttonStyle(.glassProminent)
