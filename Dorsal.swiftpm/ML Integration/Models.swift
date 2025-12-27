@@ -4,28 +4,68 @@ import FoundationModels
 import ImagePlayground
 import SwiftData
 
+// MARK: - ERRORS
+enum DreamError: Error, LocalizedError {
+    case safetyViolation
+    case refusal(String)
+    case tooLong
+    case modelDownloading
+    case unsupportedLanguage
+    case formatError
+    case systemBusy
+    case internalError
+    
+    // Image Generation Errors
+    case imageNotSupported
+    case imageUnavailable
+    case imageInputInvalid
+    case backgroundExecutionForbidden
+    case imageGenerationFailed
+    case personIdentityRequired
+
+    var errorDescription: String? {
+        switch self {
+        case .safetyViolation: return "Content flagged by safety filters."
+        case .refusal(let r): return "Model refused: \(r)"
+        case .tooLong: return "The dream is too long for the model to process."
+        case .modelDownloading: return "Apple Intelligence is still downloading assets."
+        case .unsupportedLanguage: return "This language is not supported for on-device AI."
+        case .formatError: return "Failed to process the model output."
+        case .systemBusy: return "System is busy with other AI tasks. Try again in a moment."
+        case .internalError: return "Internal Foundation Model error."
+            
+        case .imageNotSupported: return "Image creation is not supported on this device."
+        case .imageUnavailable: return "Image creation services are currently unavailable."
+        case .imageInputInvalid: return "The input provided for image generation was invalid."
+        case .backgroundExecutionForbidden: return "Image generation stopped because the app was in the background."
+        case .imageGenerationFailed: return "Failed to generate visual representation."
+        case .personIdentityRequired: return "Prompt contains a specific person that requires identity verification."
+        }
+    }
+}
+
 // MARK: - TIER 1: CORE ANALYSIS
 @Generable
 struct DreamCoreAnalysis: Codable, Sendable, Hashable {
-    @Guide(description: "A concise, engaging title for the dream.")
+    @Guide(description: "A short title of 4 words or fewer.")
     var title: String?
     
     @Guide(description: "A 1-2 sentence summary of the dream's narrative flow.")
     var summary: String?
+
+    @Guide(description: "List of people or characters. Use single-word base nouns only. No descriptors or modifiers.")
+    var people: [String]?
+
+    @Guide(description: "List of locations or settings. You MUST use single-word base location nouns only. No descriptors or modifiers.")
+    var places: [String]?
     
     @Guide(description: "The primary emotion felt.")
     var emotion: String?
 
-    @Guide(description: "List of people or characters. Use nouns only, no adjectives.")
-    var people: [String]?
-
-    @Guide(description: "List of locations or settings. Use nouns only, no adjectives.")
-    var places: [String]?
-
-    @Guide(description: "List of distinct emotions felt.")
+    @Guide(description: "List of distinct emotions felt. Emotions only.")
     var emotions: [String]?
 
-    @Guide(description: "List of key objects, animals, or natural phenomena. Use nouns only, no adjectives. Exclude people and places.")
+    @Guide(description: "List of symbols. Single-word object, animal, or phenomenon nouns only. Do NOT include people, places, emotions.")
     var symbols: [String]?
     
     @Guide(description: "A deep, empathetic psychological interpretation.")
@@ -86,6 +126,8 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     var extras: DreamExtraAnalysis?
     var generatedImageData: Data?
     
+    var analysisError: String?
+    
     // Legacy Helpers
     var smartSummary: String { core?.summary ?? "Processing..." }
     var interpretation: String { core?.interpretation ?? "Generating analysis..." }
@@ -131,7 +173,8 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         rawTranscript: String,
         core: DreamCoreAnalysis? = nil,
         extras: DreamExtraAnalysis? = nil,
-        generatedImageData: Data? = nil
+        generatedImageData: Data? = nil,
+        analysisError: String? = nil
     ) {
         self.id = id
         self.date = date
@@ -139,6 +182,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.core = core
         self.extras = extras
         self.generatedImageData = generatedImageData
+        self.analysisError = analysisError
     }
     
     // Init from SavedDream (SwiftData)
@@ -152,9 +196,9 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.core = DreamCoreAnalysis(
             title: saved.title,
             summary: saved.summary,
-            emotion: saved.emotions.first, // Infer primary
             people: saved.people,
             places: saved.places,
+            emotion: saved.emotions.first,
             emotions: saved.emotions,
             symbols: saved.symbols,
             interpretation: saved.interpretation,
@@ -172,6 +216,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
             coherenceScore: saved.coherenceScore,
             anxietyLevel: saved.anxietyLevel
         )
+        self.analysisError = nil
     }
 }
 

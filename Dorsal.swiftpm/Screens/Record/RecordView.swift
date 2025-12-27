@@ -1,5 +1,7 @@
 import SwiftUI
 import FoundationModels
+import AVFoundation
+import Speech
 
 struct RecordView: View {
     @ObservedObject var store: DreamStore
@@ -7,6 +9,7 @@ struct RecordView: View {
     @Namespace private var namespace
     
     private let model = SystemLanguageModel.default
+    
     @State private var showAvailabilityAlert = false
     @State private var availabilityMessage = ""
     
@@ -159,8 +162,8 @@ struct RecordView: View {
             } message: {
                 Text(availabilityMessage)
             }
-            .onChange(of: store.selectedTab) { newValue in
-                if newValue == 0 {
+            .onChange(of: store.selectedTab) {
+                if store.selectedTab == 0 {
                     store.navigationPath = NavigationPath()
                 }
             }
@@ -169,28 +172,53 @@ struct RecordView: View {
     
     func handleRecordButtonTap() {
         if store.isProcessing { return }
+        
         if store.isRecording {
             store.stopRecording(save: true)
-        } else {
-            switch model.availability {
-            case .available:
-                store.startRecording()
-            case .unavailable(let reason):
-                switch reason {
-                case .appleIntelligenceNotEnabled:
-                    availabilityMessage = "This feature requires Apple Intelligence to be enabled in Settings."
-                case .modelNotReady:
-                    availabilityMessage = "The on-device model isn't ready yet. Please try again later."
-                case .deviceNotEligible:
-                    availabilityMessage = "Your device doesn’t support this feature."
-                @unknown default:
-                    availabilityMessage = "Foundation Models are currently unavailable."
-                }
-                showAvailabilityAlert = true
-            @unknown default:
-                store.startRecording()
-            }
+            return
         }
+        
+        guard checkMicrophonePermissions() else {
+            availabilityMessage = "Please enable Microphone and Speech Recognition in Settings."
+            showAvailabilityAlert = true
+            return
+        }
+        
+        switch SystemLanguageModel.default.availability {
+        case .available:
+            store.startRecording()
+            
+        case .unavailable(let reason):
+            handleUnavailability(reason)
+            
+        @unknown default:
+            availabilityMessage = "An unknown error occurred with Apple Intelligence."
+            showAvailabilityAlert = true
+        }
+    }
+    
+    private func handleUnavailability(_ reason: SystemLanguageModel.Availability.UnavailableReason) {
+        switch reason {
+        case .appleIntelligenceNotEnabled:
+            availabilityMessage = "Enable Apple Intelligence in Settings to use this feature."
+        case .modelNotReady:
+            availabilityMessage = "Downloading model assets. Please wait a moment..."
+        case .deviceNotEligible:
+            availabilityMessage = "This feature requires iPhone 15 Pro or newer."
+        @unknown default:
+            availabilityMessage = "Feature temporarily unavailable."
+        }
+        showAvailabilityAlert = true
+    }
+    
+    private func checkMicrophonePermissions() -> Bool {
+        let micStatus = AVAudioApplication.shared.recordPermission
+        let speechStatus = SFSpeechRecognizer.authorizationStatus()
+
+        let micAllowed = micStatus == .granted || micStatus == .undetermined
+        let speechAllowed = speechStatus == .authorized || speechStatus == .notDetermined
+        
+        return micAllowed && speechAllowed
     }
 }
 

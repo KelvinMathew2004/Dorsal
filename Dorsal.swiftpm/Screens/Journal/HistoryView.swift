@@ -85,48 +85,93 @@ struct HistoryView: View {
 }
 
 // MARK: - Subviews
-// (Keeping existing definitions intact)
 struct FilterBar: View {
     @ObservedObject var store: DreamStore
+
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                FilterDropdown(title: "", icon: "person.2", options: store.allPeople, selected: store.activeFilter.people) { item in withAnimation { store.togglePersonFilter(item) } }
-                FilterDropdown(title: "", icon: "map", options: store.allPlaces, selected: store.activeFilter.places) { item in withAnimation { store.togglePlaceFilter(item) } }
-                FilterDropdown(title: "", icon: "heart", options: store.allEmotions, selected: store.activeFilter.emotions) { item in withAnimation { store.toggleEmotionFilter(item) } }
-                FilterDropdown(title: "", icon: "tag", options: store.allTags, selected: store.activeFilter.tags) { item in withAnimation { store.toggleTagFilter(item) } }
-                
-                if !store.activeFilter.isEmpty {
-                    Button("Clear", role: .destructive) { withAnimation { store.clearFilter() } }
-                        .font(.caption.bold())
-                        .foregroundColor(.red)
-                        .tint(.red.opacity(0.2))
-                        .buttonStyle(.glassProminent)
-                }
+        HStack(spacing: 12) {
+            FilterDropdown(
+                icon: "person.2",
+                options: store.allPeople,
+                selected: store.activeFilter.people
+            ) { item in
+                withAnimation { store.togglePersonFilter(item) }
             }
-            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
+
+            FilterDropdown(
+                icon: "map",
+                options: store.allPlaces,
+                selected: store.activeFilter.places
+            ) { item in
+                withAnimation { store.togglePlaceFilter(item) }
+            }
+            .frame(maxWidth: .infinity)
+
+            FilterDropdown(
+                icon: "heart",
+                options: store.allEmotions,
+                selected: store.activeFilter.emotions
+            ) { item in
+                withAnimation { store.toggleEmotionFilter(item) }
+            }
+            .frame(maxWidth: .infinity)
+
+            FilterDropdown(
+                icon: "tag",
+                options: store.allTags,
+                selected: store.activeFilter.tags
+            ) { item in
+                withAnimation { store.toggleTagFilter(item) }
+            }
+            .frame(maxWidth: .infinity)
+
+            if !store.activeFilter.isEmpty {
+                Button("Clear", role: .destructive) {
+                    withAnimation { store.clearFilter() }
+                }
+                .font(.caption.bold())
+                .foregroundStyle(.red)
+                .tint(.red.opacity(0.2))
+                .buttonStyle(.glassProminent)
+                .transition(.opacity.combined(with: .scale))
+            }
         }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
     }
 }
 
 struct FilterDropdown: View {
-    let title: String; let icon: String; let options: [String]; let selected: Set<String>; let onSelect: (String) -> Void
+    let icon: String
+    let options: [String]
+    let selected: Set<String>
+    let onSelect: (String) -> Void
+
     var body: some View {
         Menu {
             ForEach(options, id: \.self) { option in
-                Button { onSelect(option) } label: { HStack { Text(option.capitalized); if selected.contains(option) { Image(systemName: "checkmark") } } }
+                Button {
+                    onSelect(option)
+                } label: {
+                    HStack {
+                        Text(option.capitalized)
+                        if selected.contains(option) {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: icon).font(.body)
-                if !title.isEmpty { Text(title) }
-                Image(systemName: "chevron.down").font(.caption2)
+                Image(systemName: icon)
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
             }
             .font(.subheadline.bold())
             .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .glassEffect(.regular, in: Capsule())
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .glassEffect()
         }
     }
 }

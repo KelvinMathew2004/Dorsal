@@ -128,7 +128,16 @@ struct StatsView: View {
                     .padding(.top)
                 }
             }
-            // Use native navigation title now
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        Task { await store.refreshWeeklyInsights() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(store.isGeneratingInsights)
+                }
+            }
             .navigationTitle("Insights")
             .navigationBarTitleDisplayMode(.large)
             .onAppear {

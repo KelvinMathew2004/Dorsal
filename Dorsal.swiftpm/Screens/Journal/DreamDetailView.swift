@@ -8,141 +8,187 @@ struct DreamDetailView: View {
         store.dreams.first(where: { $0.id == dream.id }) ?? dream
     }
     
+    var isProcessingThisDream: Bool {
+        store.isProcessing && liveDream.id == store.currentDreamID
+    }
+    
     var body: some View {
         ZStack {
             Theme.gradientBackground.ignoresSafeArea()
             
-            ScrollView {
-                VStack(spacing: 24) {
-                    
-                    // 1. Image Header + Summary Combined Container
-                    VStack(spacing: 0) {
-                        // Image
-                        if let imageData = liveDream.generatedImageData, let uiImage = UIImage(data: imageData) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(height: 350)
-                                .frame(maxWidth: .infinity)
-                                .clipShape(RoundedRectangle(cornerRadius: 32))
-                        } else {
-                            Rectangle()
-                                .fill(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 32))
-                                .frame(height: 350)
-                                .overlay {
-                                    if liveDream.core == nil {
-                                        Rectangle().fill(.clear).shimmering()
+            // ERROR STATE
+            if let error = liveDream.analysisError {
+                ContentUnavailableView {
+                    Label("Analysis Failed", systemImage: "hand.raised.fill")
+                } description: {
+                    Text(error)
+                        .multilineTextAlignment(.center)
+                } actions: {
+                    if liveDream.core?.summary != nil {
+                        Button("Remove Entry", role: .destructive) {
+                            store.deleteDream(liveDream)
+                            store.navigationPath = NavigationPath()
+                        }
+                        .buttonStyle(.glass)
+                        .tint(.red)
+                        
+                        Button("Continue", role: .confirm) {
+                            store.ignoreErrorAndKeepDream(liveDream)
+                        }
+                        .buttonStyle(.glassProminent)
+                    } else {
+                        Button("Remove Entry", role: .destructive) {
+                            store.deleteDream(liveDream)
+                            store.navigationPath = NavigationPath()
+                        }
+                        .buttonStyle(.glassProminent)
+                        .tint(.red)
+                    }
+                }
+                .transition(.opacity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        
+                        VStack(spacing: 0) {
+                            if let imageData = liveDream.generatedImageData, let uiImage = UIImage(data: imageData) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(height: 350)
+                                    .frame(maxWidth: .infinity)
+                                    .clipShape(RoundedRectangle(cornerRadius: 32))
+                                    .overlay(alignment: .bottomLeading) {
+                                        HStack {
+                                            Image(systemName: "apple.intelligence")
+                                            Text("Dream Visualizer")
+                                                .font(.caption2.bold())
+                                                .tracking(1)
+                                        }
+                                        .padding(8)
+                                        .glassEffect(.regular)
+                                        .padding()
                                     }
-                                }
+                            }
+                            
+                            if let summary = liveDream.core?.summary {
+                                Text("\(Text("Summary: ").bold())\(summary)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
+                                    .padding(20)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
+                        .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+                        .padding(.horizontal)
+                        
+                        // 3. Core Analysis (Context Tags)
+                        if let core = liveDream.core {
+                            DreamContextSection(core: core, store: store)
+                                .transition(.opacity)
                         }
                         
-                        // Summary (Caption) - Left aligned below image
-                        if let summary = liveDream.core?.summary {
-                            (Text("Summary: ").bold() + Text(summary))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.leading)
-                                .padding(20)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
-                    .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
-                    .padding(.horizontal)
-                    
-                    // 3. Core Analysis (Context Tags)
-                    if let core = liveDream.core {
-                        DreamContextSection(core: core, store: store)
-                            .transition(.opacity)
-                    }
-                    
-                    // 4. Interpretation & Advice
-                    // The MagicCard component now enforces full width alignment internally,
-                    // so the text will fill the space even while streaming.
-                    if let interp = liveDream.core?.interpretation {
-                        MagicCard(title: "Interpretation", icon: "sparkles.rectangle.stack", color: .purple) {
-                            Text(interp)
-                                .lineSpacing(4)
-                        }
-                        .padding(.horizontal)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                    
-                    if let advice = liveDream.core?.actionableAdvice {
-                        MagicCard(title: "Actionable Advice", icon: "brain.head.profile", color: .green) {
-                            Text(advice)
-                                .italic()
-                        }
-                        .padding(.horizontal)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                    
-                    // 5. Voice/Tone (Equal Height)
-                    if let fatigue = liveDream.core?.voiceFatigue {
-                        HStack(spacing: 16) {
-                            // Fatigue Block
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("Voice Fatigue", systemImage: "battery.50")
-                                    .font(.headline)
-                                    .foregroundStyle(.red)
-                                Spacer()
-                                Text("\(fatigue)%").font(.title3.bold())
-                                ProgressView(value: Double(fatigue), total: 100)
-                                    .progressViewStyle(
-                                        LinearProgressViewStyle(tint: .red)
-                                    )
-                                    .frame(height: 8)
-                                    .scaleEffect(x: 1, y: 2, anchor: .center)
+                        if let interp = liveDream.core?.interpretation {
+                            MagicCard(title: "Interpretation", icon: "sparkles.rectangle.stack", color: .purple) {
+                                Text(interp)
+                                    .lineSpacing(4)
                             }
-                            .padding(20)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-                            
-                            // Tone Block
-                            if let tone = liveDream.core?.tone?.label {
+                            .padding(.horizontal)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                        
+                        if let advice = liveDream.core?.actionableAdvice {
+                            MagicCard(title: "Actionable Advice", icon: "brain.head.profile", color: .green) {
+                                Text(advice)
+                                    .italic()
+                            }
+                            .padding(.horizontal)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                        
+                        if let fatigue = liveDream.core?.voiceFatigue {
+                            HStack(spacing: 16) {
                                 VStack(alignment: .leading, spacing: 12) {
-                                    Label("Tone", systemImage: "waveform")
+                                    Label("Voice Fatigue", systemImage: "battery.50")
                                         .font(.headline)
-                                        .foregroundStyle(.orange)
+                                        .foregroundStyle(.red)
                                     Spacer()
-                                    Text(tone.capitalized).font(.title3.bold())
-                                    if let conf = liveDream.core?.tone?.confidence {
-                                        Text("\(conf)% Confidence").font(.caption).foregroundStyle(.secondary)
-                                    }
+                                    Text("\(fatigue)%").font(.title3.bold())
+                                    ProgressView(value: Double(fatigue), total: 100)
+                                        .progressViewStyle(
+                                            LinearProgressViewStyle(tint: .red)
+                                        )
+                                        .frame(height: 8)
+                                        .scaleEffect(x: 1, y: 2, anchor: .center)
                                 }
                                 .padding(20)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                                
+                                if let tone = liveDream.core?.tone?.label {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        Label("Tone", systemImage: "waveform")
+                                            .font(.headline)
+                                            .foregroundStyle(.orange)
+                                        Spacer()
+                                        Text(tone.capitalized).font(.title3.bold())
+                                        if let conf = liveDream.core?.tone?.confidence {
+                                            Text("\(conf)% Confidence").font(.caption).foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .padding(20)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                                }
                             }
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        
+                        DreamTranscriptSection(transcript: liveDream.rawTranscript)
                     }
-                    
-                    // 6. Loading
-                    if store.isProcessing && liveDream.id == store.currentDreamID && liveDream.extras == nil {
-                        HStack {
-                            ProgressView()
-                            Text("Analyzing deeper metrics...")
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .transition(.opacity)
-                    }
-                    
-                    // 7. Transcript
-                    DreamTranscriptSection(transcript: liveDream.rawTranscript)
+                    .padding(.top)
+                    .padding(.bottom, 50)
+                    .animation(.default, value: liveDream.core)
+                    .animation(.default, value: liveDream.extras)
                 }
-                .padding(.top)
-                .padding(.bottom, 50)
-                .animation(.default, value: liveDream.core)
-                .animation(.default, value: liveDream.extras)
+                .scrollDisabled(isProcessingThisDream)
+                .overlay {
+                    if isProcessingThisDream {
+                        ZStack {
+                            Color.black.opacity(0.3)
+                                .ignoresSafeArea()
+                            
+                            VStack(spacing: 16) {
+                                ProgressView()
+                                    .scaleEffect(1.5)
+                                    .tint(.white)
+                                Text("Analyzing...")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                            }
+                            .padding(32)
+                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                        }
+                    }
+                }
             }
         }
         .navigationTitle(liveDream.core?.title ?? liveDream.date.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    store.regenerateDream(liveDream)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(store.isProcessing)
+            }
+        }
     }
 }
 
@@ -205,8 +251,8 @@ struct ContextRow: View {
                             Text(item.capitalized).font(.caption.bold())
                         }
                         .buttonStyle(.glassProminent)
-                        .tint(color.opacity(0.2)) // Glass-like tint
-                        .foregroundStyle(color) // Text color matches tint
+                        .tint(color.opacity(0.2))
+                        .foregroundStyle(color)
                     }
                 }
                 .padding(.horizontal)

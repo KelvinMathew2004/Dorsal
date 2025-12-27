@@ -45,7 +45,7 @@ class DreamStore: NSObject, ObservableObject {
     
     struct ChecklistItem: Identifiable, Hashable { let id = UUID(); let question: String; let keywords: [String]; let contextType: String }
     private let questions: [ChecklistItem] = [
-        ChecklistItem(question: "Who was in the dream with you?", keywords: ["mom", "dad", "friend", "brother", "sister", "he", "she", "they", "someone", "person", "man", "woman", "grandma", "grandpa", "teacher", "celebrity", "bear", "octopus", "librarian", "no one", "taylor", "dad"], contextType: "person"),
+        ChecklistItem(question: "Who was in the dream with you?", keywords: ["mom", "dad", "friend", "brother", "sister", "he", "she", "they", "someone", "person", "man", "woman", "grandma", "grandpa", "teacher", "celebrity", "bear", "octopus", "librarian", "taylor", "dad"], contextType: "person"),
         ChecklistItem(question: "Where did it take place?", keywords: ["home", "school", "work", "outside", "inside", "room", "forest", "city", "water", "place", "house", "building", "kitchen", "hallway", "mountain", "underwater", "library", "party", "car", "downtown"], contextType: "place"),
         ChecklistItem(question: "How did you feel?", keywords: ["happy", "sad", "scared", "anxious", "excited", "confused", "calm", "angry", "felt", "feeling", "joyful", "terrified", "empowered", "lonely", "relief", "curious", "starstruck"], contextType: "emotion")
     ]
@@ -122,8 +122,8 @@ class DreamStore: NSObject, ObservableObject {
     private func generateRecommendations(for item: ChecklistItem) -> [String] {
         var recs: [String] = []
         switch item.contextType {
-        case "person": recs = ["My Mom", "A Friend", "Stranger", "No one"]; let history = Array(Set(dreams.flatMap { $0.core?.people ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
-        case "place": recs = ["Home", "School", "Work", "Unknown"]; let history = Array(Set(dreams.flatMap { $0.core?.places ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
+        case "person": recs = ["My Mom", "A Friend", "Stranger"]; let history = Array(Set(dreams.flatMap { $0.core?.people ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
+        case "place": recs = ["Home", "School", "Work"]; let history = Array(Set(dreams.flatMap { $0.core?.places ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
         case "emotion": recs = ["Scared", "Happy", "Confused", "Calm"]; let history = Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
         default: break
         }
@@ -173,7 +173,20 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
     
-    // Toggles...
+    private func deleteDreamFromPersistenceOnly(_ dream: Dream) {
+        guard let context = modelContext else { return }
+        let id = dream.id
+        try? context.delete(model: SavedDream.self, where: #Predicate { $0.id == id })
+        try? context.save()
+    }
+    
+    func ignoreErrorAndKeepDream(_ dream: Dream) {
+        if let index = dreams.firstIndex(where: { $0.id == dream.id }) {
+            dreams[index].analysisError = nil
+            persistDream(dreams[index])
+        }
+    }
+    
     func togglePersonFilter(_ item: String) { if activeFilter.people.contains(item) { activeFilter.people.remove(item) } else { activeFilter.people.insert(item) } }
     func togglePlaceFilter(_ item: String) { if activeFilter.places.contains(item) { activeFilter.places.remove(item) } else { activeFilter.places.insert(item) } }
     func toggleEmotionFilter(_ item: String) { if activeFilter.emotions.contains(item) { activeFilter.emotions.remove(item) } else { activeFilter.emotions.insert(item) } }
@@ -256,28 +269,43 @@ class DreamStore: NSObject, ObservableObject {
         navigationPath = NavigationPath()
         navigationPath.append(newDream)
         
+        runAnalysis(for: newID, transcript: transcript)
+    }
+    
+    func regenerateDream(_ dream: Dream) {
+        guard !isProcessing else { return }
+        guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
+        
+        isProcessing = true
+        currentDreamID = dream.id
+        
+        dreams[index].core = nil
+        dreams[index].extras = nil
+        dreams[index].generatedImageData = nil
+        dreams[index].analysisError = nil
+        
+        persistDream(dreams[index])
+        
+        runAnalysis(for: dream.id, transcript: dream.rawTranscript)
+    }
+    
+    private func runAnalysis(for dreamID: UUID, transcript: String) {
         Task {
             do {
-                // Stream Core
                 for try await partialCore in DreamAnalyzer.shared.streamCore(transcript: transcript) {
-                    if let index = dreams.firstIndex(where: { $0.id == newID }) {
+                    if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
                         var currentCore = dreams[index].core ?? DreamCoreAnalysis()
                         
                         if let t = partialCore.title { currentCore.title = t }
                         if let s = partialCore.summary { currentCore.summary = s }
-                        
-                        // FIX: Ensure property name matches Models.swift ('emotion' vs 'primaryEmotion')
                         if let e = partialCore.emotion { currentCore.emotion = e }
-                        
                         if let p = partialCore.people { currentCore.people = p }
                         if let pl = partialCore.places { currentCore.places = pl }
                         if let em = partialCore.emotions { currentCore.emotions = em }
                         if let sym = partialCore.symbols { currentCore.symbols = sym }
-                        
                         if let i = partialCore.interpretation { currentCore.interpretation = i }
                         if let a = partialCore.actionableAdvice { currentCore.actionableAdvice = a }
                         if let f = partialCore.voiceFatigue { currentCore.voiceFatigue = f }
-                        
                         if let toneLabel = partialCore.tone?.label {
                             currentCore.tone = ToneAnalysis(label: toneLabel, confidence: partialCore.tone?.confidence)
                         }
@@ -286,30 +314,51 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
-                // Image Generation
-                if let index = dreams.firstIndex(where: { $0.id == newID }),
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }),
                    let summary = dreams[index].core?.summary {
                     let manualPrompt = "\(summary). Artistic style: Dreamlike, surreal, soft lighting."
                     do {
-                        if #available(iOS 18.0, *) {
-                            let creator = try await ImageCreator()
-                            let concepts: [ImagePlaygroundConcept] = [.text(manualPrompt)]
-                            for try await image in creator.images(for: concepts, style: .illustration, limit: 1) {
-                                // iOS 18.4 API
-                                let cgImage = image.cgImage
-                                let uiImage = UIImage(cgImage: cgImage)
-                                if let pngData = uiImage.pngData() {
-                                    dreams[index].generatedImageData = pngData
-                                    break
-                                }
+                        let creator = try await ImageCreator()
+                        guard let firstAvailable = creator.availableStyles.first else {
+                            throw DreamError.imageUnavailable
+                        }
+                        let selectedStyle: ImagePlaygroundStyle = creator.availableStyles.contains(.illustration) ? .illustration : firstAvailable
+                        let concepts: [ImagePlaygroundConcept] = [.text(manualPrompt)]
+                        
+                        for try await image in creator.images(for: concepts, style: selectedStyle, limit: 1) {
+                            let cgImage = image.cgImage
+                            let uiImage = UIImage(cgImage: cgImage)
+                            if let pngData = uiImage.pngData() {
+                                dreams[index].generatedImageData = pngData
+                                break
                             }
                         }
-                    } catch { print("Image error: \(error)") }
+                    } catch let error as ImageCreator.Error {
+                        let specificError: DreamError
+                        switch error {
+                        case .notSupported: specificError = .imageNotSupported
+                        case .unavailable: specificError = .imageUnavailable
+                        case .creationCancelled: return
+                        case .conceptsRequirePersonIdentity: specificError = .personIdentityRequired
+                        case .faceInImageTooSmall, .unsupportedInputImage: specificError = .imageInputInvalid
+                        case .unsupportedLanguage: specificError = .unsupportedLanguage
+                        case .backgroundCreationForbidden: specificError = .backgroundExecutionForbidden
+                        case .creationFailed: specificError = .imageGenerationFailed
+                        @unknown default: specificError = .imageGenerationFailed
+                        }
+                        
+                        if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                            dreams[index].analysisError = specificError.localizedDescription
+                            deleteDreamFromPersistenceOnly(dreams[index])
+                        }
+                    } catch {
+                        print("Unknown Image error: \(error)")
+                    }
                 }
                 
                 // Stream Extras
                 for try await partialExtra in DreamAnalyzer.shared.streamExtras(transcript: transcript) {
-                    if let index = dreams.firstIndex(where: { $0.id == newID }) {
+                    if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
                         var currentExtras = dreams[index].extras ?? DreamExtraAnalysis()
                         if let s = partialExtra.sentimentScore { currentExtras.sentimentScore = s }
                         if let nm = partialExtra.isNightmare { currentExtras.isNightmare = nm }
@@ -321,7 +370,7 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
-                if let finalDream = dreams.first(where: { $0.id == newID }) {
+                if let finalDream = dreams.first(where: { $0.id == dreamID }) {
                     persistDream(finalDream)
                 }
                 
@@ -331,8 +380,9 @@ class DreamStore: NSObject, ObservableObject {
             } catch {
                 print("Streaming failed: \(error)")
                 isProcessing = false
-                if let finalDream = dreams.first(where: { $0.id == newID }) {
-                    persistDream(finalDream)
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                    dreams[index].analysisError = error.localizedDescription
+                    deleteDreamFromPersistenceOnly(dreams[index])
                 }
             }
         }

@@ -16,28 +16,64 @@ class DreamAnalyzer {
             """)
     }
     
-    // Add Pre-warming to load model into memory early
     func prewarm() async {
         session.prewarm()
     }
     
     // MARK: - Streaming Analysis
     
-    // Stage 1: Core
     func streamCore(transcript: String) -> AsyncThrowingStream<DreamCoreAnalysis.PartiallyGenerated, Error> {
-        let prompt = """
-        Analyze this transcript. 
-        Transcript: "\(transcript)"
-        """
+        let prompt = "Analyze this transcript. Transcript: \"\(transcript)\""
         
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let stream = session.streamResponse(to: prompt, generating: DreamCoreAnalysis.self)
+                    let stream = session.streamResponse(
+                        to: prompt,
+                        generating: DreamCoreAnalysis.self,
+                        options: GenerationOptions(temperature: 0.5)
+                    )
+                    
                     for try await snapshot in stream {
                         continuation.yield(snapshot.content)
                     }
                     continuation.finish()
+                } catch let error as LanguageModelSession.GenerationError {
+                    switch error {
+                    case .guardrailViolation:
+                        continuation.finish(throwing: DreamError.safetyViolation)
+                        
+                    case .refusal(let refusal, _):
+                        Task {
+                            do {
+                                let reason = try await self.extractRefusalReason(from: refusal)
+                                continuation.finish(throwing: DreamError.refusal(reason))
+                            } catch {
+                                continuation.finish(throwing: DreamError.refusal("Policy restriction"))
+                            }
+                        }
+                        
+                    case .exceededContextWindowSize:
+                        continuation.finish(throwing: DreamError.tooLong)
+                        
+                    case .assetsUnavailable:
+                        continuation.finish(throwing: DreamError.modelDownloading)
+                        
+                    case .unsupportedLanguageOrLocale:
+                        continuation.finish(throwing: DreamError.unsupportedLanguage)
+                        
+                    case .decodingFailure:
+                        continuation.finish(throwing: DreamError.formatError)
+                        
+                    case .rateLimited, .concurrentRequests:
+                        continuation.finish(throwing: DreamError.systemBusy)
+                        
+                    case .unsupportedGuide:
+                        continuation.finish(throwing: DreamError.internalError)
+                        
+                    @unknown default:
+                        continuation.finish(throwing: error)
+                    }
                 } catch {
                     continuation.finish(throwing: error)
                 }
@@ -45,7 +81,11 @@ class DreamAnalyzer {
         }
     }
     
-    // Stage 2: Extras
+    private nonisolated func extractRefusalReason(from refusal: LanguageModelSession.GenerationError.Refusal) async throws -> String {
+        let response = try await refusal.explanation
+        return response.content
+    }
+    
     func streamExtras(transcript: String) -> AsyncThrowingStream<DreamExtraAnalysis.PartiallyGenerated, Error> {
         let prompt = """
         Analyze the remaining metrics based on the transcript: "\(transcript)"
@@ -54,7 +94,12 @@ class DreamAnalyzer {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let stream = session.streamResponse(to: prompt, generating: DreamExtraAnalysis.self)
+                    let stream = session.streamResponse(
+                        to: prompt,
+                        generating: DreamExtraAnalysis.self,
+                        options: GenerationOptions(temperature: 0.5)
+                    )
+                    
                     for try await snapshot in stream {
                         continuation.yield(snapshot.content)
                     }
@@ -75,7 +120,11 @@ class DreamAnalyzer {
         
         let prompt = "Review these dreams and generate a holistic insight report:\n\(dreamSummaries)"
         
-        let response = try await session.respond(to: prompt, generating: WeeklyInsightResult.self)
+        let response = try await session.respond(
+            to: prompt,
+            generating: WeeklyInsightResult.self,
+            options: GenerationOptions(temperature: 0.5)
+        )
         return response.content
     }
 }

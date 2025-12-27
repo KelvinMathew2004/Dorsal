@@ -147,7 +147,6 @@ struct FlowLayout: Layout {
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? 0
-        var height: CGFloat = 0
         var x: CGFloat = 0
         var y: CGFloat = 0
         var maxHeight: CGFloat = 0
@@ -166,7 +165,6 @@ struct FlowLayout: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let width = bounds.width
         var x: CGFloat = bounds.minX
         var y: CGFloat = bounds.minY
         var maxHeight: CGFloat = 0
