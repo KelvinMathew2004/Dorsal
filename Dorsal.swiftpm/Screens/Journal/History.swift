@@ -11,8 +11,7 @@ struct HistoryView: View {
                 VStack(spacing: 0) {
                     // Filter Bar
                     FilterBar(store: store)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal)
+                        .padding(.bottom, 10)
                     
                     // Active Filters
                     if !store.activeFilter.isEmpty {
@@ -118,7 +117,7 @@ struct FilterBar: View {
             .frame(maxWidth: .infinity)
 
             FilterDropdown(
-                icon: "tag",
+                icon: "star",
                 options: store.allTags,
                 selected: store.activeFilter.tags
             ) { item in
@@ -130,7 +129,7 @@ struct FilterBar: View {
                 Button("Clear", role: .destructive) {
                     withAnimation { store.clearFilter() }
                 }
-                .font(.caption.bold())
+                .font(.subheadline.bold())
                 .foregroundStyle(.red)
                 .tint(.red.opacity(0.2))
                 .buttonStyle(.glassProminent)
@@ -161,12 +160,12 @@ struct FilterDropdown: View {
                         }
                     }
                 }
+                .menuActionDismissBehavior(.disabled)
             }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                 Image(systemName: "chevron.down")
-                    .font(.caption2)
             }
             .font(.subheadline.bold())
             .foregroundStyle(.white)
@@ -183,7 +182,7 @@ struct ActiveFiltersView: View {
             ForEach(Array(store.activeFilter.people), id: \.self) { item in RemovablePill(text: item, icon: "person.fill", color: .blue) { withAnimation { store.togglePersonFilter(item) } } }
             ForEach(Array(store.activeFilter.places), id: \.self) { item in RemovablePill(text: item, icon: "map.fill", color: .green) { withAnimation { store.togglePlaceFilter(item) } } }
             ForEach(Array(store.activeFilter.emotions), id: \.self) { item in RemovablePill(text: item, icon: "heart.fill", color: .pink) { withAnimation { store.toggleEmotionFilter(item) } } }
-            ForEach(Array(store.activeFilter.tags), id: \.self) { item in RemovablePill(text: item, icon: "tag.fill", color: .purple) { withAnimation { store.toggleTagFilter(item) } } }
+            ForEach(Array(store.activeFilter.tags), id: \.self) { item in RemovablePill(text: item, icon: "star.fill", color: .purple) { withAnimation { store.toggleTagFilter(item) } } }
         }
     }
 }
@@ -211,7 +210,7 @@ struct DreamRow: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(dream.date.formatted(date: .abbreviated, time: .shortened)).font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
-                Text(dream.smartSummary).font(.subheadline).foregroundStyle(.primary).lineLimit(2)
+                Text(dream.core?.title ?? "Processing...").font(.subheadline).foregroundStyle(.primary).lineLimit(2)
             }
             Spacer()
             Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)

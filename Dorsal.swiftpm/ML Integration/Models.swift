@@ -104,14 +104,22 @@ struct DreamExtraAnalysis: Codable, Sendable, Hashable {
 
 @Generable
 struct ToneAnalysis: Codable, Sendable, Hashable {
+    @Guide(description: "Tone label. Single word.")
     var label: String?
+    
+    @Guide(description: "Confidence score for tone detection.", .range(0...100))
     var confidence: Int?
 }
 
 @Generable
 struct WeeklyInsightResult: Codable, Sendable, Hashable {
+    @Guide(description: "High-level overview of all dreams.")
     var periodOverview: String?
+    
+    @Guide(description: "Dominant theme. 1–3 words.")
     var dominantTheme: String?
+    
+    @Guide(description: "One short sentence describing the overall mental health trend.")
     var mentalHealthTrend: String?
     var strategicAdvice: String?
 }

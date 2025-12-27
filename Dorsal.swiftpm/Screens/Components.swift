@@ -62,15 +62,10 @@ struct StatCard: View {
     let value: String
     let icon: String
     let color: Color
+    var showArrow: Bool = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(color)
-                .frame(width: 44, height: 44)
-                .background(color.opacity(0.15), in: Circle())
-            
+        HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(value)
                     .font(.title.bold())
@@ -80,8 +75,24 @@ struct StatCard: View {
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.6))
             }
+            
+            Spacer()
+            
+            // Icon and Optional Arrow centered vertically to the right
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundStyle(color)
+                    .frame(width: 44, height: 44)
+                    .background(color.opacity(0.15), in: Circle())
+                
+                if showArrow {
+                    Image(systemName: "chevron.right")
+                        .font(.body.bold())
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
     }
@@ -105,21 +116,32 @@ struct RingView: View {
     let percentage: Double
     let title: String
     let color: Color
+    var showArrow: Bool = false
     
     var body: some View {
-        VStack {
-            ZStack {
-                Circle().stroke(.white.opacity(0.1), lineWidth: 10)
-                Circle().trim(from: 0, to: percentage / 100)
-                    .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                Text("\(Int(percentage))%").font(.title3.bold()).foregroundStyle(.white)
+        // Changed back to .topTrailing to position arrow in the corner
+        ZStack(alignment: .topTrailing) {
+            if showArrow {
+                Image(systemName: "chevron.right")
+                    .font(.body.bold())
+                    .foregroundStyle(.white.opacity(0.3))
+                    .padding(12)
             }
-            .frame(height: 100)
-            Text(title).font(.caption.bold()).foregroundStyle(.white.opacity(0.8))
+            
+            VStack(spacing: 20) {
+                ZStack {
+                    Circle().stroke(.white.opacity(0.1), lineWidth: 10)
+                    Circle().trim(from: 0, to: percentage / 100)
+                        .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Text("\(Int(percentage))%").font(.title3.bold()).foregroundStyle(.white)
+                }
+                .frame(height: 100)
+                Text(title).font(.caption.bold()).foregroundStyle(.white.opacity(0.8)).padding(.top, 8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(20)
         }
-        .padding()
-        .frame(maxWidth: .infinity)
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
     }
 }

@@ -108,39 +108,66 @@ struct DreamDetailView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                         
+                        // Vocal Fatigue & Tone Section (Clickable & Compact with Overlay Arrows)
                         if let fatigue = liveDream.core?.voiceFatigue {
                             HStack(spacing: 16) {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Label("Voice Fatigue", systemImage: "battery.50")
-                                        .font(.headline)
-                                        .foregroundStyle(.red)
-                                    Spacer()
-                                    Text("\(fatigue)%").font(.title3.bold())
-                                    ProgressView(value: Double(fatigue), total: 100)
-                                        .progressViewStyle(
-                                            LinearProgressViewStyle(tint: .red)
-                                        )
-                                        .frame(height: 8)
-                                        .scaleEffect(x: 1, y: 2, anchor: .center)
-                                }
-                                .padding(20)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-                                
-                                if let tone = liveDream.core?.tone?.label {
+                                // Vocal Fatigue Card
+                                NavigationLink(destination: TrendDetailView(metric: .fatigue, store: store)) {
                                     VStack(alignment: .leading, spacing: 12) {
-                                        Label("Tone", systemImage: "waveform")
+                                        Label("Vocal Fatigue", systemImage: "battery.50")
                                             .font(.headline)
-                                            .foregroundStyle(.orange)
+                                            .foregroundStyle(.red)
+                                        
                                         Spacer()
-                                        Text(tone.capitalized).font(.title3.bold())
-                                        if let conf = liveDream.core?.tone?.confidence {
-                                            Text("\(conf)% Confidence").font(.caption).foregroundStyle(.secondary)
-                                        }
+                                        
+                                        Text("\(fatigue)%").font(.title3.bold()).foregroundStyle(.white)
+                                        
+                                        ProgressView(value: Double(fatigue), total: 100)
+                                            .progressViewStyle(LinearProgressViewStyle(tint: .red))
+                                            .frame(height: 8)
+                                            .scaleEffect(x: 1, y: 2, anchor: .center)
                                     }
                                     .padding(20)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                                     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                                    .overlay(alignment: .trailing) {
+                                        Image(systemName: "chevron.right")
+                                            .font(.body.bold())
+                                            .foregroundStyle(.white.opacity(0.3))
+                                            .padding(.trailing, 20)
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                // Tone Card
+                                if let tone = liveDream.core?.tone?.label {
+                                    NavigationLink(destination: TrendDetailView(metric: .tone, store: store)) {
+                                        VStack(alignment: .leading, spacing: 12) {
+                                            Label("Tone", systemImage: "waveform")
+                                                .font(.headline)
+                                                .foregroundStyle(.orange)
+                                            
+                                            Spacer()
+                                            
+                                            Text(tone.capitalized).font(.title3.bold()).foregroundStyle(.white)
+                                            
+                                            if let conf = liveDream.core?.tone?.confidence {
+                                                Text("\(conf)% Confidence")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        .padding(20)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                                        .overlay(alignment: .trailing) {
+                                            Image(systemName: "chevron.right")
+                                                .font(.body.bold())
+                                                .foregroundStyle(.white.opacity(0.3))
+                                                .padding(.trailing, 20)
+                                        }
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
                             .fixedSize(horizontal: false, vertical: true)

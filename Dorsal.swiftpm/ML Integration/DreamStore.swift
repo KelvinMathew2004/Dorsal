@@ -314,6 +314,13 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
+                // REPAIR CORE IF NEEDED
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }),
+                   let currentCore = dreams[index].core {
+                    let repairedCore = await DreamAnalyzer.shared.ensureCoreFields(current: currentCore, transcript: transcript)
+                    dreams[index].core = repairedCore
+                }
+                
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }),
                    let summary = dreams[index].core?.summary {
                     let manualPrompt = "\(summary). Artistic style: Dreamlike, surreal, soft lighting."
@@ -368,6 +375,13 @@ class DreamStore: NSObject, ObservableObject {
                         if let a = partialExtra.anxietyLevel { currentExtras.anxietyLevel = a }
                         dreams[index].extras = currentExtras
                     }
+                }
+                
+                // REPAIR EXTRAS IF NEEDED
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }),
+                   let currentExtras = dreams[index].extras {
+                    let repairedExtras = await DreamAnalyzer.shared.ensureExtraFields(current: currentExtras, transcript: transcript)
+                    dreams[index].extras = repairedExtras
                 }
                 
                 if let finalDream = dreams.first(where: { $0.id == dreamID }) {
