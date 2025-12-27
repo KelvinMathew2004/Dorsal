@@ -116,6 +116,100 @@ struct WeeklyInsightResult: Codable, Sendable, Hashable {
     var strategicAdvice: String?
 }
 
+// MARK: - REPAIR WRAPPERS (Single Field Generation)
+@Generable
+struct RepairTitle: Codable, Sendable {
+    @Guide(description: "A short title of 4 words or fewer.")
+    var title: String
+}
+
+@Generable
+struct RepairSummary: Codable, Sendable {
+    @Guide(description: "A 1-2 sentence summary of the dream's narrative flow.")
+    var summary: String
+}
+
+@Generable
+struct RepairVoiceFatigue: Codable, Sendable {
+    @Guide(description: "Voice fatigue (0-100).", .range(0...100))
+    var voiceFatigue: Int
+}
+
+@Generable
+struct RepairTone: Codable, Sendable {
+    var tone: ToneAnalysis
+}
+
+@Generable
+struct RepairInterpretation: Codable, Sendable {
+    @Guide(description: "A deep, empathetic psychological interpretation.")
+    var interpretation: String
+}
+
+@Generable
+struct RepairAdvice: Codable, Sendable {
+    @Guide(description: "Actionable advice based on the dream's themes.")
+    var actionableAdvice: String
+}
+
+@Generable
+struct RepairSentiment: Codable, Sendable {
+    @Guide(description: "Sentiment score (0-100).", .range(0...100))
+    var sentimentScore: Int
+}
+
+@Generable
+struct RepairNightmare: Codable, Sendable {
+    @Guide(description: "Is this a nightmare?")
+    var isNightmare: Bool
+}
+
+@Generable
+struct RepairLucidity: Codable, Sendable {
+    @Guide(description: "Lucidity score (0-100).", .range(0...100))
+    var lucidityScore: Int
+}
+
+@Generable
+struct RepairVividness: Codable, Sendable {
+    @Guide(description: "Vividness score (0-100).", .range(0...100))
+    var vividnessScore: Int
+}
+
+@Generable
+struct RepairCoherence: Codable, Sendable {
+    @Guide(description: "Coherence score (0-100).", .range(0...100))
+    var coherenceScore: Int
+}
+
+@Generable
+struct RepairAnxiety: Codable, Sendable {
+    @Guide(description: "Anxiety level (0-100).", .range(0...100))
+    var anxietyLevel: Int
+}
+
+// Weekly Insight Repairs
+@Generable
+struct RepairPeriodOverview: Codable, Sendable {
+    var periodOverview: String
+}
+
+@Generable
+struct RepairDominantTheme: Codable, Sendable {
+    var dominantTheme: String
+}
+
+@Generable
+struct RepairMentalHealthTrend: Codable, Sendable {
+    var mentalHealthTrend: String
+}
+
+@Generable
+struct RepairStrategicAdvice: Codable, Sendable {
+    var strategicAdvice: String
+}
+
+
 // MARK: - APP DOMAIN MODEL
 struct Dream: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
