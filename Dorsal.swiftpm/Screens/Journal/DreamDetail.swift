@@ -136,6 +136,7 @@ struct DreamDetailView: View {
                                             .foregroundStyle(.white.opacity(0.3))
                                             .padding(.trailing, 20)
                                     }
+                                    .contentShape(RoundedRectangle(cornerRadius: 24)) // Ensure full tap area
                                 }
                                 .buttonStyle(PlainButtonStyle())
                                 
@@ -166,6 +167,7 @@ struct DreamDetailView: View {
                                                 .foregroundStyle(.white.opacity(0.3))
                                                 .padding(.trailing, 20)
                                         }
+                                        .contentShape(RoundedRectangle(cornerRadius: 24)) // Ensure full tap area
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                 }

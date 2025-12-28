@@ -434,9 +434,24 @@ class DreamStore: NSObject, ObservableObject {
     func refreshWeeklyInsights() async {
         guard !dreams.isEmpty else { return }
         withAnimation { isGeneratingInsights = true }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Use the Fixed Week Interval to match WeeklyInsights.swift
+        let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now)
+        ?? DateInterval(start: now.addingTimeInterval(-7*24*60*60), duration: 7*24*60*60)
+        
         do {
-            let recentDreams = dreams.filter { $0.date > Date().addingTimeInterval(-30*24*60*60) }
-            guard !recentDreams.isEmpty else { isGeneratingInsights = false; return }
+            // Filter using the fixed week
+            let recentDreams = dreams.filter { weekInterval.contains($0.date) }
+            
+            // If no dreams in this fixed week, stop generation (or you could choose to expand search)
+            guard !recentDreams.isEmpty else {
+                isGeneratingInsights = false
+                return
+            }
+            
             let insights = try await DreamAnalyzer.shared.analyzeWeeklyTrends(dreams: recentDreams)
             self.weeklyInsight = insights
             persistInsight(insights)

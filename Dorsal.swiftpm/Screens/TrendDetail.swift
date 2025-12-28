@@ -56,6 +56,22 @@ enum DreamMetric: String, CaseIterable, Identifiable {
         }
     }
     
+    // MARK: - Learn More Links
+    var learnMoreLink: String {
+        switch self {
+        case .dreams: return "https://www.sleepfoundation.org/dreams"
+        case .anxiety: return "https://www.apa.org/topics/anxiety"
+        case .sentiment: return "https://www.ibm.com/think/topics/sentiment-analysis"
+        case .lucidity: return "https://www.webmd.com/sleep-disorders/lucid-dreams-overview"
+        case .vividness: return "https://www.sleepfoundation.org/dreams/vivid-dreams"
+        case .fatigue: return "https://my.clevelandclinic.org/health/symptoms/21206-fatigue"
+        case .tone: return "https://www.nature.com/articles/s41598-019-50859-w"
+        case .coherence: return "https://philarchive.org/archive/BOSDAS-2"
+        case .nightmares: return "https://hms.harvard.edu/news-events/publications-archive/brain/nightmares-brain"
+        case .positive: return "https://dreamsforpeace.org/2025/02/13/positive-dreams-how-do-you-process-them/"
+        }
+    }
+    
     var unit: String {
         switch self {
         case .nightmares, .positive, .dreams: return ""
@@ -84,6 +100,13 @@ struct ChartDataPoint: Identifiable {
     let value: Double
 }
 
+// Data wrapper for series
+struct MetricSeries: Identifiable {
+    let metric: DreamMetric
+    let points: [ChartDataPoint]
+    var id: String { metric.rawValue }
+}
+
 struct TrendDetailView: View {
     let metric: DreamMetric
     @ObservedObject var store: DreamStore
@@ -92,88 +115,109 @@ struct TrendDetailView: View {
     @State private var selectedTimeFrame: TimeFrame = .week
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
     
-    // Tone Specific State
     @State private var toneReferenceDate: Date = Date()
     @State private var selectedToneYear: Int = Calendar.current.component(.year, from: Date())
     
-    // Dynamic available years based on data
     var availableYears: [Int] {
         let years = store.dreams.map { Calendar.current.component(.year, from: $0.date) }
         let uniqueYears = Set(years)
-        // Ensure current year is always available even if empty
         let allYears = uniqueYears.isEmpty ? [Calendar.current.component(.year, from: Date())] : Array(uniqueYears)
         return allYears.sorted()
     }
     
+    var viewTitle: String {
+        if metric == .anxiety || metric == .sentiment { return "Mental Health" }
+        return metric.rawValue
+    }
+    
+    var viewDescription: String {
+        if metric == .anxiety || metric == .sentiment {
+            return "Tracks the relationship between stress levels (Anxiety) and emotional tone (Sentiment). High anxiety often correlates with lower sentiment scores."
+        }
+        return metric.description
+    }
+    
     // MARK: - Data Processing
     
-    var chartData: [ChartDataPoint] {
+    // Generates raw points for a specific metric
+    func generatePoints(for m: DreamMetric) -> [ChartDataPoint] {
         let calendar = Calendar.current
         let now = Date()
         let rawDreams = store.dreams
-        
         var points: [ChartDataPoint] = []
         
         switch selectedTimeFrame {
         case .day:
-            // Domain: Today 00:00 to 23:59. Bin by Hour.
             let startOfDay = calendar.startOfDay(for: now)
             for i in 0..<24 {
                 if let hourDate = calendar.date(byAdding: .hour, value: i, to: startOfDay) {
                     let nextHour = calendar.date(byAdding: .hour, value: 1, to: hourDate)!
                     let dreamsInHour = rawDreams.filter { $0.date >= hourDate && $0.date < nextHour }
-                    let val = calculateValue(for: dreamsInHour)
-                    points.append(ChartDataPoint(date: hourDate, value: val))
+                    
+                    if !dreamsInHour.isEmpty {
+                        let val = calculateValue(for: dreamsInHour, metric: m)
+                        points.append(ChartDataPoint(date: hourDate, value: val))
+                    }
                 }
             }
-            
         case .week:
-            // Domain: Past 7 days (ensure 7 full days: 6 days ago + today)
             for i in (0...6).reversed() {
                 if let dayDate = calendar.date(byAdding: .day, value: -i, to: now) {
                     let startOfD = calendar.startOfDay(for: dayDate)
                     let endOfD = calendar.date(byAdding: .day, value: 1, to: startOfD)!
+                    
                     let dreamsInDay = rawDreams.filter { $0.date >= startOfD && $0.date < endOfD }
-                    let val = calculateValue(for: dreamsInDay)
-                    points.append(ChartDataPoint(date: startOfD, value: val))
+                    
+                    if !dreamsInDay.isEmpty {
+                        let val = calculateValue(for: dreamsInDay, metric: m)
+                        points.append(ChartDataPoint(date: startOfD, value: val))
+                    }
                 }
             }
-            
         case .month:
-            // Domain: Current month, daily averages (1-30/31)
             let currentComponents = calendar.dateComponents([.year, .month], from: now)
-            guard let startOfMonth = calendar.date(from: currentComponents),
-                  let range = calendar.range(of: .day, in: .month, for: startOfMonth) else { return [] }
-            
-            for day in range {
-                if let date = calendar.date(byAdding: .day, value: day - 1, to: startOfMonth) {
-                    let nextDay = calendar.date(byAdding: .day, value: 1, to: date)!
-                    let dreamsInDay = rawDreams.filter { $0.date >= date && $0.date < nextDay }
-                    let val = calculateValue(for: dreamsInDay)
-                    points.append(ChartDataPoint(date: date, value: val))
+            if let startOfMonth = calendar.date(from: currentComponents),
+               let range = calendar.range(of: .day, in: .month, for: startOfMonth) {
+                // Iterate ALL days in month to ensure daily alignment
+                for day in range {
+                    if let date = calendar.date(byAdding: .day, value: day - 1, to: startOfMonth) {
+                        let nextDay = calendar.date(byAdding: .day, value: 1, to: date)!
+                        let dreamsInDay = rawDreams.filter { $0.date >= date && $0.date < nextDay }
+                        
+                        if !dreamsInDay.isEmpty {
+                            let val = calculateValue(for: dreamsInDay, metric: m)
+                            points.append(ChartDataPoint(date: date, value: val))
+                        }
+                    }
                 }
             }
-            
         case .year:
-            // Domain: Selected Year (Jan-Dec)
             let yearStart = calendar.date(from: DateComponents(year: selectedYear, month: 1, day: 1))!
-            
             for month in 0..<12 {
                 if let monthDate = calendar.date(byAdding: .month, value: month, to: yearStart) {
                     let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthDate)!
                     let dreamsInMonth = rawDreams.filter { $0.date >= monthDate && $0.date < nextMonth }
-                    let val = calculateValue(for: dreamsInMonth)
-                    points.append(ChartDataPoint(date: monthDate, value: val))
+                    
+                    if !dreamsInMonth.isEmpty {
+                        let val = calculateValue(for: dreamsInMonth, metric: m)
+                        points.append(ChartDataPoint(date: monthDate, value: val))
+                    }
                 }
             }
         }
-        
         return points
     }
     
-    func calculateValue(for dreams: [Dream]) -> Double {
+    // Groups data into series for the chart
+    var groupedSeries: [MetricSeries] {
+        let metricsToShow: [DreamMetric] = (metric == .anxiety || metric == .sentiment) ? [.anxiety, .sentiment] : [metric]
+        return metricsToShow.map { m in
+            MetricSeries(metric: m, points: generatePoints(for: m))
+        }
+    }
+    
+    func calculateValue(for dreams: [Dream], metric: DreamMetric) -> Double {
         if dreams.isEmpty { return 0 }
-        
         switch metric {
         case .dreams: return Double(dreams.count)
         case .nightmares: return Double(dreams.filter { $0.extras?.isNightmare ?? false }.count)
@@ -195,29 +239,24 @@ struct TrendDetailView: View {
     }
     
     var aggregateValue: String {
-        let allValues = chartData.map { $0.value }
-        if allValues.isEmpty || allValues.allSatisfy({ $0 == 0 }) {
-            // Return "None" for count-based metrics if 0 or empty
-            if metric == .dreams || metric == .nightmares || metric == .positive {
-                return "None"
-            }
+        // Calculate aggregate for the primary metric only
+        let primaryPoints = generatePoints(for: metric)
+        let values = primaryPoints.map { $0.value }
+        
+        if values.isEmpty || values.allSatisfy({ $0 == 0 }) {
+            if metric == .dreams || metric == .nightmares || metric == .positive { return "None" }
             return "No Data"
         }
-        
         if metric.isPercentage {
-            let nonZeroBins = allValues.filter { $0 > 0 }
-            if nonZeroBins.isEmpty { return "0%" }
-            let avg = nonZeroBins.reduce(0, +) / Double(nonZeroBins.count)
+            let nonZero = values.filter { $0 > 0 }
+            if nonZero.isEmpty { return "0%" }
+            let avg = nonZero.reduce(0, +) / Double(nonZero.count)
             return String(format: "%.0f", avg) + "%"
         } else {
-            // For counts in Week/Month/Year, user requested "Average"
             if selectedTimeFrame == .day {
-                 let total = allValues.reduce(0, +)
-                 return "\(Int(total))"
+                 return "\(Int(values.reduce(0, +)))"
             } else {
-                let total = allValues.reduce(0, +)
-                let count = Double(allValues.count)
-                let avg = count > 0 ? total / count : 0
+                let avg = values.reduce(0, +) / Double(values.count)
                 return String(format: "%.1f", avg)
             }
         }
@@ -225,10 +264,37 @@ struct TrendDetailView: View {
     
     var aggregateLabel: String {
         switch selectedTimeFrame {
-        case .day: return "Total Today"
-        case .week: return "Average This Week"
-        case .month: return "Average This Month"
-        case .year: return "Average \(selectedYear)"
+        case .day: return "Total"
+        case .week: return "Daily Average"
+        case .month: return "Daily Average"
+        case .year: return "Daily Average"
+        }
+    }
+    
+    var aggregateColor: Color {
+        if metric == .anxiety || metric == .sentiment {
+            return .green
+        }
+        return metric.color
+    }
+    
+    var timeFrameSubheading: String {
+        let now = Date()
+        let formatter = DateFormatter()
+
+        switch selectedTimeFrame {
+        case .day:
+            return "Today"
+
+        case .week:
+            return "This Week"
+
+        case .month:
+            formatter.dateFormat = "MMM yyyy"
+            return formatter.string(from: now).uppercased()
+            
+        case .year:
+            return String(selectedYear)
         }
     }
     
@@ -241,18 +307,22 @@ struct TrendDetailView: View {
             let end = calendar.date(byAdding: .hour, value: 23, to: start)!
             return start...end
         case .week:
-            let start = calendar.date(byAdding: .day, value: -6, to: now)!
-            return start...now
+            let startRaw = calendar.date(byAdding: .day, value: -6, to: now)!
+            let start = calendar.startOfDay(for: startRaw)
+            let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
+            return start...end
         case .month:
             let currentComponents = calendar.dateComponents([.year, .month], from: now)
             let start = calendar.date(from: currentComponents)!
             let range = calendar.range(of: .day, in: .month, for: start)!
-            let end = calendar.date(byAdding: .day, value: range.count - 1, to: start)!
+            let end = calendar.date(byAdding: .day, value: range.count, to: start)!
             return start...end
         case .year:
+             // Explicitly define the full year range
              let start = calendar.date(from: DateComponents(year: selectedYear, month: 1, day: 1))!
              let end = calendar.date(from: DateComponents(year: selectedYear, month: 12, day: 31))!
-             return start...end
+             let endBuffered = calendar.date(byAdding: .day, value: 1, to: end)!
+             return start...endBuffered
         }
     }
     
@@ -262,18 +332,15 @@ struct TrendDetailView: View {
         let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: toneReferenceDate)
         return calendar.date(from: components) ?? Date()
     }
-    
     var toneWeekEnd: Date {
         Calendar.current.date(byAdding: .day, value: 6, to: toneWeekStart) ?? Date()
     }
-    
     func toneForDate(_ date: Date) -> (tone: String, confidence: Int)? {
         let calendar = Calendar.current
         let dayDreams = store.dreams.filter { calendar.isDate($0.date, inSameDayAs: date) }
         guard let first = dayDreams.first, let tone = first.core?.tone?.label, let conf = first.core?.tone?.confidence else { return nil }
         return (tone, conf)
     }
-    
     func moveWeek(by value: Int) {
         if let newDate = Calendar.current.date(byAdding: .weekOfYear, value: value, to: toneReferenceDate) {
             toneReferenceDate = newDate
@@ -287,254 +354,299 @@ struct TrendDetailView: View {
             
             ScrollView {
                 VStack(spacing: 24) {
-                    
                     if metric == .tone {
-                        // MARK: - TONE VIEW
-                        
-                        // Week Navigator with Year Dropdown to Right
-                        HStack {
-                            Button { moveWeek(by: -1) } label: {
-                                Image(systemName: "chevron.left.circle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.white.opacity(0.3))
-                            }
-                            
-                            Spacer()
-                            
-                            Text("\(toneWeekStart.formatted(.dateTime.month().day())) - \(toneWeekEnd.formatted(.dateTime.month().day()))")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                            
-                            Spacer()
-                            
-                            Button { moveWeek(by: 1) } label: {
-                                Image(systemName: "chevron.right.circle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.white.opacity(0.3))
-                            }
-                            
-                            Spacer()
-                            
-                            // Year Dropdown (Right Side)
-                            Menu {
-                                ForEach(availableYears, id: \.self) { year in
-                                    Button(String(year)) {
-                                        selectedToneYear = year
-                                        // Update reference date to Jan 1 of that year
-                                        let components = DateComponents(year: year, month: 1, day: 1)
-                                        if let newDate = Calendar.current.date(from: components) {
-                                            toneReferenceDate = newDate
-                                        }
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(String(selectedToneYear))
-                                    Image(systemName: "chevron.down")
-                                        .font(.caption.bold())
-                                }
-                                .font(.subheadline.bold())
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Theme.accent.opacity(0.1), in: Capsule())
-                                .foregroundStyle(Theme.accent)
-                            }
-                        }
-                        .padding(16)
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
-                        .padding(.horizontal)
-                        
-                        // Vertical Calendar List
-                        VStack(spacing: 12) {
-                            ForEach(0..<7, id: \.self) { dayOffset in
-                                let date = Calendar.current.date(byAdding: .day, value: dayOffset, to: toneWeekStart) ?? Date()
-                                let data = toneForDate(date)
-                                
-                                HStack {
-                                    VStack(alignment: .leading) {
-                                        Text(date.formatted(.dateTime.weekday(.wide)))
-                                            .font(.headline)
-                                            .foregroundStyle(.white)
-                                        Text(date.formatted(.dateTime.month().day()))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    if let data = data {
-                                        VStack(alignment: .trailing) {
-                                            Text(data.tone.capitalized)
-                                                .font(.headline)
-                                                .foregroundStyle(metric.color) // Matched to Metric Color (Orange)
-                                            Text("\(data.confidence)% Confidence")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    } else {
-                                        Text("No Data")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.white.opacity(0.3))
-                                    }
-                                }
-                                .padding()
-                                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
-                            }
-                        }
-                        .padding(.horizontal)
-                        
+                        toneSection
                     } else {
-                        // MARK: - STANDARD CHART VIEW
-                        
-                        // 1. Time Frame Picker
-                        Picker("Time Frame", selection: $selectedTimeFrame) {
-                            ForEach(TimeFrame.allCases, id: \.self) { frame in
-                                Text(frame.rawValue).tag(frame)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.horizontal)
-                        
-                        // 2. Data Header
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(aggregateLabel.uppercased())
-                                .font(.caption.bold())
-                                .foregroundStyle(.secondary)
-                            
-                            Text(aggregateValue)
-                                .font(.system(size: 42, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
-                            
-                            // Year Dropdown BELOW the average statistic
-                            if selectedTimeFrame == .year {
-                                Menu {
-                                    ForEach(availableYears, id: \.self) { year in
-                                        Button(String(year)) { selectedYear = year }
-                                    }
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Text(String(selectedYear))
-                                        Image(systemName: "chevron.down")
-                                            .font(.caption.bold())
-                                    }
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(Theme.accent)
-                                    .padding(.top, 4)
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
-                        .padding(.top, 16)
-                        
-                        // 3. Graph
-                        ChartCard {
-                            Chart {
-                                ForEach(chartData) { data in
-                                    if selectedTimeFrame == .day {
-                                        BarMark(
-                                            x: .value("Time", data.date, unit: .hour),
-                                            y: .value("Value", data.value)
-                                        )
-                                        .foregroundStyle(metric.color.gradient)
-                                    } else if selectedTimeFrame == .year {
-                                        BarMark(
-                                            x: .value("Month", data.date, unit: .month),
-                                            y: .value("Value", data.value)
-                                        )
-                                        .foregroundStyle(metric.color.gradient)
-                                    } else {
-                                        // Week / Month - Line Chart
-                                        LineMark(
-                                            x: .value("Date", data.date, unit: .day),
-                                            y: .value("Value", data.value)
-                                        )
-                                        .interpolationMethod(.linear)
-                                        .symbol(.circle)
-                                        .foregroundStyle(metric.color)
-                                        
-                                        AreaMark(
-                                            x: .value("Date", data.date, unit: .day),
-                                            y: .value("Value", data.value)
-                                        )
-                                        .interpolationMethod(.linear)
-                                        .foregroundStyle(
-                                            LinearGradient(
-                                                colors: [metric.color.opacity(0.3), metric.color.opacity(0.0)],
-                                                startPoint: .top,
-                                                endPoint: .bottom
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                            .chartXScale(domain: xAxisDomain)
-                            .chartYScale(domain: metric.isPercentage ? .automatic(includesZero: true) : .automatic)
-                            .chartYAxis {
-                                AxisMarks { value in
-                                    AxisGridLine()
-                                    AxisTick()
-                                    AxisValueLabel()
-                                }
-                            }
-                            .modifier(PercentageScaleModifier(isPercentage: metric.isPercentage))
-                            .chartXAxis {
-                                if selectedTimeFrame == .day {
-                                    AxisMarks(values: .stride(by: .hour, count: 4)) { _ in
-                                        AxisValueLabel(format: .dateTime.hour())
-                                        AxisGridLine()
-                                    }
-                                } else if selectedTimeFrame == .week {
-                                    AxisMarks(values: .stride(by: .day)) { _ in
-                                        AxisValueLabel(format: .dateTime.weekday(.abbreviated))
-                                    }
-                                } else if selectedTimeFrame == .month {
-                                    AxisMarks(values: .stride(by: .day, count: 5)) { _ in
-                                        AxisValueLabel(format: .dateTime.day())
-                                    }
-                                } else {
-                                    // Year
-                                    AxisMarks(values: .stride(by: .month)) { _ in
-                                        AxisValueLabel(format: .dateTime.month(.narrow))
-                                    }
-                                }
-                            }
-                            .frame(height: 250)
-                        } caption: {
-                            EmptyView()
-                        }
-                        .padding(.horizontal)
+                        standardChartSection
                     }
                     
-                    // 4. Description & Learn More (Common)
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(metric.description)
-                            .font(.body)
-                            .foregroundStyle(.white.opacity(0.8))
-                        + Text(" Learn more...")
-                            .font(.body.bold())
-                            .foregroundStyle(Theme.accent)
-                    }
-                    .lineSpacing(4)
-                    .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal)
-                    .onTapGesture {
-                        print("Navigate to learn more about \(metric.rawValue)")
-                    }
-                    
+                    descriptionSection
                     Spacer()
                 }
                 .padding(.top)
             }
         }
-        .navigationTitle(metric.rawValue)
+        .navigationTitle(viewTitle)
         .navigationBarTitleDisplayMode(.large)
+    }
+    
+    var toneSection: some View {
+        VStack(spacing: 24) {
+            HStack {
+                Button { moveWeek(by: -1) } label: {
+                    Image(systemName: "chevron.left.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+                Spacer()
+                Text("\(toneWeekStart.formatted(.dateTime.month().day())) - \(toneWeekEnd.formatted(.dateTime.month().day()))")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Spacer()
+                Button { moveWeek(by: 1) } label: {
+                    Image(systemName: "chevron.right.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+                Spacer()
+                Menu {
+                    ForEach(availableYears, id: \.self) { year in
+                        Button(String(year)) {
+                            selectedToneYear = year
+                            let components = DateComponents(year: year, month: 1, day: 1)
+                            if let newDate = Calendar.current.date(from: components) {
+                                toneReferenceDate = newDate
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(String(selectedToneYear))
+                        Image(systemName: "chevron.down")
+                            .font(.caption.bold())
+                    }
+                    .font(.subheadline.bold())
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Theme.accent.opacity(0.1), in: Capsule())
+                    .foregroundStyle(Theme.accent)
+                }
+            }
+            .padding(16)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal)
+            
+            VStack(spacing: 12) {
+                ForEach(0..<7, id: \.self) { dayOffset in
+                    let date = Calendar.current.date(byAdding: .day, value: dayOffset, to: toneWeekStart) ?? Date()
+                    let data = toneForDate(date)
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(date.formatted(.dateTime.weekday(.wide)))
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                            Text(date.formatted(.dateTime.month().day()))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if let data = data {
+                            VStack(alignment: .trailing) {
+                                Text(data.tone.capitalized)
+                                    .font(.headline)
+                                    .foregroundStyle(metric.color)
+                                Text("\(data.confidence)% Confidence")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text("No Data")
+                                .font(.subheadline)
+                                .foregroundStyle(.white.opacity(0.3))
+                        }
+                    }
+                    .padding()
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    var standardChartSection: some View {
+        VStack(spacing: 24) {
+            Picker("Time Frame", selection: $selectedTimeFrame) {
+                ForEach(TimeFrame.allCases, id: \.self) { frame in
+                    Text(frame.rawValue).tag(frame)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(aggregateLabel.uppercased())
+                    .font(.headline.bold())
+                    .foregroundStyle(.secondary)
+                Text(aggregateValue)
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
+                    .foregroundStyle(aggregateColor)
+                
+                if selectedTimeFrame != .year {
+                    Text(timeFrameSubheading)
+                        .font(.headline.bold())
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                } else {
+                    Menu {
+                        ForEach(availableYears, id: \.self) { year in
+                            Button(String(year)) { selectedYear = year }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(String(selectedYear))
+                                .foregroundStyle(Color.secondary)
+                            Image(systemName: "chevron.down")
+                                .foregroundStyle(aggregateColor)
+                        }
+                        .font(.headline.bold())
+                        .padding(.top, 4)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal)
+            .padding(.top, 16)
+            
+            // Separate Chart implementations
+            if selectedTimeFrame == .day || selectedTimeFrame == .year {
+                barChartView
+            } else {
+                lineChartView
+            }
+        }
+    }
+    
+    var barChartView: some View {
+        ChartCard {
+            Chart(groupedSeries) { series in
+                ForEach(series.points) { point in
+                    BarMark(
+                        x: .value(selectedTimeFrame == .day ? "Time" : "Month", point.date, unit: selectedTimeFrame == .year ? .month : .hour),
+                        y: .value("Value", point.value)
+                    )
+                    .foregroundStyle(series.metric.color.gradient)
+                }
+            }
+            .chartXScale(domain: xAxisDomain)
+            .chartYScale(domain: metric.isPercentage ? .automatic(includesZero: true) : .automatic)
+            .chartYAxis {
+                AxisMarks { _ in AxisGridLine(); AxisTick(); AxisValueLabel() }
+            }
+            .modifier(PercentageScaleModifier(isPercentage: metric.isPercentage))
+            .chartXAxis {
+                if selectedTimeFrame == .day {
+                    AxisMarks(values: .automatic(desiredCount: 6)) { _ in
+                        AxisValueLabel(format: .dateTime.hour()); AxisGridLine()
+                    }
+                } else {
+                    AxisMarks(values: .stride(by: .month)) { _ in
+                        AxisValueLabel(format: .dateTime.month(.narrow), centered: true)
+                    }
+                }
+            }
+            .frame(height: 250)
+            .padding(.trailing, 10)
+        } caption: {
+            if metric == .anxiety || metric == .sentiment {
+                HStack(spacing: 16) {
+                    Label("Anxiety", systemImage: "circle.fill").foregroundStyle(.pink)
+                    Label("Sentiment", systemImage: "circle.fill").foregroundStyle(.green)
+                    Spacer()
+                }
+                .font(.caption)
+                .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal)
+    }
+    
+    var lineChartView: some View {
+        ChartCard {
+            Chart(groupedSeries) { series in
+                ForEach(series.points) { point in
+                    let unit: Calendar.Component = selectedTimeFrame == .year ? .month : .day
+                    
+                    if groupedSeries.count == 1 || metric == .anxiety || metric == .sentiment {
+                        AreaMark(
+                            x: .value("Date", point.date, unit: unit),
+                            yStart: .value("Baseline", 0),
+                            yEnd: .value("Value", point.value),
+                            series: .value("Metric", series.metric.id)
+                        )
+                        .interpolationMethod(.linear)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [series.metric.color.opacity(0.5), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .alignsMarkStylesWithPlotArea()
+                    }
+
+                    LineMark(
+                        x: .value("Date", point.date, unit: unit),
+                        y: .value("Value", point.value),
+                        series: .value("Metric", series.metric.id)
+                    )
+                    .interpolationMethod(.linear)
+                    .symbol(.circle)
+                    .foregroundStyle(series.metric.color.gradient)
+                }
+            }
+            .chartYScale(domain: 0...100)
+            .chartXScale(domain: xAxisDomain)
+            .chartYAxis {
+                AxisMarks { _ in AxisGridLine(); AxisTick(); AxisValueLabel() }
+            }
+            .chartXAxis {
+                AxisMarks(values: selectedTimeFrame == .week ? .stride(by: .day) :
+                                  selectedTimeFrame == .month ? .stride(by: .day, count: 4) :
+                                  selectedTimeFrame == .year ? .stride(by: .month) :
+                                  .automatic(desiredCount: 6)) { value in
+                    
+                    if selectedTimeFrame == .week {
+                        AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true)
+                    } else if selectedTimeFrame == .month {
+                        AxisValueLabel(format: .dateTime.day())
+                    } else if selectedTimeFrame == .year {
+                        AxisValueLabel(format: .dateTime.month(.narrow), centered: true)
+                    } else {
+                        AxisValueLabel()
+                    }
+                }
+            }
+            .frame(height: 250)
+            .padding(.trailing, 10)
+        } caption: {
+            if metric == .anxiety || metric == .sentiment {
+                HStack(spacing: 16) {
+                    Label("Anxiety", systemImage: "circle.fill").foregroundStyle(.pink)
+                    Label("Sentiment", systemImage: "circle.fill").foregroundStyle(.green)
+                    Spacer()
+                }
+                .font(.caption)
+                .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal)
+    }
+    
+    var descriptionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(viewDescription)
+                .font(.body)
+                .foregroundStyle(.white.opacity(0.8))
+            + Text(" Learn more...")
+                .font(.body.bold())
+                .foregroundStyle(Theme.accent)
+        }
+        .lineSpacing(4)
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+        .onTapGesture {
+            // Updated to use the new variable
+            if let url = URL(string: metric.learnMoreLink) {
+                UIApplication.shared.open(url)
+            } else {
+                print("Invalid URL for \(metric.rawValue)")
+            }
+        }
     }
 }
 
-// Workaround to conditionally apply chartYScale domain
 struct PercentageScaleModifier: ViewModifier {
     let isPercentage: Bool
     func body(content: Content) -> some View {
