@@ -22,6 +22,9 @@ struct StarryBackground: View {
                 .ignoresSafeArea()
             
             GeometryReader { proxy in
+                // Force full size
+                Color.clear
+                
                 ZStack {
                     // Static & Pulsing Stars
                     ForEach(0..<80, id: \.self) { _ in
@@ -76,7 +79,6 @@ struct ShootingStarSystem: View {
         let id = UUID()
         let start: CGPoint
         let end: CGPoint
-        let duration: Double
     }
     
     @State private var activeStar: StarConfig?
@@ -84,20 +86,20 @@ struct ShootingStarSystem: View {
     var body: some View {
         ZStack {
             if let star = activeStar {
-                ShootingStar(startPoint: star.start, endPoint: star.end, duration: star.duration)
+                ShootingStar(startPoint: star.start, endPoint: star.end)
                     .id(star.id)
-                    // FIX 2: Explicit transition prevents the view from vanishing instantly
-                    .transition(.opacity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
-            // DEBUG: Reduced delay to 3 seconds for testing; change back to 15+ later
-            try? await Task.sleep(for: .seconds(3))
+            // Initial delay
+            try? await Task.sleep(for: .seconds(2))
             
             while !Task.isCancelled {
                 spawnStar()
-                // Frequency: Wait 5-10 seconds for testing visibility
-                try? await Task.sleep(for: .seconds(Double.random(in: 5.0...10.0)))
+                
+                // Frequency: 10 to 20 seconds
+                try? await Task.sleep(for: .seconds(Double.random(in: 10.0...20.0)))
             }
         }
     }
@@ -108,24 +110,19 @@ struct ShootingStarSystem: View {
         
         guard width > 0 && height > 0 else { return }
         
-        // Pick a start point
-        let startX = CGFloat.random(in: 0...width * 0.8)
-        let startY = CGFloat.random(in: 0...height * 0.5)
+        let startX = CGFloat.random(in: 0...width)
+        let startY = CGFloat.random(in: 0...(height * 0.5))
         let start = CGPoint(x: startX, y: startY)
         
-        // Calculate end point (aiming downwards and right)
-        let angle = Double.random(in: 0.3...0.8)
-        let distance = max(width, height)
-        let end = CGPoint(
-            x: startX + (distance * cos(angle)),
-            y: startY + (distance * sin(angle))
-        )
+        // Go far off screen (3x distance)
+        let deltaX = CGFloat.random(in: 100...300) * (Bool.random() ? 1 : -1)
+        let deltaY = CGFloat.random(in: 200...500)
+        let distanceMultiplier = 3.0
         
-        // FIX 3: Ensure UI updates happen on main thread
-        DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.5)) {
-                self.activeStar = StarConfig(start: start, end: end, duration: 1.5)
-            }
+        let end = CGPoint(x: startX + (deltaX * distanceMultiplier), y: startY + (deltaY * distanceMultiplier))
+        
+        withAnimation {
+            activeStar = StarConfig(start: start, end: end)
         }
     }
 }
@@ -133,46 +130,38 @@ struct ShootingStarSystem: View {
 struct ShootingStar: View {
     let startPoint: CGPoint
     let endPoint: CGPoint
-    let duration: Double
+    
     @State private var progress: CGFloat = 0.0
     
     var body: some View {
-        // FIX 4: Removed nested GeometryReader which was resetting coordinates
-        HStack(spacing: 0) {
-            LinearGradient(
-                colors: [.white.opacity(0), .white.opacity(0.5)],
-                startPoint: .leading,
-                endPoint: .trailing
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [.white, .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
-            .frame(width: 100, height: 2)
-            
-            Circle()
-                .fill(.white)
-                .frame(width: 3, height: 3)
-                .shadow(color: .white, radius: 3)
-        }
-        // Rotate around the "head" (the circle)
-        .rotationEffect(.degrees(calculateAngle()), anchor: .trailing)
-        .position(
-            x: startPoint.x + (endPoint.x - startPoint.x) * progress,
-            y: startPoint.y + (endPoint.y - startPoint.y) * progress
-        )
-        .opacity(progress < 0.1 ? progress * 10 : (progress > 0.9 ? (1 - progress) * 10.0 : 1))
-        .onAppear {
-            withAnimation(.linear(duration: duration)) {
-                progress = 1.0
+            .frame(width: 2, height: 120) // Thinner width, longer tail
+            // Correct rotation: Vertical rect needs +90 to align 'top' with 0 degrees (Right)
+            .rotationEffect(.degrees(angle() + 90))
+            .position(
+                x: startPoint.x + (endPoint.x - startPoint.x) * progress,
+                y: startPoint.y + (endPoint.y - startPoint.y) * progress
+            )
+            .onAppear {
+                // Linear animation ensures constant speed, no pause at end
+                withAnimation(.linear(duration: 1.5)) {
+                    progress = 1.0
+                }
             }
-            // Auto-cleanup after animation completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
-                progress = 0
-            }
-        }
     }
     
-    private func calculateAngle() -> Double {
-        let deltaX = endPoint.x - startPoint.x
-        let deltaY = endPoint.y - startPoint.y
-        return atan2(deltaY, deltaX) * 180 / .pi
+    private func angle() -> Double {
+        atan2(
+            Double(endPoint.y - startPoint.y),
+            Double(endPoint.x - startPoint.x)
+        ) * 180 / .pi
     }
 }
 

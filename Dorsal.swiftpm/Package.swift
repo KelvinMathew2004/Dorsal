@@ -34,7 +34,8 @@ let package = Package(
             ],
             capabilities: [
                 .microphone(purposeString: "We need your microphone to record dreams"),
-                .speechRecognition(purposeString: "We need speech recognition to transcribe dreams")
+                .speechRecognition(purposeString: "We need speech recognition to transcribe dreams"),
+                .photoLibrary(purposeString: "We need your photo library to upload your photo.")
             ],
             appCategory: .healthcareFitness
         )

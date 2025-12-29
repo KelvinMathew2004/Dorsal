@@ -31,6 +31,10 @@ struct ContentView: View {
             StatsView(store: store)
                 .tabItem { Label("Insights", systemImage: "chart.xyaxis.line") }
                 .tag(2)
+                
+            ProfileView(store: store)
+                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+                .tag(3)
         }
         .preferredColorScheme(.dark)
         .onAppear {

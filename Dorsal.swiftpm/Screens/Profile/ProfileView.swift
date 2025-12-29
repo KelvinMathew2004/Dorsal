@@ -6,6 +6,11 @@ struct ProfileView: View {
     
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedCategory: String = "People"
+    @State private var showEditSheet = false
+    
+    // Temporary state for the sheet editing
+    @State private var editFirstName = ""
+    @State private var editLastName = ""
     
     let categories = ["People", "Places", "Symbols"]
     
@@ -18,62 +23,70 @@ struct ProfileView: View {
                     VStack(spacing: 40) {
                         
                         // MARK: - Header (Photo + Names)
-                        // Centered Horizontally
-                        HStack(spacing: 24) {
-                            // Left: Profile Picture
-                            PhotosPicker(selection: $selectedItem, matching: .images) {
-                                if let data = store.profileImageData, let uiImage = UIImage(data: data) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 90, height: 90)
-                                        .clipShape(Circle())
-                                        .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 2))
-                                        .shadow(color: .black.opacity(0.3), radius: 10)
-                                } else {
-                                    ZStack {
-                                        Circle()
-                                            .fill(.white.opacity(0.1))
+                        HStack {
+                            Spacer(minLength: 0)
+                            
+                            HStack(spacing: 24) {
+                                // Profile Picture
+                                PhotosPicker(selection: $selectedItem, matching: .images) {
+                                    if let data = store.profileImageData,
+                                       let uiImage = UIImage(data: data) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
                                             .frame(width: 90, height: 90)
-                                            .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 2))
-                                        
-                                        Image(systemName: "person.fill")
-                                            .font(.system(size: 35))
-                                            .foregroundStyle(.white.opacity(0.5))
-                                    }
-                                }
-                            }
-                            .onChange(of: selectedItem) {
-                                Task {
-                                    if let data = try? await selectedItem?.loadTransferable(type: Data.self) {
-                                        withAnimation {
-                                            store.profileImageData = data
+                                            .clipShape(Circle())
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(.white.opacity(0.3), lineWidth: 2)
+                                            )
+                                            .shadow(color: .black.opacity(0.3), radius: 10)
+                                    } else {
+                                        ZStack {
+                                            Circle()
+                                                .fill(.white.opacity(0.1))
+                                                .frame(width: 90, height: 90)
+                                                .overlay(
+                                                    Circle()
+                                                        .stroke(.white.opacity(0.2), lineWidth: 2)
+                                                )
+                                            
+                                            Image(systemName: "person.fill")
+                                                .font(.system(size: 35))
+                                                .foregroundStyle(.white.opacity(0.5))
                                         }
                                     }
                                 }
+                                .onChange(of: selectedItem) {
+                                    Task {
+                                        if let data = try? await selectedItem?.loadTransferable(type: Data.self) {
+                                            withAnimation {
+                                                store.profileImageData = data
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Names (Display Only)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(store.firstName)
+                                        .font(.system(size: 28, weight: .bold))
+                                        .foregroundStyle(.white)
+                                    
+                                    Text(store.lastName)
+                                        .font(.system(size: 20, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(width: 120, alignment: .leading)
                             }
                             
-                            // Right: Split Name Fields (First Name on Top, Last Name Below)
-                            // Plain text style, click to edit
-                            VStack(alignment: .leading, spacing: 2) {
-                                TextField("First Name", text: $store.firstName)
-                                    .font(.system(size: 28, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .submitLabel(.next)
-                                    .textInputAutocapitalization(.words)
-                                
-                                TextField("Last Name", text: $store.lastName)
-                                    .font(.system(size: 20, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                                    .submitLabel(.done)
-                                    .textInputAutocapitalization(.words)
-                            }
+                            Spacer(minLength: 0)
                         }
+                        .frame(maxWidth: .infinity)
                         .padding(.top, 40)
-                        .frame(maxWidth: .infinity, alignment: .center)
                         
                         // MARK: - Single Line Stats Row
-                        HStack(spacing: 2) {
+                        HStack(spacing: 6) {
                             // Block 1: Streak (Rounded Left)
                             ContinuousStatBlock(
                                 title: "Streak",
@@ -155,6 +168,42 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        editFirstName = store.firstName
+                        editLastName = store.lastName
+                        showEditSheet = true
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                }
+            }
+            .sheet(isPresented: $showEditSheet) {
+                NavigationStack {
+                    Form {
+                        Section("Profile Details") {
+                            TextField("First Name", text: $editFirstName)
+                            TextField("Last Name", text: $editLastName)
+                        }
+                    }
+                    .navigationTitle("Edit Profile")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(role: .cancel) { showEditSheet = false }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(role: .confirm) {
+                                store.firstName = editFirstName
+                                store.lastName = editLastName
+                                showEditSheet = false
+                            }
+                        }
+                    }
+                }
+                .presentationDetents([.medium])
+            }
         }
     }
     
@@ -196,21 +245,11 @@ struct ContinuousStatBlock: View {
     
     var body: some View {
         ZStack {
-            // Background Layer: Glass Effect Base
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .opacity(0.7) // Slightly more translucent for glass look
-                .clipShape(CustomCorner(corners: corners, radius: 20))
-            
-            // Icon Layer: Centered Background
-            // We use a GeometryReader-like approach or simple Frame max
             ZStack {
                 Image(systemName: icon)
-                    .font(.system(size: 60))
+                    .font(.system(size: 50))
                     .foregroundStyle(color.opacity(0.15))
-                    // Ensure it stays centered in the block
             }
-            .clipShape(CustomCorner(corners: corners, radius: 20))
             
             // Foreground Content: Centered Text
             VStack(spacing: 2) {
@@ -229,6 +268,7 @@ struct ContinuousStatBlock: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 100)
+        .glassEffect(.clear.tint(color.opacity(0.15)), in: CustomCorner(corners: corners, radius: 20))
     }
 }
 
