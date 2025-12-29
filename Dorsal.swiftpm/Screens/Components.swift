@@ -5,10 +5,7 @@ struct Theme {
     static let bgStart = Color(red: 0.05, green: 0.02, blue: 0.10)
     static let bgMid = Color(red: 0.10, green: 0.05, blue: 0.20)
     static let bgEnd = Color(red: 0.02, green: 0.02, blue: 0.05)
-    
-    static let accent = Color.teal
-    static let secondary = Color.purple
-    
+        
     static let gradientBackground = LinearGradient(
         colors: [bgStart, bgMid, bgEnd],
         startPoint: .topLeading,
@@ -157,7 +154,7 @@ struct TagPill: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .foregroundStyle(isSelected ? .black : .secondary)
-            .glassEffect(isSelected ? .regular.tint(Theme.accent) : .regular, in: .capsule)
+            .glassEffect(isSelected ? .regular.tint(Color.accentColor) : .regular, in: .capsule)
     }
 }
 

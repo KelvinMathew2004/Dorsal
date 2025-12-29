@@ -435,10 +435,10 @@ class DreamStore: NSObject, ObservableObject {
         guard !dreams.isEmpty else { return }
         withAnimation { isGeneratingInsights = true }
         
-        let calendar = Calendar.current
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
         let now = Date()
         
-        // Use the Fixed Week Interval to match WeeklyInsights.swift
         let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now)
         ?? DateInterval(start: now.addingTimeInterval(-7*24*60*60), duration: 7*24*60*60)
         

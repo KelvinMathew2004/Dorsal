@@ -6,9 +6,9 @@ struct StatsView: View {
     
     // MARK: - Date Logic
     
-    // Determines the fixed week interval (e.g., Sunday to Saturday) for the current date
     private var currentWeekInterval: DateInterval {
-        let calendar = Calendar.current
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
         return calendar.dateInterval(of: .weekOfYear, for: Date()) ?? DateInterval(start: Date(), duration: 0)
     }
     
@@ -46,7 +46,8 @@ struct StatsView: View {
     
     // Compute daily averages for the fixed week
     var weekAggregates: [DailyAggregate] {
-        let calendar = Calendar.current
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2 // Ensure consistency with interval
         let startOfWeek = currentWeekInterval.start
         var aggregates: [DailyAggregate] = []
         
@@ -307,7 +308,7 @@ struct StatsView: View {
             .buttonStyle(PlainButtonStyle())
 
             NavigationLink(value: DreamMetric.lucidity) {
-                StatCard(title: "Lucidity", value: "\(Int(avgLucidity))%", icon: "eye.fill", color: .cyan, showArrow: true)
+                StatCard(title: "Lucidity", value: "\(Int(avgLucidity))%", icon: "eye.fill", color: .teal, showArrow: true)
                     .contentShape(Rectangle())
             }
             .buttonStyle(PlainButtonStyle())
@@ -400,7 +401,7 @@ struct StatsView: View {
                 .buttonStyle(PlainButtonStyle())
                 
                 NavigationLink(value: DreamMetric.coherence) {
-                    RingView(percentage: Double(avgMetric { $0.extras?.coherenceScore ?? 0 }), title: "Coherence", color: .teal, showArrow: true)
+                    RingView(percentage: Double(avgMetric { $0.extras?.coherenceScore ?? 0 }), title: "Coherence", color: .cyan, showArrow: true)
                         .frame(maxWidth: .infinity)
                         .contentShape(Rectangle())
                 }

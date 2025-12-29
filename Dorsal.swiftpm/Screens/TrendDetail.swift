@@ -21,11 +21,11 @@ enum DreamMetric: String, CaseIterable, Identifiable {
         case .dreams: return .blue
         case .anxiety: return .pink
         case .sentiment: return .green
-        case .lucidity: return .cyan
+        case .lucidity: return .teal
         case .vividness: return .orange
         case .fatigue: return .red
         case .tone: return .orange
-        case .coherence: return .teal
+        case .coherence: return .cyan
         case .nightmares: return .purple
         case .positive: return .green
         }
@@ -140,8 +140,9 @@ struct TrendDetailView: View {
     // MARK: - Data Processing
     
     // Generates raw points for a specific metric
-    func generatePoints(for m: DreamMetric) -> [ChartDataPoint] {
-        let calendar = Calendar.current
+    func generatePoints(for metric: DreamMetric) -> [ChartDataPoint] {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
         let now = Date()
         let rawDreams = store.dreams
         var points: [ChartDataPoint] = []
@@ -155,21 +156,24 @@ struct TrendDetailView: View {
                     let dreamsInHour = rawDreams.filter { $0.date >= hourDate && $0.date < nextHour }
                     
                     if !dreamsInHour.isEmpty {
-                        let val = calculateValue(for: dreamsInHour, metric: m)
+                        let val = calculateValue(for: dreamsInHour, metric: metric)
                         points.append(ChartDataPoint(date: hourDate, value: val))
                     }
                 }
             }
         case .week:
-            for i in (0...6).reversed() {
-                if let dayDate = calendar.date(byAdding: .day, value: -i, to: now) {
+            let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now) ?? DateInterval(start: now, duration: 0)
+            let startOfWeek = weekInterval.start
+            
+            for i in 0..<7 {
+                if let dayDate = calendar.date(byAdding: .day, value: i, to: startOfWeek) {
                     let startOfD = calendar.startOfDay(for: dayDate)
                     let endOfD = calendar.date(byAdding: .day, value: 1, to: startOfD)!
                     
                     let dreamsInDay = rawDreams.filter { $0.date >= startOfD && $0.date < endOfD }
                     
                     if !dreamsInDay.isEmpty {
-                        let val = calculateValue(for: dreamsInDay, metric: m)
+                        let val = calculateValue(for: dreamsInDay, metric: metric)
                         points.append(ChartDataPoint(date: startOfD, value: val))
                     }
                 }
@@ -185,7 +189,7 @@ struct TrendDetailView: View {
                         let dreamsInDay = rawDreams.filter { $0.date >= date && $0.date < nextDay }
                         
                         if !dreamsInDay.isEmpty {
-                            let val = calculateValue(for: dreamsInDay, metric: m)
+                            let val = calculateValue(for: dreamsInDay, metric: metric)
                             points.append(ChartDataPoint(date: date, value: val))
                         }
                     }
@@ -199,7 +203,7 @@ struct TrendDetailView: View {
                     let dreamsInMonth = rawDreams.filter { $0.date >= monthDate && $0.date < nextMonth }
                     
                     if !dreamsInMonth.isEmpty {
-                        let val = calculateValue(for: dreamsInMonth, metric: m)
+                        let val = calculateValue(for: dreamsInMonth, metric: metric)
                         points.append(ChartDataPoint(date: monthDate, value: val))
                     }
                 }
@@ -211,8 +215,8 @@ struct TrendDetailView: View {
     // Groups data into series for the chart
     var groupedSeries: [MetricSeries] {
         let metricsToShow: [DreamMetric] = (metric == .anxiety || metric == .sentiment) ? [.anxiety, .sentiment] : [metric]
-        return metricsToShow.map { m in
-            MetricSeries(metric: m, points: generatePoints(for: m))
+        return metricsToShow.map { metric in
+            MetricSeries(metric: metric, points: generatePoints(for: metric))
         }
     }
     
@@ -238,15 +242,15 @@ struct TrendDetailView: View {
         }
     }
     
-    var aggregateValue: String {
-        // Calculate aggregate for the primary metric only
-        let primaryPoints = generatePoints(for: metric)
-        let values = primaryPoints.map { $0.value }
+    func formattedAggregate(for metric: DreamMetric) -> String {
+        let points = generatePoints(for: metric)
+        let values = points.map { $0.value }
         
         if values.isEmpty || values.allSatisfy({ $0 == 0 }) {
             if metric == .dreams || metric == .nightmares || metric == .positive { return "None" }
             return "No Data"
         }
+        
         if metric.isPercentage {
             let nonZero = values.filter { $0 > 0 }
             if nonZero.isEmpty { return "0%" }
@@ -254,7 +258,7 @@ struct TrendDetailView: View {
             return String(format: "%.0f", avg) + "%"
         } else {
             if selectedTimeFrame == .day {
-                 return "\(Int(values.reduce(0, +)))"
+                return "\(Int(values.reduce(0, +)))"
             } else {
                 let avg = values.reduce(0, +) / Double(values.count)
                 return String(format: "%.1f", avg)
@@ -299,7 +303,8 @@ struct TrendDetailView: View {
     }
     
     var xAxisDomain: ClosedRange<Date> {
-        let calendar = Calendar.current
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
         let now = Date()
         switch selectedTimeFrame {
         case .day:
@@ -307,10 +312,8 @@ struct TrendDetailView: View {
             let end = calendar.date(byAdding: .hour, value: 23, to: start)!
             return start...end
         case .week:
-            let startRaw = calendar.date(byAdding: .day, value: -6, to: now)!
-            let start = calendar.startOfDay(for: startRaw)
-            let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
-            return start...end
+            let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now) ?? DateInterval(start: now, duration: 0)
+            return weekInterval.start...weekInterval.end
         case .month:
             let currentComponents = calendar.dateComponents([.year, .month], from: now)
             let start = calendar.date(from: currentComponents)!
@@ -318,7 +321,6 @@ struct TrendDetailView: View {
             let end = calendar.date(byAdding: .day, value: range.count, to: start)!
             return start...end
         case .year:
-             // Explicitly define the full year range
              let start = calendar.date(from: DateComponents(year: selectedYear, month: 1, day: 1))!
              let end = calendar.date(from: DateComponents(year: selectedYear, month: 12, day: 31))!
              let endBuffered = calendar.date(byAdding: .day, value: 1, to: end)!
@@ -326,7 +328,6 @@ struct TrendDetailView: View {
         }
     }
     
-    // Tone Logic
     var toneWeekStart: Date {
         let calendar = Calendar.current
         let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: toneReferenceDate)
@@ -408,8 +409,8 @@ struct TrendDetailView: View {
                     .font(.subheadline.bold())
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Theme.accent.opacity(0.1), in: Capsule())
-                    .foregroundStyle(Theme.accent)
+                    .background(Color.accentColor.opacity(0.1), in: Capsule())
+                    .foregroundStyle(Color.accentColor)
                 }
             }
             .padding(16)
@@ -467,9 +468,25 @@ struct TrendDetailView: View {
                 Text(aggregateLabel.uppercased())
                     .font(.headline.bold())
                     .foregroundStyle(.secondary)
-                Text(aggregateValue)
-                    .font(.system(size: 42, weight: .bold, design: .rounded))
-                    .foregroundStyle(aggregateColor)
+                
+                if metric == .anxiety || metric == .sentiment {
+                    HStack(spacing: 12) {
+                        Text("\(formattedAggregate(for: .anxiety))")
+                            .foregroundStyle(DreamMetric.anxiety.color)
+                        
+                        Rectangle()
+                                .fill(Color.secondary)
+                                .frame(width: 2, height: 28)
+                        
+                        Text("\(formattedAggregate(for: .sentiment))")
+                            .foregroundStyle(DreamMetric.sentiment.color)
+                    }
+                    .font(.system(size: 35, weight: .bold, design: .rounded))
+                } else {
+                    Text(formattedAggregate(for: metric))
+                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .foregroundStyle(aggregateColor)
+                }
                 
                 if selectedTimeFrame != .year {
                     Text(timeFrameSubheading)
@@ -486,7 +503,7 @@ struct TrendDetailView: View {
                             Text(String(selectedYear))
                                 .foregroundStyle(Color.secondary)
                             Image(systemName: "chevron.down")
-                                .foregroundStyle(aggregateColor)
+                                .foregroundStyle(Color.accentColor)
                         }
                         .font(.headline.bold())
                         .padding(.top, 4)
@@ -498,12 +515,161 @@ struct TrendDetailView: View {
             .padding(.top, 16)
             
             // Separate Chart implementations
-            if selectedTimeFrame == .day || selectedTimeFrame == .year {
+            if (metric == .anxiety || metric == .sentiment) && (selectedTimeFrame == .week || selectedTimeFrame == .month) {
+                mentalHealthChart
+            } else if metric == .fatigue && (selectedTimeFrame == .week || selectedTimeFrame == .month) {
+                vocalFatigueChart
+            } else if selectedTimeFrame == .day || selectedTimeFrame == .year {
                 barChartView
             } else {
                 lineChartView
             }
         }
+    }
+    
+    // MARK: - Dedicated Chart Components
+    
+    var mentalHealthChart: some View {
+        let anxietyPoints = generatePoints(for: .anxiety)
+        let sentimentPoints = generatePoints(for: .sentiment)
+        let unit: Calendar.Component = selectedTimeFrame == .year ? .month : .day
+        
+        return ChartCard {
+            Chart {
+                ForEach(anxietyPoints) { point in
+                    AreaMark(
+                        x: .value("Date", point.date, unit: unit),
+                        yStart: .value("Baseline", 0),
+                        yEnd: .value("Anxiety", point.value),
+                        series: .value("Metric", "Anxiety")
+                    )
+                    .interpolationMethod(.linear)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.pink.opacity(0.5), Color.pink.opacity(0)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                }
+                
+                ForEach(sentimentPoints) { point in
+                    AreaMark(
+                        x: .value("Date", point.date, unit: unit),
+                        yStart: .value("Baseline", 0),
+                        yEnd: .value("Sentiment", point.value),
+                        series: .value("Metric", "Sentiment")
+                    )
+                    .interpolationMethod(.linear)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.green.opacity(0.5), Color.green.opacity(0)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                }
+                
+                ForEach(anxietyPoints) { point in
+                    LineMark(
+                        x: .value("Date", point.date, unit: unit),
+                        y: .value("Anxiety", point.value),
+                        series: .value("Metric", "Anxiety")
+                    )
+                    .interpolationMethod(.linear)
+                    .symbol(.circle)
+                    .foregroundStyle(Color.pink.gradient)
+                }
+                
+                ForEach(sentimentPoints) { point in
+                    LineMark(
+                        x: .value("Date", point.date, unit: unit),
+                        y: .value("Sentiment", point.value),
+                        series: .value("Metric", "Sentiment")
+                    )
+                    .interpolationMethod(.linear)
+                    .symbol(.circle)
+                    .foregroundStyle(Color.green.gradient)
+                }
+            }
+            .chartYScale(domain: 0...100)
+            .chartXScale(domain: xAxisDomain)
+            .chartYAxis { AxisMarks { _ in AxisGridLine(); AxisTick(); AxisValueLabel() } }
+            .chartXAxis {
+                AxisMarks(values: selectedTimeFrame == .week ? .stride(by: .day) :
+                          selectedTimeFrame == .month ? .stride(by: .day, count: 4) : .automatic(desiredCount: 6)) { value in
+                    if selectedTimeFrame == .week { AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true) }
+                    else if selectedTimeFrame == .month { AxisValueLabel(format: .dateTime.day()) }
+                    else { AxisValueLabel() }
+                }
+            }
+            .frame(height: 250)
+            .padding(.trailing, 10)
+        } caption: {
+            HStack(spacing: 16) {
+                Label("Anxiety", systemImage: "circle.fill").foregroundStyle(.pink)
+                Label("Sentiment", systemImage: "circle.fill").foregroundStyle(.green)
+                Spacer()
+            }
+            .font(.caption)
+            .padding(.top, 4)
+        }
+        .padding(.horizontal)
+    }
+    
+    var vocalFatigueChart: some View {
+        let points = generatePoints(for: .fatigue)
+        let unit: Calendar.Component = selectedTimeFrame == .year ? .month : .day
+        
+        return ChartCard {
+            Chart {
+                ForEach(points) { point in
+                    AreaMark(
+                        x: .value("Date", point.date, unit: unit),
+                        yStart: .value("Baseline", 0),
+                        yEnd: .value("Fatigue", point.value)
+                    )
+                    .interpolationMethod(.linear)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.red.opacity(0.4), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    
+                    LineMark(
+                        x: .value("Date", point.date, unit: unit),
+                        y: .value("Fatigue", point.value)
+                    )
+                    .foregroundStyle(.red.gradient)
+                    .interpolationMethod(.linear)
+                    .symbol(.circle)
+                }
+            }
+            .chartYScale(domain: 0...100)
+            .chartXScale(domain: xAxisDomain)
+            .chartYAxis { AxisMarks { _ in AxisGridLine(); AxisTick(); AxisValueLabel() } }
+            .chartXAxis {
+                AxisMarks(values: selectedTimeFrame == .week ? .stride(by: .day) :
+                          selectedTimeFrame == .month ? .stride(by: .day, count: 4) : .automatic(desiredCount: 6)) { value in
+                    if selectedTimeFrame == .week { AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true) }
+                    else if selectedTimeFrame == .month { AxisValueLabel(format: .dateTime.day()) }
+                    else { AxisValueLabel() }
+                }
+            }
+            .frame(height: 250)
+            .padding(.trailing, 10)
+        } caption: {
+            HStack {
+                Text("Higher bars indicate higher vocal fatigue.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.top, 4)
+        }
+        .padding(.horizontal)
     }
     
     var barChartView: some View {
@@ -629,7 +795,7 @@ struct TrendDetailView: View {
                 .foregroundStyle(.white.opacity(0.8))
             + Text(" Learn more...")
                 .font(.body.bold())
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Color.accentColor)
         }
         .lineSpacing(4)
         .padding(24)

@@ -58,7 +58,7 @@ struct RecordView: View {
                         VStack(spacing: 16) {
                             Image(systemName: "moon.stars.fill")
                                 .font(.system(size: 60))
-                                .foregroundStyle(Theme.accent)
+                                .foregroundStyle(Color.accentColor)
                                 .symbolEffect(.bounce, value: true)
                             
                             Text("Good Morning")
@@ -128,7 +128,7 @@ struct RecordView: View {
                                 }
                             }
                             .contentShape(Circle())
-                            .glassEffect(.clear.interactive().tint(store.isRecording ? .red : Theme.accent), in: Circle())
+                            .glassEffect(.clear.interactive().tint(store.isRecording ? .red : Color.accentColor), in: Circle())
                             .disabled(store.isProcessing)
                             .glassEffectID("recordButton", in: namespace)
                             
@@ -328,7 +328,7 @@ struct AudioVisualizer: View {
         HStack(spacing: 4) {
             ForEach(0..<bars, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Theme.accent.gradient)
+                    .fill(Color.accentColor.gradient)
                     .frame(width: 4, height: 10 + (CGFloat(power) * CGFloat.random(in: 10...80)))
                     .animation(.easeInOut(duration: 0.1), value: power)
             }
