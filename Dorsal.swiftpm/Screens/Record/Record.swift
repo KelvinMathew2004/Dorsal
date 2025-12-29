@@ -13,10 +13,28 @@ struct RecordView: View {
     @State private var showAvailabilityAlert = false
     @State private var availabilityMessage = ""
     
+    // Greeting logic based on time of day
+    private var greetingData: (text: String, icon: String) {
+        let hour = Calendar.current.component(.hour, from: Date())
+        
+        // Use the computed first name from the store
+        let name = store.firstName
+        
+        switch hour {
+        case 5..<12:
+            return ("Good Morning, \(name)", "sun.max.fill")
+        case 12..<17:
+            return ("Good Afternoon, \(name)", "sun.haze.fill")
+        default:
+            return ("Good Evening, \(name)", "moon.stars.fill")
+        }
+    }
+    
     var body: some View {
         NavigationStack(path: $store.navigationPath) {
             ZStack {
-                Theme.gradientBackground.ignoresSafeArea()
+                // Background
+                StarryBackground()
                 
                 VStack {
                     Spacer()
@@ -35,14 +53,14 @@ struct RecordView: View {
                                     .font(.title2.bold())
                                     .foregroundStyle(.white)
                                 
-                                Text("You're doing great. Describe any other details you remember.")
+                                Text("You're doing great, \(store.firstName). Describe any other details you remember.")
                                     .font(.subheadline)
                                     .foregroundStyle(.white.opacity(0.8))
                                     .multilineTextAlignment(.center)
                             }
                             .padding(24)
                             .frame(maxWidth: .infinity)
-                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                            .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 24))
                             .padding(.horizontal, 30)
                             .transition(.scale.combined(with: .opacity))
                         } else {
@@ -54,14 +72,14 @@ struct RecordView: View {
                                 ))
                         }
                     } else {
-                        // Welcome State
+                        // Welcome State (Dynamic)
                         VStack(spacing: 16) {
-                            Image(systemName: "moon.stars.fill")
+                            Image(systemName: greetingData.icon)
                                 .font(.system(size: 60))
                                 .foregroundStyle(Color.accentColor)
                                 .symbolEffect(.bounce, value: true)
                             
-                            Text("Good Morning")
+                            Text(greetingData.text)
                                 .font(.largeTitle.weight(.bold))
                             
                             Text("Ready to capture your dreams?")
@@ -98,7 +116,7 @@ struct RecordView: View {
                                 .foregroundStyle(.white)
                                 .frame(width: 60, height: 60)
                                 .contentShape(Circle())
-                                .glassEffect(.regular.interactive(), in: Circle())
+                                .glassEffect(.clear.interactive(), in: Circle())
                                 .glassEffectID("pauseButton", in: namespace)
                             }
                             
@@ -128,7 +146,7 @@ struct RecordView: View {
                                 }
                             }
                             .contentShape(Circle())
-                            .glassEffect(.clear.interactive().tint(store.isRecording ? .red : Color.accentColor), in: Circle())
+                            .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : Color.accentColor.opacity(0.8)), in: Circle())
                             .disabled(store.isProcessing)
                             .glassEffectID("recordButton", in: namespace)
                             
@@ -143,7 +161,7 @@ struct RecordView: View {
                                 .foregroundStyle(.white)
                                 .frame(width: 60, height: 60)
                                 .contentShape(Circle())
-                                .glassEffect(.regular.interactive(), in: Circle())
+                                .glassEffect(.clear.interactive(), in: Circle())
                                 .glassEffectID("cancelButton", in: namespace)
                             }
                         }
@@ -273,7 +291,7 @@ private struct QuestionCard: View {
         .padding(24)
         .frame(maxWidth: .infinity)
         .glassEffect(
-            .regular.tint(isSatisfied ? Color.green.opacity(0.15) : .clear),
+            .clear.tint(isSatisfied ? Color.green.opacity(0.15) : .clear),
             in: RoundedRectangle(cornerRadius: 24)
         )
         .padding(.horizontal, 30)
@@ -286,24 +304,10 @@ struct SimpleWrappedPills: View {
     let items: [String]
     
     var body: some View {
-        if items.count <= 4 {
-            HStack(spacing: 8) {
-                ForEach(items, id: \.self) { item in
-                    RecommendationPill(text: item.capitalized)
-                }
-            }
-        } else {
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    ForEach(items.prefix(3), id: \.self) { item in
-                        RecommendationPill(text: item.capitalized)
-                    }
-                }
-                HStack(spacing: 8) {
-                    ForEach(items.dropFirst(3), id: \.self) { item in
-                        RecommendationPill(text: item.capitalized)
-                    }
-                }
+        // Enforce maximum of 3 items
+        HStack(spacing: 8) {
+            ForEach(Array(items.prefix(3)), id: \.self) { item in
+                RecommendationPill(text: item.capitalized)
             }
         }
     }
@@ -316,7 +320,7 @@ struct RecommendationPill: View {
             .font(.caption)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .glassEffect(.regular.tint(.secondary.opacity(0.2)), in: Capsule())
+            .glassEffect(.clear.tint(.secondary.opacity(0.2)))
             .fixedSize(horizontal: true, vertical: false)
     }
 }

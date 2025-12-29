@@ -13,6 +13,209 @@ struct Theme {
     )
 }
 
+// MARK: - VISUAL EFFECTS
+
+struct StarryBackground: View {
+    var body: some View {
+        ZStack {
+            Theme.gradientBackground
+                .ignoresSafeArea()
+            
+            GeometryReader { proxy in
+                ZStack {
+                    // Static & Pulsing Stars
+                    ForEach(0..<80, id: \.self) { _ in
+                        PulsingStar(containerSize: proxy.size)
+                    }
+                    
+                    // Random Shooting Star System
+                    ShootingStarSystem(containerSize: proxy.size)
+                }
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct PulsingStar: View {
+    let containerSize: CGSize
+    @State private var normalizedX: Double = Double.random(in: 0...1)
+    @State private var normalizedY: Double = Double.random(in: 0...1)
+    @State private var size: CGFloat = 2.0
+    @State private var opacity: Double = Double.random(in: 0.3...0.7)
+    @State private var scale: CGFloat = 1.0
+    
+    let willPulsate = Bool.random()
+    
+    var body: some View {
+        Circle()
+            .fill(.white)
+            .frame(width: size, height: size)
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .position(
+                x: normalizedX * containerSize.width,
+                y: normalizedY * containerSize.height
+            )
+            .onAppear {
+                size = CGFloat.random(in: 1.5...3.0)
+                if willPulsate {
+                    withAnimation(.easeInOut(duration: Double.random(in: 2.0...4.0)).repeatForever(autoreverses: true)) {
+                        opacity = 1.0
+                        scale = 1.3
+                    }
+                }
+            }
+    }
+}
+
+struct ShootingStarSystem: View {
+    let containerSize: CGSize
+    
+    struct StarConfig: Identifiable {
+        let id = UUID()
+        let start: CGPoint
+        let end: CGPoint
+        let duration: Double
+    }
+    
+    @State private var activeStar: StarConfig?
+    
+    var body: some View {
+        ZStack {
+            if let star = activeStar {
+                ShootingStar(startPoint: star.start, endPoint: star.end, duration: star.duration)
+                    .id(star.id)
+                    // FIX 2: Explicit transition prevents the view from vanishing instantly
+                    .transition(.opacity)
+            }
+        }
+        .task {
+            // DEBUG: Reduced delay to 3 seconds for testing; change back to 15+ later
+            try? await Task.sleep(for: .seconds(3))
+            
+            while !Task.isCancelled {
+                spawnStar()
+                // Frequency: Wait 5-10 seconds for testing visibility
+                try? await Task.sleep(for: .seconds(Double.random(in: 5.0...10.0)))
+            }
+        }
+    }
+    
+    private func spawnStar() {
+        let width = containerSize.width
+        let height = containerSize.height
+        
+        guard width > 0 && height > 0 else { return }
+        
+        // Pick a start point
+        let startX = CGFloat.random(in: 0...width * 0.8)
+        let startY = CGFloat.random(in: 0...height * 0.5)
+        let start = CGPoint(x: startX, y: startY)
+        
+        // Calculate end point (aiming downwards and right)
+        let angle = Double.random(in: 0.3...0.8)
+        let distance = max(width, height)
+        let end = CGPoint(
+            x: startX + (distance * cos(angle)),
+            y: startY + (distance * sin(angle))
+        )
+        
+        // FIX 3: Ensure UI updates happen on main thread
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.5)) {
+                self.activeStar = StarConfig(start: start, end: end, duration: 1.5)
+            }
+        }
+    }
+}
+
+struct ShootingStar: View {
+    let startPoint: CGPoint
+    let endPoint: CGPoint
+    let duration: Double
+    @State private var progress: CGFloat = 0.0
+    
+    var body: some View {
+        // FIX 4: Removed nested GeometryReader which was resetting coordinates
+        HStack(spacing: 0) {
+            LinearGradient(
+                colors: [.white.opacity(0), .white.opacity(0.5)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: 100, height: 2)
+            
+            Circle()
+                .fill(.white)
+                .frame(width: 3, height: 3)
+                .shadow(color: .white, radius: 3)
+        }
+        // Rotate around the "head" (the circle)
+        .rotationEffect(.degrees(calculateAngle()), anchor: .trailing)
+        .position(
+            x: startPoint.x + (endPoint.x - startPoint.x) * progress,
+            y: startPoint.y + (endPoint.y - startPoint.y) * progress
+        )
+        .opacity(progress < 0.1 ? progress * 10 : (progress > 0.9 ? (1 - progress) * 10.0 : 1))
+        .onAppear {
+            withAnimation(.linear(duration: duration)) {
+                progress = 1.0
+            }
+            // Auto-cleanup after animation completes
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+                progress = 0
+            }
+        }
+    }
+    
+    private func calculateAngle() -> Double {
+        let deltaX = endPoint.x - startPoint.x
+        let deltaY = endPoint.y - startPoint.y
+        return atan2(deltaY, deltaX) * 180 / .pi
+    }
+}
+
+struct TypewriterText: View {
+    let text: String
+    let animates: Bool
+    @State private var displayedText = ""
+    
+    init(text: String, animates: Bool = true) {
+        self.text = text
+        self.animates = animates
+    }
+    
+    var body: some View {
+        Text(displayedText)
+            .task(id: text) {
+                if !animates {
+                    displayedText = text
+                    return
+                }
+                
+                if !text.hasPrefix(displayedText) {
+                    displayedText = ""
+                }
+                
+                let currentCount = displayedText.count
+                if currentCount < text.count {
+                    for i in currentCount..<text.count {
+                        if Task.isCancelled { return }
+                        try? await Task.sleep(for: .seconds(0.01))
+                        let index = text.index(text.startIndex, offsetBy: i)
+                        displayedText.append(text[index])
+                    }
+                }
+            }
+            .onAppear {
+                if !animates {
+                    displayedText = text
+                }
+            }
+    }
+}
+
 // MARK: - EXTENSIONS
 extension Color {
     init(hex: String) {

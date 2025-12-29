@@ -92,7 +92,8 @@ struct DreamDetailView: View {
                         
                         if let interp = liveDream.core?.interpretation {
                             MagicCard(title: "Interpretation", icon: "sparkles.rectangle.stack", color: .purple) {
-                                Text(interp)
+                                // Animate only if processing
+                                TypewriterText(text: interp, animates: isProcessingThisDream)
                                     .lineSpacing(4)
                             }
                             .padding(.horizontal)
@@ -101,14 +102,15 @@ struct DreamDetailView: View {
                         
                         if let advice = liveDream.core?.actionableAdvice {
                             MagicCard(title: "Actionable Advice", icon: "brain.head.profile", color: .green) {
-                                Text(advice)
+                                // Animate only if processing
+                                TypewriterText(text: advice, animates: isProcessingThisDream)
                                     .italic()
                             }
                             .padding(.horizontal)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                         
-                        // Vocal Fatigue & Tone Section (Clickable & Compact with Overlay Arrows)
+                        // Vocal Fatigue & Tone Section
                         if let fatigue = liveDream.core?.voiceFatigue {
                             HStack(spacing: 16) {
                                 // Vocal Fatigue Card
@@ -136,7 +138,7 @@ struct DreamDetailView: View {
                                             .foregroundStyle(.white.opacity(0.3))
                                             .padding(.trailing, 20)
                                     }
-                                    .contentShape(RoundedRectangle(cornerRadius: 24)) // Ensure full tap area
+                                    .contentShape(RoundedRectangle(cornerRadius: 24))
                                 }
                                 .buttonStyle(PlainButtonStyle())
                                 
@@ -167,7 +169,7 @@ struct DreamDetailView: View {
                                                 .foregroundStyle(.white.opacity(0.3))
                                                 .padding(.trailing, 20)
                                         }
-                                        .contentShape(RoundedRectangle(cornerRadius: 24)) // Ensure full tap area
+                                        .contentShape(RoundedRectangle(cornerRadius: 24))
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                 }

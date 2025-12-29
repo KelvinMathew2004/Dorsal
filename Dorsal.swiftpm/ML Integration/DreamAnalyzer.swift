@@ -22,8 +22,8 @@ class DreamAnalyzer {
     
     // MARK: - Streaming Analysis
     
-    func streamCore(transcript: String) -> AsyncThrowingStream<DreamCoreAnalysis.PartiallyGenerated, Error> {
-        let prompt = "Analyze this transcript. Transcript: \"\(transcript)\""
+    func streamCore(transcript: String, userName: String) -> AsyncThrowingStream<DreamCoreAnalysis.PartiallyGenerated, Error> {
+        let prompt = "Analyze this transcript of \(userName)'s dream. Transcript: \"\(transcript)\""
         
         return AsyncThrowingStream { continuation in
             Task {
@@ -208,7 +208,7 @@ class DreamAnalyzer {
     
     // MARK: - Weekly Insights
     
-    func analyzeWeeklyTrends(dreams: [Dream]) async throws -> WeeklyInsightResult {
+    func analyzeWeeklyTrends(dreams: [Dream], userName: String) async throws -> WeeklyInsightResult {
         let validDreams = dreams.filter {
             if let summary = $0.core?.summary, !summary.isEmpty {
                 return true
@@ -222,7 +222,7 @@ class DreamAnalyzer {
             return "- \(dream.date.formatted(date: .abbreviated, time: .omitted)): \(summary) (Emotion: \(emo))"
         }.joined(separator: "\n")
         
-        let prompt = "Review these dream summaries and generate a holistic insight report:\n\(dreamSummaries)"
+        let prompt = "Review these dream summaries for \(userName) and generate a holistic insight report:\n\(dreamSummaries)"
         
         var response = try await session.respond(
             to: prompt,
