@@ -50,6 +50,13 @@ class DreamStore: NSObject, ObservableObject {
     @Published var permissionError: String?
     @Published var showPermissionAlert: Bool = false
     
+    // MARK: - IMAGE GENERATION SUPPORT
+    @Published var isImageGenerationAvailable: Bool = false
+    
+    // MARK: - UI UPDATE TRIGGERS
+    // Used to force views to redraw when entities are updated in the background context
+    @Published var entityUpdateTrigger: Int = 0
+    
     @Published var currentTranscript: String = ""
     @Published var isRecording: Bool = false
     @Published var isPaused: Bool = false
@@ -75,6 +82,11 @@ class DreamStore: NSObject, ObservableObject {
         self.lastName = UserDefaults.standard.string(forKey: "userLastName") ?? "Mathew"
         super.init()
         self.profileImageData = loadProfileImageFromDisk()
+        
+        // Check for Image Generation Support
+        Task {
+            await checkImageGenerationSupport()
+        }
     }
     
     // MARK: - PERSISTENCE HELPERS
@@ -122,6 +134,83 @@ class DreamStore: NSObject, ObservableObject {
                 )
             }
         } catch { print("Insight fetch error: \(error)") }
+    }
+    
+    // MARK: - ENTITY MANAGEMENT
+    
+    func getEntity(name: String, type: String) -> SavedEntity? {
+        guard let context = modelContext else { return nil }
+        let id = "\(type):\(name)"
+        let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.id == id })
+        return try? context.fetch(descriptor).first
+    }
+    
+    func updateEntity(name: String, type: String, description: String, image: Data?) {
+        guard let context = modelContext else { return }
+        let id = "\(type):\(name)"
+        
+        do {
+            let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.id == id })
+            if let existing = try context.fetch(descriptor).first {
+                existing.details = description
+                existing.imageData = image
+                existing.lastUpdated = Date()
+            } else {
+                let newEntity = SavedEntity(name: name, type: type, details: description, imageData: image)
+                context.insert(newEntity)
+            }
+            try context.save()
+            // Force UI update
+            self.entityUpdateTrigger += 1
+        } catch {
+            print("Entity Save Error: \(error)")
+        }
+    }
+    
+    func deleteEntity(name: String, type: String) {
+        guard let context = modelContext else { return }
+        let id = "\(type):\(name)"
+        do {
+            try context.delete(model: SavedEntity.self, where: #Predicate { $0.id == id })
+            try context.save()
+            // Force UI update
+            self.entityUpdateTrigger += 1
+        } catch {
+            print("Entity Delete Error: \(error)")
+        }
+    }
+    
+    // MARK: - IMAGE GENERATION HELPER
+    
+    func checkImageGenerationSupport() async {
+        do {
+            // Attempt to initialize ImageCreator to check for device support
+            _ = try await ImageCreator()
+            self.isImageGenerationAvailable = true
+        } catch {
+            print("Image generation not supported on this device: \(error)")
+            self.isImageGenerationAvailable = false
+        }
+    }
+    
+    func generateImageFromPrompt(prompt: String) async throws -> Data {
+        guard isImageGenerationAvailable else { throw DreamError.imageUnavailable }
+        
+        let creator = try await ImageCreator()
+        guard let firstAvailable = creator.availableStyles.first else {
+            throw DreamError.imageUnavailable
+        }
+        let selectedStyle: ImagePlaygroundStyle = creator.availableStyles.contains(.illustration) ? .illustration : firstAvailable
+        let concepts: [ImagePlaygroundConcept] = [.text(prompt)]
+        
+        for try await image in creator.images(for: concepts, style: selectedStyle, limit: 1) {
+            let cgImage = image.cgImage
+            let uiImage = UIImage(cgImage: cgImage)
+            if let pngData = uiImage.pngData() {
+                return pngData
+            }
+        }
+        throw DreamError.imageGenerationFailed
     }
     
     // ... Computed Props ...
@@ -392,28 +481,14 @@ class DreamStore: NSObject, ObservableObject {
                 
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }),
                    let summary = dreams[index].core?.summary {
-                    let manualPrompt = "\(summary). Artistic style: Dreamlike, surreal, soft lighting."
-                    do {
-                        let creator = try await ImageCreator()
-                        guard let firstAvailable = creator.availableStyles.first else {
-                            throw DreamError.imageUnavailable
+                    if isImageGenerationAvailable {
+                        let manualPrompt = "\(summary). Artistic style: Dreamlike, surreal, soft lighting."
+                        do {
+                            let data = try await generateImageFromPrompt(prompt: manualPrompt)
+                            dreams[index].generatedImageData = data
+                        } catch {
+                            print("Image generation error: \(error)")
                         }
-                        let selectedStyle: ImagePlaygroundStyle = creator.availableStyles.contains(.illustration) ? .illustration : firstAvailable
-                        let concepts: [ImagePlaygroundConcept] = [.text(manualPrompt)]
-                        
-                        for try await image in creator.images(for: concepts, style: selectedStyle, limit: 1) {
-                            let cgImage = image.cgImage
-                            let uiImage = UIImage(cgImage: cgImage)
-                            if let pngData = uiImage.pngData() {
-                                dreams[index].generatedImageData = pngData
-                                break
-                            }
-                        }
-                    } catch let error as ImageCreator.Error {
-                        // Error handling mostly same as before
-                        print("Image error: \(error)")
-                    } catch {
-                        print("Unknown Image error: \(error)")
                     }
                 }
                 

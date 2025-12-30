@@ -9,7 +9,7 @@ struct DorsalApp: App {
         WindowGroup {
             ContentView(store: store)
                 // Register models for persistence
-                .modelContainer(for: [SavedDream.self, SavedWeeklyInsight.self])
+                .modelContainer(for: [SavedDream.self, SavedWeeklyInsight.self, SavedEntity.self])
         }
     }
 }

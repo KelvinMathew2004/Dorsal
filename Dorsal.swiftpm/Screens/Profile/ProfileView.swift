@@ -8,6 +8,26 @@ struct ProfileView: View {
     @State private var selectedCategory: String = "People"
     @State private var showEditSheet = false
     
+    // Profile Picture Action Sheet
+    @State private var showProfilePicOptions = false
+    @State private var showImagePlayground = false
+    @State private var showPhotoPicker = false
+    
+    // Navigation for Entity Details
+    @State private var selectedEntity: EntityIdentifier?
+    // We use a separate state map or binding logic for dialogs to attach them to specific buttons
+    // However, for list items, we can track the "active" item for action sheet.
+    @State private var activeActionSheetItem: EntityIdentifier?
+    
+    @State private var showDeleteAlert = false
+    @State private var itemToDelete: EntityIdentifier?
+    
+    struct EntityIdentifier: Hashable, Identifiable {
+        let name: String
+        let type: String
+        var id: String { "\(type):\(name)" }
+    }
+    
     // Temporary state for the sheet editing
     @State private var editFirstName = ""
     @State private var editLastName = ""
@@ -28,7 +48,9 @@ struct ProfileView: View {
                             
                             HStack(spacing: 24) {
                                 // Profile Picture
-                                PhotosPicker(selection: $selectedItem, matching: .images) {
+                                Button {
+                                    showProfilePicOptions = true
+                                } label: {
                                     if let data = store.profileImageData,
                                        let uiImage = UIImage(data: data) {
                                         Image(uiImage: uiImage)
@@ -57,14 +79,20 @@ struct ProfileView: View {
                                         }
                                     }
                                 }
-                                .onChange(of: selectedItem) {
-                                    Task {
-                                        if let data = try? await selectedItem?.loadTransferable(type: Data.self) {
-                                            withAnimation {
-                                                store.profileImageData = data
-                                            }
+                                .confirmationDialog("Profile Picture", isPresented: $showProfilePicOptions) {
+                                    Button("Photo Library") { showPhotoPicker = true }
+                                    
+                                    // Only show Image Playground if supported
+                                    if store.isImageGenerationAvailable {
+                                        Button("Create with Image Playground") { showImagePlayground = true }
+                                    }
+                                    
+                                    if store.profileImageData != nil {
+                                        Button("Remove Image", role: .destructive) {
+                                            store.profileImageData = nil
                                         }
                                     }
+                                    Button("Cancel", role: .cancel) { }
                                 }
                                 
                                 // Names (Display Only)
@@ -139,12 +167,11 @@ struct ProfileView: View {
                             LazyVStack(spacing: 12) {
                                 ForEach(itemsForCategory, id: \.self) { item in
                                     Button {
-                                        store.jumpToFilter(type: filterTypeForCategory, value: item)
+                                        activeActionSheetItem = EntityIdentifier(name: item, type: filterTypeForCategory)
                                     } label: {
-                                        HStack {
-                                            Image(systemName: iconForCategory)
-                                                .foregroundStyle(.white.opacity(0.7))
-                                                .frame(width: 30)
+                                        HStack(spacing: 16) {
+                                            // Entity Image or Icon
+                                            EntityListImage(store: store, name: item, type: filterTypeForCategory, icon: iconForCategory)
                                             
                                             Text(item.capitalized)
                                                 .font(.body.weight(.medium))
@@ -158,6 +185,25 @@ struct ProfileView: View {
                                         .padding()
                                         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
                                     }
+                                    .confirmationDialog(
+                                        "Options",
+                                        isPresented: Binding(
+                                            get: { activeActionSheetItem?.name == item },
+                                            set: { if !$0 { activeActionSheetItem = nil } }
+                                        )
+                                    ) {
+                                        Button("View Details") {
+                                            selectedEntity = EntityIdentifier(name: item, type: filterTypeForCategory)
+                                        }
+                                        Button("Filter Dreams") {
+                                            store.jumpToFilter(type: filterTypeForCategory, value: item)
+                                        }
+                                        Button("Delete Details", role: .destructive) {
+                                            itemToDelete = EntityIdentifier(name: item, type: filterTypeForCategory)
+                                            showDeleteAlert = true
+                                        }
+                                        Button("Cancel", role: .cancel) { }
+                                    }
                                 }
                             }
                             .padding(.horizontal)
@@ -168,6 +214,9 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(item: $selectedEntity) { entity in
+                EntityDetailView(store: store, name: entity.name, type: entity.type)
+            }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -179,6 +228,20 @@ struct ProfileView: View {
                     }
                 }
             }
+            // Alert for Delete Confirmation (Global to view, triggered by list action)
+            .alert("Delete Details?", isPresented: $showDeleteAlert) {
+                Button("Delete", role: .destructive) {
+                    if let entity = itemToDelete {
+                        withAnimation {
+                            store.deleteEntity(name: entity.name, type: entity.type)
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This will remove the custom image and description. The item will remain in your list as long as it appears in your dreams.")
+            }
+            // Edit Profile Sheet
             .sheet(isPresented: $showEditSheet) {
                 NavigationStack {
                     Form {
@@ -203,6 +266,21 @@ struct ProfileView: View {
                     }
                 }
                 .presentationDetents([.medium])
+            }
+            // Image Playground for Profile Pic
+            .sheet(isPresented: $showImagePlayground) {
+                ImagePlaygroundSheet(store: store, entityName: "Profile Picture", entityDescription: "A cool avatar") { data in
+                    withAnimation { store.profileImageData = data }
+                }
+            }
+            // Photo Picker for Profile Pic
+            .photosPicker(isPresented: $showPhotoPicker, selection: $selectedItem, matching: .images)
+            .onChange(of: selectedItem) {
+                Task {
+                    if let data = try? await selectedItem?.loadTransferable(type: Data.self) {
+                        withAnimation { store.profileImageData = data }
+                    }
+                }
             }
         }
     }
@@ -231,6 +309,39 @@ struct ProfileView: View {
         case "Places": return "map.fill"
         case "Symbols": return "star.fill"
         default: return "circle.fill"
+        }
+    }
+}
+
+struct EntityListImage: View {
+    @ObservedObject var store: DreamStore
+    let name: String
+    let type: String
+    let icon: String
+    
+    // We observe this purely to force a redraw when store.entityUpdateTrigger changes
+    var forceUpdate: Int { store.entityUpdateTrigger }
+    
+    // Fetch image from store based on composite ID
+    var imageData: Data? {
+        // Accessing property to establish dependency
+        _ = forceUpdate
+        return store.getEntity(name: name, type: type)?.imageData
+    }
+    
+    var body: some View {
+        if let data = imageData, let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 40, height: 40)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
+        } else {
+            Image(systemName: icon)
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(.white.opacity(0.1)))
         }
     }
 }
