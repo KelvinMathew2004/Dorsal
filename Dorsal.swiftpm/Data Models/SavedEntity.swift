@@ -10,12 +10,16 @@ final class SavedEntity {
     @Attribute(.externalStorage) var imageData: Data?
     var lastUpdated: Date
     
-    init(name: String, type: String, details: String = "", imageData: Data? = nil) {
+    // New field for hierarchy
+    var parentID: String?
+    
+    init(name: String, type: String, details: String = "", imageData: Data? = nil, parentID: String? = nil) {
         self.name = name
         self.type = type
         self.id = "\(type):\(name)"
         self.details = details
         self.imageData = imageData
         self.lastUpdated = Date()
+        self.parentID = parentID
     }
 }

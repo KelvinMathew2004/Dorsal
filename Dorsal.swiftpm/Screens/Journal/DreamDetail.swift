@@ -4,6 +4,18 @@ struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
     let dream: Dream
     
+    // Interaction State
+    @State private var activeEntity: EntityIdentifier?
+    @State private var selectedEntity: EntityIdentifier?
+    @State private var entityToDelete: EntityIdentifier?
+    @State private var showDeleteAlert = false
+    
+    struct EntityIdentifier: Hashable, Identifiable {
+        let name: String
+        let type: String
+        var id: String { "\(type):\(name)" }
+    }
+    
     var liveDream: Dream {
         store.dreams.first(where: { $0.id == dream.id }) ?? dream
     }
@@ -86,8 +98,10 @@ struct DreamDetailView: View {
                         
                         // 3. Core Analysis (Context Tags)
                         if let core = liveDream.core {
-                            DreamContextSection(core: core, store: store)
-                                .transition(.opacity)
+                            DreamContextSection(core: core, onEntityTap: { name, type in
+                                activeEntity = EntityIdentifier(name: name, type: type)
+                            })
+                            .transition(.opacity)
                         }
                         
                         if let interp = liveDream.core?.interpretation {
@@ -220,6 +234,45 @@ struct DreamDetailView: View {
                 .disabled(store.isProcessing)
             }
         }
+        // Interaction Handlers
+        .confirmationDialog(
+            "Options",
+            isPresented: Binding(
+                get: { activeEntity != nil },
+                set: { if !$0 { activeEntity = nil } }
+            )
+        ) {
+            Button("View Details") {
+                if let entity = activeEntity {
+                    selectedEntity = entity
+                }
+            }
+            Button("Filter Dreams") {
+                if let entity = activeEntity {
+                    store.jumpToFilter(type: entity.type, value: entity.name)
+                }
+            }
+            Button("Delete Details", role: .destructive) {
+                if let entity = activeEntity {
+                    entityToDelete = entity
+                    showDeleteAlert = true
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+        .alert("Delete Details?", isPresented: $showDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                if let entity = entityToDelete {
+                    store.deleteEntity(name: entity.name, type: entity.type)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will remove the custom image and description. The item will remain in the dream list.")
+        }
+        .navigationDestination(item: $selectedEntity) { entity in
+            EntityDetailView(store: store, name: entity.name, type: entity.type)
+        }
     }
 }
 
@@ -227,32 +280,32 @@ struct DreamDetailView: View {
 
 struct DreamContextSection: View {
     let core: DreamCoreAnalysis
-    @ObservedObject var store: DreamStore
+    let onEntityTap: (String, String) -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             
             if let people = core.people, !people.isEmpty {
                 ContextRow(title: "People", icon: "person.2.fill", color: .blue, items: people) { item in
-                    store.jumpToFilter(type: "person", value: item)
+                    onEntityTap(item, "person")
                 }
             }
             
             if let places = core.places, !places.isEmpty {
                 ContextRow(title: "Places", icon: "map.fill", color: .green, items: places) { item in
-                    store.jumpToFilter(type: "place", value: item)
+                    onEntityTap(item, "place")
                 }
             }
             
             if let emotions = core.emotions, !emotions.isEmpty {
                 ContextRow(title: "Emotions", icon: "heart.fill", color: .pink, items: emotions) { item in
-                    store.jumpToFilter(type: "emotion", value: item)
+                    onEntityTap(item, "emotion")
                 }
             }
             
             if let symbols = core.symbols, !symbols.isEmpty {
                 ContextRow(title: "Symbols", icon: "star.fill", color: .yellow, items: symbols) { item in
-                    store.jumpToFilter(type: "tag", value: item)
+                    onEntityTap(item, "tag")
                 }
             }
         }

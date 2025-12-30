@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 
 struct ProfileView: View {
     @ObservedObject var store: DreamStore
@@ -22,7 +23,12 @@ struct ProfileView: View {
     @State private var showDeleteAlert = false
     @State private var itemToDelete: EntityIdentifier?
     
-    struct EntityIdentifier: Hashable, Identifiable {
+    // Drag & Drop State
+    @State private var draggedItem: EntityIdentifier?
+    @State private var dropTargetItem: EntityIdentifier?
+    @State private var isTargeted = false
+    
+    struct EntityIdentifier: Hashable, Identifiable, Codable {
         let name: String
         let type: String
         var id: String { "\(type):\(name)" }
@@ -39,177 +45,242 @@ struct ProfileView: View {
             ZStack {
                 Theme.gradientBackground.ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(spacing: 40) {
-                        
-                        // MARK: - Header (Photo + Names)
-                        HStack {
-                            Spacer(minLength: 0)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 40) {
                             
-                            HStack(spacing: 24) {
-                                // Profile Picture
-                                Button {
-                                    showProfilePicOptions = true
-                                } label: {
-                                    if let data = store.profileImageData,
-                                       let uiImage = UIImage(data: data) {
-                                        Image(uiImage: uiImage)
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                            .frame(width: 90, height: 90)
-                                            .clipShape(Circle())
-                                            .overlay(
-                                                Circle()
-                                                    .stroke(.white.opacity(0.3), lineWidth: 2)
-                                            )
-                                            .shadow(color: .black.opacity(0.3), radius: 10)
-                                    } else {
-                                        ZStack {
-                                            Circle()
-                                                .fill(.white.opacity(0.1))
+                            // MARK: - Header (Photo + Names)
+                            HStack {
+                                Spacer(minLength: 0)
+                                
+                                HStack(spacing: 24) {
+                                    // Profile Picture
+                                    Button {
+                                        showProfilePicOptions = true
+                                    } label: {
+                                        if let data = store.profileImageData,
+                                           let uiImage = UIImage(data: data) {
+                                            Image(uiImage: uiImage)
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
                                                 .frame(width: 90, height: 90)
+                                                .clipShape(Circle())
                                                 .overlay(
                                                     Circle()
-                                                        .stroke(.white.opacity(0.2), lineWidth: 2)
+                                                        .stroke(.white.opacity(0.3), lineWidth: 2)
                                                 )
-                                            
-                                            Image(systemName: "person.fill")
-                                                .font(.system(size: 35))
-                                                .foregroundStyle(.white.opacity(0.5))
+                                                .shadow(color: .black.opacity(0.3), radius: 10)
+                                        } else {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(.white.opacity(0.1))
+                                                    .frame(width: 90, height: 90)
+                                                    .overlay(
+                                                        Circle()
+                                                            .stroke(.white.opacity(0.2), lineWidth: 2)
+                                                    )
+                                                
+                                                Image(systemName: "person.fill")
+                                                    .font(.system(size: 35))
+                                                    .foregroundStyle(.white.opacity(0.5))
+                                            }
                                         }
                                     }
-                                }
-                                .confirmationDialog("Profile Picture", isPresented: $showProfilePicOptions) {
-                                    Button("Photo Library") { showPhotoPicker = true }
-                                    
-                                    // Only show Image Playground if supported
-                                    if store.isImageGenerationAvailable {
-                                        Button("Create with Image Playground") { showImagePlayground = true }
-                                    }
-                                    
-                                    if store.profileImageData != nil {
-                                        Button("Remove Image", role: .destructive) {
-                                            store.profileImageData = nil
+                                    .confirmationDialog("Profile Picture", isPresented: $showProfilePicOptions) {
+                                        Button("Photo Library") { showPhotoPicker = true }
+                                        
+                                        // Only show Image Playground if supported
+                                        if store.isImageGenerationAvailable {
+                                            Button("Create with Image Playground") { showImagePlayground = true }
                                         }
-                                    }
-                                    Button("Cancel", role: .cancel) { }
-                                }
-                                
-                                // Names (Display Only)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(store.firstName)
-                                        .font(.system(size: 28, weight: .bold))
-                                        .foregroundStyle(.white)
-                                    
-                                    Text(store.lastName)
-                                        .font(.system(size: 20, weight: .medium))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .frame(width: 120, alignment: .leading)
-                            }
-                            
-                            Spacer(minLength: 0)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
-                        
-                        // MARK: - Single Line Stats Row
-                        HStack(spacing: 6) {
-                            // Block 1: Streak (Rounded Left)
-                            ContinuousStatBlock(
-                                title: "Streak",
-                                value: "\(store.currentStreak)",
-                                icon: "flame.fill",
-                                color: .orange,
-                                corners: [.topLeft, .bottomLeft]
-                            )
-                            
-                            // Block 2: Dreams (No Rounding)
-                            ContinuousStatBlock(
-                                title: "Dreams",
-                                value: "\(store.dreams.count)",
-                                icon: "moon.fill",
-                                color: .purple,
-                                corners: []
-                            )
-                            
-                            // Block 3: Places (No Rounding)
-                            ContinuousStatBlock(
-                                title: "Places",
-                                value: "\(store.allPlaces.count)",
-                                icon: "map.fill",
-                                color: .green,
-                                corners: []
-                            )
-                            
-                            // Block 4: People (Rounded Right)
-                            ContinuousStatBlock(
-                                title: "People",
-                                value: "\(store.allPeople.count)",
-                                icon: "person.2.fill",
-                                color: .blue,
-                                corners: [.topRight, .bottomRight]
-                            )
-                        }
-                        .padding(.horizontal)
-                        
-                        // MARK: - Category Filter
-                        VStack(alignment: .leading, spacing: 16) {
-                            Picker("Category", selection: $selectedCategory) {
-                                ForEach(categories, id: \.self) { cat in
-                                    Text(cat).tag(cat)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .padding(.horizontal)
-                            
-                            // List items based on category
-                            LazyVStack(spacing: 12) {
-                                ForEach(itemsForCategory, id: \.self) { item in
-                                    Button {
-                                        activeActionSheetItem = EntityIdentifier(name: item, type: filterTypeForCategory)
-                                    } label: {
-                                        HStack(spacing: 16) {
-                                            // Entity Image or Icon
-                                            EntityListImage(store: store, name: item, type: filterTypeForCategory, icon: iconForCategory)
-                                            
-                                            Text(item.capitalized)
-                                                .font(.body.weight(.medium))
-                                                .foregroundStyle(.white)
-                                            
-                                            Spacer()
-                                            
-                                            Image(systemName: "chevron.right")
-                                                .foregroundStyle(.white.opacity(0.3))
-                                        }
-                                        .padding()
-                                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
-                                    }
-                                    .confirmationDialog(
-                                        "Options",
-                                        isPresented: Binding(
-                                            get: { activeActionSheetItem?.name == item },
-                                            set: { if !$0 { activeActionSheetItem = nil } }
-                                        )
-                                    ) {
-                                        Button("View Details") {
-                                            selectedEntity = EntityIdentifier(name: item, type: filterTypeForCategory)
-                                        }
-                                        Button("Filter Dreams") {
-                                            store.jumpToFilter(type: filterTypeForCategory, value: item)
-                                        }
-                                        Button("Delete Details", role: .destructive) {
-                                            itemToDelete = EntityIdentifier(name: item, type: filterTypeForCategory)
-                                            showDeleteAlert = true
+                                        
+                                        if store.profileImageData != nil {
+                                            Button("Remove Image", role: .destructive) {
+                                                store.profileImageData = nil
+                                            }
                                         }
                                         Button("Cancel", role: .cancel) { }
                                     }
+                                    
+                                    // Names (Display Only)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(store.firstName)
+                                            .font(.system(size: 28, weight: .bold))
+                                            .foregroundStyle(.white)
+                                        
+                                        Text(store.lastName)
+                                            .font(.system(size: 20, weight: .medium))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(width: 120, alignment: .leading)
                                 }
+                                
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                            .id("top")
+                            
+                            // MARK: - Single Line Stats Row
+                            HStack(spacing: 6) {
+                                // Block 1: Streak (Rounded Left)
+                                ContinuousStatBlock(
+                                    title: "Streak",
+                                    value: "\(store.currentStreak)",
+                                    icon: "flame.fill",
+                                    color: .orange,
+                                    corners: [.topLeft, .bottomLeft]
+                                )
+                                
+                                // Block 2: Dreams (No Rounding)
+                                ContinuousStatBlock(
+                                    title: "Dreams",
+                                    value: "\(store.dreams.count)",
+                                    icon: "moon.fill",
+                                    color: .purple,
+                                    corners: []
+                                )
+                                
+                                // Block 3: Places (No Rounding)
+                                ContinuousStatBlock(
+                                    title: "Places",
+                                    value: "\(store.allPlaces.count)",
+                                    icon: "map.fill",
+                                    color: .green,
+                                    corners: []
+                                )
+                                
+                                // Block 4: People (Rounded Right)
+                                ContinuousStatBlock(
+                                    title: "People",
+                                    value: "\(store.allPeople.count)",
+                                    icon: "person.2.fill",
+                                    color: .blue,
+                                    corners: [.topRight, .bottomRight]
+                                )
                             }
                             .padding(.horizontal)
+                            
+                            // MARK: - Category Filter
+                            VStack(alignment: .leading, spacing: 16) {
+                                Picker("Category", selection: $selectedCategory) {
+                                    ForEach(categories, id: \.self) { cat in
+                                        Text(cat).tag(cat)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .padding(.horizontal)
+                                
+                                // List items based on category
+                                LazyVStack(spacing: 12) {
+                                    ForEach(itemsForCategory, id: \.self) { item in
+                                        let itemIdentifier = EntityIdentifier(name: item, type: filterTypeForCategory)
+                                        let children = store.getChildren(for: item, type: filterTypeForCategory)
+                                        let isParent = !children.isEmpty
+                                        
+                                        // Use same spacing as LazyVStack (12) so children look uniform with parents
+                                        VStack(spacing: 12) {
+                                            // Parent Item
+                                            EntityRowView(
+                                                store: store,
+                                                identifier: itemIdentifier,
+                                                iconCategory: iconForCategory,
+                                                isActive: activeActionSheetItem?.name == item,
+                                                onTap: {
+                                                    activeActionSheetItem = itemIdentifier
+                                                },
+                                                isDropTarget: dropTargetItem?.name == item,
+                                                onDelete: {
+                                                    itemToDelete = itemIdentifier
+                                                    showDeleteAlert = true
+                                                },
+                                                onViewDetails: {
+                                                    selectedEntity = itemIdentifier
+                                                },
+                                                onFilter: {
+                                                    store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
+                                                }
+                                            )
+                                            .onDrag {
+                                                // Disable dragging if it's a parent
+                                                if isParent {
+                                                    return NSItemProvider()
+                                                }
+                                                self.draggedItem = itemIdentifier
+                                                return NSItemProvider(object: item as NSString)
+                                            }
+                                            .onDrop(of: [UTType.text], delegate: EntityDropDelegate(
+                                                item: itemIdentifier,
+                                                draggedItem: $draggedItem,
+                                                dropTargetItem: $dropTargetItem,
+                                                store: store,
+                                                scrollViewProxy: proxy
+                                            ))
+                                            
+                                            // Children
+                                            ForEach(children, id: \.id) { child in
+                                                let childIdentifier = EntityIdentifier(name: child.name, type: child.type)
+                                                
+                                                HStack(spacing: 16) {
+                                                    // "L" Arrow visual
+                                                    Image(systemName: "arrow.turn.down.right")
+                                                        .font(.system(size: 20, weight: .regular))
+                                                        .foregroundStyle(.white.opacity(0.3))
+                                                        .frame(width: 40, height: 40)
+                                                    
+                                                    Text(child.name.capitalized)
+                                                        .font(.body.weight(.medium))
+                                                        .foregroundStyle(.white.opacity(0.8))
+                                                    
+                                                    Spacer()
+                                                    
+                                                    // Unlink / Delete Button (Replaces Swipe Actions which require List)
+                                                    Button(role: .destructive) {
+                                                        withAnimation {
+                                                            store.unlinkEntity(name: child.name, type: child.type)
+                                                        }
+                                                    } label: {
+                                                        Image(systemName: "trash")
+                                                            .font(.system(size: 16, weight: .semibold))
+                                                            .foregroundStyle(.red.opacity(0.8))
+                                                            .padding(8)
+                                                            .background(Color.red.opacity(0.1))
+                                                            .clipShape(Circle())
+                                                    }
+                                                }
+                                                .padding()
+                                                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                                                // Context Menu for alternative unlink access
+                                                .contextMenu {
+                                                    Button(role: .destructive) {
+                                                        withAnimation {
+                                                            store.unlinkEntity(name: child.name, type: child.type)
+                                                        }
+                                                    } label: {
+                                                        Label("Unlink (Remove from Parent)", systemImage: "link.badge.minus")
+                                                    }
+                                                }
+                                                // Make children not interactive for details, but enable dragging
+                                                .onDrag {
+                                                    self.draggedItem = childIdentifier
+                                                    return NSItemProvider(object: child.name as NSString)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal)
+                                // Make the background hit-testable for drops between items
+                                .background(Color.white.opacity(0.001))
+                                .onDrop(of: [UTType.text], delegate: RootDropDelegate(
+                                    draggedItem: $draggedItem,
+                                    store: store
+                                ))
+                            }
                         }
+                        .padding(.bottom, 100)
                     }
-                    .padding(.bottom, 100)
+                    .coordinateSpace(name: "scroll")
                 }
             }
             .navigationTitle("Profile")
@@ -309,6 +380,148 @@ struct ProfileView: View {
         case "Places": return "map.fill"
         case "Symbols": return "star.fill"
         default: return "circle.fill"
+        }
+    }
+}
+
+// Extracted Subview for cleaner code and better state management of the sheet binding
+struct EntityRowView: View {
+    @ObservedObject var store: DreamStore
+    let identifier: ProfileView.EntityIdentifier
+    let iconCategory: String
+    let isActive: Bool
+    let onTap: () -> Void
+    let isDropTarget: Bool
+    
+    let onDelete: () -> Void
+    let onViewDetails: () -> Void
+    let onFilter: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 16) {
+                // Entity Image or Icon
+                EntityListImage(store: store, name: identifier.name, type: identifier.type, icon: iconCategory)
+                
+                Text(identifier.name.capitalized)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.white)
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+            .padding()
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isDropTarget ? Color.white.opacity(0.8) : Color.clear, lineWidth: 4)
+            )
+        }
+        .confirmationDialog(
+            "Options",
+            isPresented: Binding(
+                get: { isActive },
+                set: { if !$0 { onTap() } } // This logic handles dismissal, tapping again toggles in parent logic
+            )
+        ) {
+            Button("View Details", action: onViewDetails)
+            Button("Filter Dreams", action: onFilter)
+            Button("Delete Details", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) { }
+        }
+    }
+}
+
+// MARK: - Drop Delegates
+
+struct RootDropDelegate: DropDelegate {
+    @Binding var draggedItem: ProfileView.EntityIdentifier?
+    let store: DreamStore
+    
+    func performDrop(info: DropInfo) -> Bool {
+        guard let dragged = draggedItem else { return false }
+        
+        // If we reached here, it means we dropped on the background/root list
+        // and NOT on a specific item (since specific item delegate would have handled it if valid)
+        // So this is an "unlink" action.
+        
+        withAnimation {
+            store.unlinkEntity(name: dragged.name, type: dragged.type)
+        }
+        
+        draggedItem = nil
+        return true
+    }
+    
+    // We allow drop always, so user can drop "anywhere else" to unlink
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        return DropProposal(operation: .move)
+    }
+}
+
+struct EntityDropDelegate: DropDelegate {
+    let item: ProfileView.EntityIdentifier
+    @Binding var draggedItem: ProfileView.EntityIdentifier?
+    @Binding var dropTargetItem: ProfileView.EntityIdentifier?
+    let store: DreamStore
+    let scrollViewProxy: ScrollViewProxy
+    
+    func performDrop(info: DropInfo) -> Bool {
+        guard let dragged = draggedItem, dragged.id != item.id else { return false }
+        
+        // Ensure not linking circular or invalid types (handled in store, but good to check)
+        withAnimation {
+            store.linkEntity(
+                childName: dragged.name,
+                childType: dragged.type,
+                parentName: item.name,
+                parentType: item.type
+            )
+        }
+        
+        // Reset state
+        self.draggedItem = nil
+        self.dropTargetItem = nil
+        return true
+    }
+    
+    func dropEntered(info: DropInfo) {
+        guard let dragged = draggedItem, dragged.id != item.id else { return }
+        
+        // Circular check is done in store, but visually we allow target
+        withAnimation {
+            dropTargetItem = item
+        }
+    }
+    
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        // Auto-Scroll Logic with Haptics
+        let location = info.location.y
+        let topThreshold: CGFloat = 100
+        
+        // We use a global coordinate check if possible, but location is relative to the view usually.
+        // Assuming the view is near screen size, < 100 is top.
+        
+        if location < topThreshold {
+             // Scroll up
+            DispatchQueue.main.async {
+                withAnimation {
+                    scrollViewProxy.scrollTo("top", anchor: .top)
+                }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        }
+        
+        return DropProposal(operation: .move)
+    }
+    
+    func dropExited(info: DropInfo) {
+        if dropTargetItem?.id == item.id {
+            withAnimation {
+                dropTargetItem = nil
+            }
         }
     }
 }

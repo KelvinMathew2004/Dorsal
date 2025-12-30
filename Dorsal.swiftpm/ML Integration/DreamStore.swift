@@ -145,6 +145,124 @@ class DreamStore: NSObject, ObservableObject {
         return try? context.fetch(descriptor).first
     }
     
+    // Returns only top-level entities (no parent) for the list
+    func getRootEntities(type: String) -> [SavedEntity] {
+        guard let context = modelContext else { return [] }
+        // Force refresh dependency
+        _ = entityUpdateTrigger
+        
+        // We fetch all and filter manually because Predicate support for nil optional strings can be tricky in some SwiftData versions
+        // and we also need to account for entities that might not be saved yet but appear in dreams.
+        
+        // 1. Get all saved entities of this type
+        let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.type == type })
+        let savedEntities = (try? context.fetch(descriptor)) ?? []
+        
+        // 2. Identify all names from dreams
+        let dreamNames: [String]
+        switch type {
+        case "person": dreamNames = allPeopleNamesFromDreams
+        case "place": dreamNames = allPlacesNamesFromDreams
+        case "tag": dreamNames = allTagsNamesFromDreams
+        default: dreamNames = []
+        }
+        
+        // 3. Create a map of saved entities
+        var entityMap: [String: SavedEntity] = [:]
+        for entity in savedEntities {
+            entityMap[entity.name] = entity
+        }
+        
+        // 4. Build result list
+        var roots: [SavedEntity] = []
+        
+        // Add existing roots
+        for entity in savedEntities {
+            if entity.parentID == nil {
+                roots.append(entity)
+            }
+        }
+        
+        // Add unsaved names as temporary root entities
+        for name in dreamNames {
+            if entityMap[name] == nil {
+                // It's a raw name from dreams, not saved yet. Treat as root.
+                // We create a temp entity for display (not inserting into context)
+                let temp = SavedEntity(name: name, type: type)
+                roots.append(temp)
+                entityMap[name] = temp // prevent duplicates
+            }
+        }
+        
+        return roots.sorted { $0.name < $1.name }
+    }
+    
+    // Returns children for a specific parent
+    func getChildren(for parentName: String, type: String) -> [SavedEntity] {
+        guard let context = modelContext else { return [] }
+        _ = entityUpdateTrigger
+        
+        let parentID = "\(type):\(parentName)"
+        let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.parentID == parentID })
+        return (try? context.fetch(descriptor)) ?? []
+    }
+    
+    // Link a child to a parent
+    func linkEntity(childName: String, childType: String, parentName: String, parentType: String) {
+        guard let context = modelContext else { return }
+        
+        // Cannot link to self or different types
+        if childName == parentName || childType != parentType { return }
+        
+        // Ensure child exists as a SavedEntity
+        if getEntity(name: childName, type: childType) == nil {
+            let newChild = SavedEntity(name: childName, type: childType)
+            context.insert(newChild)
+        }
+        
+        // Ensure parent exists as a SavedEntity
+        if getEntity(name: parentName, type: parentType) == nil {
+            let newParent = SavedEntity(name: parentName, type: parentType)
+            context.insert(newParent)
+        }
+        
+        // Update child's parentID
+        if let child = getEntity(name: childName, type: childType) {
+            let parentID = "\(parentType):\(parentName)"
+            
+            // Circular dependency check: Ensure parent is not already a child of this child
+            if let parent = getEntity(name: parentName, type: parentType), parent.parentID == child.id {
+                return // Prevent cycle
+            }
+            
+            child.parentID = parentID
+            child.lastUpdated = Date()
+            
+            do {
+                try context.save()
+                self.entityUpdateTrigger += 1
+            } catch {
+                print("Linking Error: \(error)")
+            }
+        }
+    }
+    
+    // Remove parent link (make root)
+    func unlinkEntity(name: String, type: String) {
+        guard let context = modelContext else { return }
+        guard let entity = getEntity(name: name, type: type) else { return }
+        
+        entity.parentID = nil
+        entity.lastUpdated = Date()
+        
+        do {
+            try context.save()
+            self.entityUpdateTrigger += 1
+        } catch {
+            print("Unlinking Error: \(error)")
+        }
+    }
+    
     func updateEntity(name: String, type: String, description: String, image: Data?) {
         guard let context = modelContext else { return }
         let id = "\(type):\(name)"
@@ -171,6 +289,14 @@ class DreamStore: NSObject, ObservableObject {
         guard let context = modelContext else { return }
         let id = "\(type):\(name)"
         do {
+            // First, find any children and unlink them (make them orphans)
+            let childrenDescriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.parentID == id })
+            if let children = try? context.fetch(childrenDescriptor) {
+                for child in children {
+                    child.parentID = nil
+                }
+            }
+            
             try context.delete(model: SavedEntity.self, where: #Predicate { $0.id == id })
             try context.save()
             // Force UI update
@@ -214,25 +340,50 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     // ... Computed Props ...
+    
+    // Helper to get all aliases (children) for a given set of names
+    private func resolveAliases(for names: Set<String>, type: String) -> Set<String> {
+        guard let context = modelContext else { return names }
+        var resolved = names
+        
+        for name in names {
+            let parentID = "\(type):\(name)"
+            // Find children
+            let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.parentID == parentID })
+            if let children = try? context.fetch(descriptor) {
+                for child in children {
+                    resolved.insert(child.name)
+                }
+            }
+        }
+        return resolved
+    }
+    
     var filteredDreams: [Dream] {
-        dreams.filter { dream in
+        // Resolve aliases for active filter
+        let peopleFilter = resolveAliases(for: activeFilter.people, type: "person")
+        let placesFilter = resolveAliases(for: activeFilter.places, type: "place")
+        let tagsFilter = resolveAliases(for: activeFilter.tags, type: "tag")
+        
+        return dreams.filter { dream in
             let matchesSearch = searchQuery.isEmpty || dream.rawTranscript.localizedCaseInsensitiveContains(searchQuery)
             if !matchesSearch { return false }
-            if !activeFilter.people.isEmpty {
+            
+            if !peopleFilter.isEmpty {
                 let dreamPeople = Set(dream.core?.people ?? [])
-                if activeFilter.people.isDisjoint(with: dreamPeople) { return false }
+                if peopleFilter.isDisjoint(with: dreamPeople) { return false }
             }
-            if !activeFilter.places.isEmpty {
+            if !placesFilter.isEmpty {
                 let dreamPlaces = Set(dream.core?.places ?? [])
-                if activeFilter.places.isDisjoint(with: dreamPlaces) { return false }
+                if placesFilter.isDisjoint(with: dreamPlaces) { return false }
             }
             if !activeFilter.emotions.isEmpty {
                 let dreamEmotions = Set(dream.core?.emotions ?? [])
                 if activeFilter.emotions.isDisjoint(with: dreamEmotions) { return false }
             }
-            if !activeFilter.tags.isEmpty {
+            if !tagsFilter.isEmpty {
                 let dreamTags = Set(dream.core?.symbols ?? [])
-                if activeFilter.tags.isDisjoint(with: dreamTags) { return false }
+                if tagsFilter.isDisjoint(with: dreamTags) { return false }
             }
             return true
         }
@@ -267,10 +418,25 @@ class DreamStore: NSObject, ObservableObject {
         return streak
     }
     
-    var allPeople: [String] { Array(Set(dreams.flatMap { $0.core?.people ?? [] })).sorted() }
-    var allPlaces: [String] { Array(Set(dreams.flatMap { $0.core?.places ?? [] })).sorted() }
+    // Helper accessors for raw dream data
+    private var allPeopleNamesFromDreams: [String] { Array(Set(dreams.flatMap { $0.core?.people ?? [] })).sorted() }
+    private var allPlacesNamesFromDreams: [String] { Array(Set(dreams.flatMap { $0.core?.places ?? [] })).sorted() }
+    private var allTagsNamesFromDreams: [String] { Array(Set(dreams.flatMap { $0.core?.symbols ?? [] })).sorted() }
+    
+    // Public Accessors - Only returns ROOTS (Parents or Orphans) used for lists
+    var allPeople: [String] {
+        return getRootEntities(type: "person").map { $0.name }
+    }
+    
+    var allPlaces: [String] {
+        return getRootEntities(type: "place").map { $0.name }
+    }
+    
     var allEmotions: [String] { Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })).sorted() }
-    var allTags: [String] { Array(Set(dreams.flatMap { $0.core?.symbols ?? [] })).sorted() }
+    
+    var allTags: [String] {
+        return getRootEntities(type: "tag").map { $0.name }
+    }
     
     func getRecommendations(for item: ChecklistItem) -> [String] {
         if let cached = recommendationCache[item.id] { return cached }

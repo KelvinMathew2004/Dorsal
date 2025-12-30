@@ -26,6 +26,11 @@ struct EntityDetailView: View {
         }
     }
     
+    // Children Fetching
+    var childrenEntities: [SavedEntity] {
+        return store.getChildren(for: name, type: type)
+    }
+    
     var body: some View {
         ZStack {
             Theme.gradientBackground.ignoresSafeArea()
@@ -141,6 +146,35 @@ struct EntityDetailView: View {
                         }
                     }
                     .padding(.horizontal)
+                    
+                    // MARK: - Alternative Names (Children)
+                    if !childrenEntities.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("ALTERNATIVE NAMES")
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 4)
+                            
+                            ForEach(childrenEntities, id: \.id) { child in
+                                HStack(spacing: 16) {
+                                    // "L" Arrow visual
+                                    Image(systemName: "arrow.turn.down.right")
+                                        .font(.system(size: 20, weight: .regular))
+                                        .foregroundStyle(.white.opacity(0.3))
+                                        .frame(width: 40, height: 40)
+                                    
+                                    Text(child.name.capitalized)
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(.white)
+                                    
+                                    Spacer()
+                                }
+                                .padding()
+                                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
                     
                     Spacer()
                 }
