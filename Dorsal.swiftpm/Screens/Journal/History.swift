@@ -3,6 +3,9 @@ import SwiftUI
 struct HistoryView: View {
     @ObservedObject var store: DreamStore
     
+    @State private var showingDeleteAlert = false
+    @State private var dreamToDelete: Dream?
+    
     var body: some View {
         NavigationStack(path: $store.navigationPath) {
             ZStack {
@@ -49,11 +52,10 @@ struct HistoryView: View {
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                     Button(role: .destructive) {
-                                        withAnimation {
-                                            store.deleteDream(dream)
-                                        }
+                                        dreamToDelete = dream
+                                        showingDeleteAlert = true
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
@@ -79,6 +81,16 @@ struct HistoryView: View {
                 DreamDetailView(store: store, dream: dream)
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .alert("Delete Dream?", isPresented: $showingDeleteAlert, presenting: dreamToDelete) { dream in
+                Button("Delete", role: .destructive) {
+                    withAnimation {
+                        store.deleteDream(dream)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { dream in
+                Text("Are you sure you want to delete this dream? This action cannot be undone.")
+            }
         }
     }
 }

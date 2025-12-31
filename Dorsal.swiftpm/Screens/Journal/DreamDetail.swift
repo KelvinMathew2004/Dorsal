@@ -98,9 +98,14 @@ struct DreamDetailView: View {
                         
                         // 3. Core Analysis (Context Tags)
                         if let core = liveDream.core {
-                            DreamContextSection(core: core, onEntityTap: { name, type in
-                                activeEntity = EntityIdentifier(name: name, type: type)
-                            })
+                            DreamContextSection(
+                                core: core,
+                                activeEntity: $activeEntity,
+                                selectedEntity: $selectedEntity,
+                                entityToDelete: $entityToDelete,
+                                showDeleteAlert: $showDeleteAlert,
+                                store: store
+                            )
                             .transition(.opacity)
                         }
                         
@@ -234,32 +239,7 @@ struct DreamDetailView: View {
                 .disabled(store.isProcessing)
             }
         }
-        // Interaction Handlers
-        .confirmationDialog(
-            "Options",
-            isPresented: Binding(
-                get: { activeEntity != nil },
-                set: { if !$0 { activeEntity = nil } }
-            )
-        ) {
-            Button("View Details") {
-                if let entity = activeEntity {
-                    selectedEntity = entity
-                }
-            }
-            Button("Filter Dreams") {
-                if let entity = activeEntity {
-                    store.jumpToFilter(type: entity.type, value: entity.name)
-                }
-            }
-            Button("Delete Details", role: .destructive) {
-                if let entity = activeEntity {
-                    entityToDelete = entity
-                    showDeleteAlert = true
-                }
-            }
-            Button("Cancel", role: .cancel) { }
-        }
+        // Only global alert for deletion; ConfirmationDialog is now local to ContextRow
         .alert("Delete Details?", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
                 if let entity = entityToDelete {
@@ -280,33 +260,74 @@ struct DreamDetailView: View {
 
 struct DreamContextSection: View {
     let core: DreamCoreAnalysis
-    let onEntityTap: (String, String) -> Void
+    
+    @Binding var activeEntity: DreamDetailView.EntityIdentifier?
+    @Binding var selectedEntity: DreamDetailView.EntityIdentifier?
+    @Binding var entityToDelete: DreamDetailView.EntityIdentifier?
+    @Binding var showDeleteAlert: Bool
+    @ObservedObject var store: DreamStore
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             
             if let people = core.people, !people.isEmpty {
-                ContextRow(title: "People", icon: "person.2.fill", color: .blue, items: people) { item in
-                    onEntityTap(item, "person")
-                }
+                ContextRow(
+                    title: "People",
+                    icon: "person.2.fill",
+                    color: .blue,
+                    items: people,
+                    type: "person",
+                    activeEntity: $activeEntity,
+                    selectedEntity: $selectedEntity,
+                    entityToDelete: $entityToDelete,
+                    showDeleteAlert: $showDeleteAlert,
+                    store: store
+                )
             }
             
             if let places = core.places, !places.isEmpty {
-                ContextRow(title: "Places", icon: "map.fill", color: .green, items: places) { item in
-                    onEntityTap(item, "place")
-                }
+                ContextRow(
+                    title: "Places",
+                    icon: "map.fill",
+                    color: .green,
+                    items: places,
+                    type: "place",
+                    activeEntity: $activeEntity,
+                    selectedEntity: $selectedEntity,
+                    entityToDelete: $entityToDelete,
+                    showDeleteAlert: $showDeleteAlert,
+                    store: store
+                )
             }
             
             if let emotions = core.emotions, !emotions.isEmpty {
-                ContextRow(title: "Emotions", icon: "heart.fill", color: .pink, items: emotions) { item in
-                    onEntityTap(item, "emotion")
-                }
+                ContextRow(
+                    title: "Emotions",
+                    icon: "heart.fill",
+                    color: .pink,
+                    items: emotions,
+                    type: "emotion",
+                    activeEntity: $activeEntity,
+                    selectedEntity: $selectedEntity,
+                    entityToDelete: $entityToDelete,
+                    showDeleteAlert: $showDeleteAlert,
+                    store: store
+                )
             }
             
             if let symbols = core.symbols, !symbols.isEmpty {
-                ContextRow(title: "Symbols", icon: "star.fill", color: .yellow, items: symbols) { item in
-                    onEntityTap(item, "tag")
-                }
+                ContextRow(
+                    title: "Symbols",
+                    icon: "star.fill",
+                    color: .yellow,
+                    items: symbols,
+                    type: "tag",
+                    activeEntity: $activeEntity,
+                    selectedEntity: $selectedEntity,
+                    entityToDelete: $entityToDelete,
+                    showDeleteAlert: $showDeleteAlert,
+                    store: store
+                )
             }
         }
     }
@@ -317,7 +338,13 @@ struct ContextRow: View {
     let icon: String
     let color: Color
     let items: [String]
-    let action: (String) -> Void
+    let type: String
+    
+    @Binding var activeEntity: DreamDetailView.EntityIdentifier?
+    @Binding var selectedEntity: DreamDetailView.EntityIdentifier?
+    @Binding var entityToDelete: DreamDetailView.EntityIdentifier?
+    @Binding var showDeleteAlert: Bool
+    @ObservedObject var store: DreamStore
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -330,13 +357,39 @@ struct ContextRow: View {
                 HStack(spacing: 8) {
                     ForEach(items, id: \.self) { item in
                         Button {
-                            action(item)
+                            if type == "emotion" {
+                                // Emotions bypass dialog and jump directly to filter
+                                store.jumpToFilter(type: type, value: item)
+                            } else {
+                                // Other types trigger the dialog
+                                activeEntity = DreamDetailView.EntityIdentifier(name: item, type: type)
+                            }
                         } label: {
                             Text(item.capitalized).font(.caption.bold())
                         }
                         .buttonStyle(.glassProminent)
                         .tint(color.opacity(0.2))
                         .foregroundStyle(color)
+                        // ATTACHMENT: Confirmation Dialog attached directly to the button for the specific item
+                        .confirmationDialog(
+                            "Options",
+                            isPresented: Binding(
+                                get: { activeEntity?.id == DreamDetailView.EntityIdentifier(name: item, type: type).id },
+                                set: { if !$0 { activeEntity = nil } }
+                            )
+                        ) {
+                            Button("View Details") {
+                                selectedEntity = DreamDetailView.EntityIdentifier(name: item, type: type)
+                            }
+                            Button("Filter Dreams") {
+                                store.jumpToFilter(type: type, value: item)
+                            }
+                            Button("Delete Details", role: .destructive) {
+                                entityToDelete = DreamDetailView.EntityIdentifier(name: item, type: type)
+                                showDeleteAlert = true
+                            }
+                            Button("Cancel", role: .cancel) { }
+                        }
                     }
                 }
                 .padding(.horizontal)

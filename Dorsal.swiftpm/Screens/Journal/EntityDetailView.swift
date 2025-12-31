@@ -126,8 +126,6 @@ struct EntityDetailView: View {
                             }
                             
                             // Standard Vertical TextField
-                            // Removed .submitLabel because axis: .vertical reserves 'Return' for new lines.
-                            // Added keyboard toolbar below for dismissal.
                             TextField("", text: $descriptionText, axis: .vertical)
                                 .focused($isDescriptionFocused)
                                 .lineLimit(4...15)
@@ -168,6 +166,21 @@ struct EntityDetailView: View {
                                         .foregroundStyle(.white)
                                     
                                     Spacer()
+                                    
+                                    // Unlink Button on right end
+                                    Button(role: .destructive) {
+                                        withAnimation {
+                                            store.unlinkEntity(name: child.name, type: child.type)
+                                        }
+                                    } label: {
+                                        Image(systemName: "link")
+                                            .symbolVariant(.slash)
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundStyle(.orange.opacity(0.8))
+                                            .padding(8)
+                                            .background(Color.orange.opacity(0.1))
+                                            .clipShape(Circle())
+                                    }
                                 }
                                 .padding()
                                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))

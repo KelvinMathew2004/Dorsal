@@ -78,8 +78,8 @@ class DreamStore: NSObject, ObservableObject {
     private var updateStateTask: Task<Void, Never>?
     
     override init() {
-        self.firstName = UserDefaults.standard.string(forKey: "userFirstName") ?? "Kelvin"
-        self.lastName = UserDefaults.standard.string(forKey: "userLastName") ?? "Mathew"
+        self.firstName = UserDefaults.standard.string(forKey: "userFirstName") ?? ""
+        self.lastName = UserDefaults.standard.string(forKey: "userLastName") ?? ""
         super.init()
         self.profileImageData = loadProfileImageFromDisk()
         
@@ -145,20 +145,13 @@ class DreamStore: NSObject, ObservableObject {
         return try? context.fetch(descriptor).first
     }
     
-    // Returns only top-level entities (no parent) for the list
     func getRootEntities(type: String) -> [SavedEntity] {
         guard let context = modelContext else { return [] }
-        // Force refresh dependency
         _ = entityUpdateTrigger
         
-        // We fetch all and filter manually because Predicate support for nil optional strings can be tricky in some SwiftData versions
-        // and we also need to account for entities that might not be saved yet but appear in dreams.
-        
-        // 1. Get all saved entities of this type
         let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.type == type })
         let savedEntities = (try? context.fetch(descriptor)) ?? []
         
-        // 2. Identify all names from dreams
         let dreamNames: [String]
         switch type {
         case "person": dreamNames = allPeopleNamesFromDreams
@@ -167,106 +160,66 @@ class DreamStore: NSObject, ObservableObject {
         default: dreamNames = []
         }
         
-        // 3. Create a map of saved entities
         var entityMap: [String: SavedEntity] = [:]
-        for entity in savedEntities {
-            entityMap[entity.name] = entity
-        }
+        for entity in savedEntities { entityMap[entity.name] = entity }
         
-        // 4. Build result list
         var roots: [SavedEntity] = []
-        
-        // Add existing roots
         for entity in savedEntities {
-            if entity.parentID == nil {
-                roots.append(entity)
-            }
+            if entity.parentID == nil { roots.append(entity) }
         }
         
-        // Add unsaved names as temporary root entities
         for name in dreamNames {
             if entityMap[name] == nil {
-                // It's a raw name from dreams, not saved yet. Treat as root.
-                // We create a temp entity for display (not inserting into context)
                 let temp = SavedEntity(name: name, type: type)
                 roots.append(temp)
-                entityMap[name] = temp // prevent duplicates
+                entityMap[name] = temp
             }
         }
         
         return roots.sorted { $0.name < $1.name }
     }
     
-    // Returns children for a specific parent
     func getChildren(for parentName: String, type: String) -> [SavedEntity] {
         guard let context = modelContext else { return [] }
         _ = entityUpdateTrigger
-        
         let parentID = "\(type):\(parentName)"
         let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.parentID == parentID })
         return (try? context.fetch(descriptor)) ?? []
     }
     
-    // Link a child to a parent
     func linkEntity(childName: String, childType: String, parentName: String, parentType: String) {
         guard let context = modelContext else { return }
-        
-        // Cannot link to self or different types
         if childName == parentName || childType != parentType { return }
         
-        // Ensure child exists as a SavedEntity
         if getEntity(name: childName, type: childType) == nil {
-            let newChild = SavedEntity(name: childName, type: childType)
-            context.insert(newChild)
+            context.insert(SavedEntity(name: childName, type: childType))
         }
-        
-        // Ensure parent exists as a SavedEntity
         if getEntity(name: parentName, type: parentType) == nil {
-            let newParent = SavedEntity(name: parentName, type: parentType)
-            context.insert(newParent)
+            context.insert(SavedEntity(name: parentName, type: parentType))
         }
         
-        // Update child's parentID
         if let child = getEntity(name: childName, type: childType) {
             let parentID = "\(parentType):\(parentName)"
-            
-            // Circular dependency check: Ensure parent is not already a child of this child
-            if let parent = getEntity(name: parentName, type: parentType), parent.parentID == child.id {
-                return // Prevent cycle
-            }
-            
+            if let parent = getEntity(name: parentName, type: parentType), parent.parentID == child.id { return }
             child.parentID = parentID
             child.lastUpdated = Date()
-            
-            do {
-                try context.save()
-                self.entityUpdateTrigger += 1
-            } catch {
-                print("Linking Error: \(error)")
-            }
+            try? context.save()
+            self.entityUpdateTrigger += 1
         }
     }
     
-    // Remove parent link (make root)
     func unlinkEntity(name: String, type: String) {
         guard let context = modelContext else { return }
         guard let entity = getEntity(name: name, type: type) else { return }
-        
         entity.parentID = nil
         entity.lastUpdated = Date()
-        
-        do {
-            try context.save()
-            self.entityUpdateTrigger += 1
-        } catch {
-            print("Unlinking Error: \(error)")
-        }
+        try? context.save()
+        self.entityUpdateTrigger += 1
     }
     
     func updateEntity(name: String, type: String, description: String, image: Data?) {
         guard let context = modelContext else { return }
         let id = "\(type):\(name)"
-        
         do {
             let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.id == id })
             if let existing = try context.fetch(descriptor).first {
@@ -274,93 +227,66 @@ class DreamStore: NSObject, ObservableObject {
                 existing.imageData = image
                 existing.lastUpdated = Date()
             } else {
-                let newEntity = SavedEntity(name: name, type: type, details: description, imageData: image)
-                context.insert(newEntity)
+                context.insert(SavedEntity(name: name, type: type, details: description, imageData: image))
             }
             try context.save()
-            // Force UI update
             self.entityUpdateTrigger += 1
-        } catch {
-            print("Entity Save Error: \(error)")
-        }
+        } catch { print("Entity Save Error: \(error)") }
     }
     
     func deleteEntity(name: String, type: String) {
         guard let context = modelContext else { return }
         let id = "\(type):\(name)"
         do {
-            // First, find any children and unlink them (make them orphans)
             let childrenDescriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.parentID == id })
             if let children = try? context.fetch(childrenDescriptor) {
-                for child in children {
-                    child.parentID = nil
-                }
+                for child in children { child.parentID = nil }
             }
-            
             try context.delete(model: SavedEntity.self, where: #Predicate { $0.id == id })
             try context.save()
-            // Force UI update
             self.entityUpdateTrigger += 1
-        } catch {
-            print("Entity Delete Error: \(error)")
-        }
+        } catch { print("Entity Delete Error: \(error)") }
     }
     
-    // MARK: - IMAGE GENERATION HELPER
+    // MARK: - IMAGE GENERATION
     
     func checkImageGenerationSupport() async {
         do {
-            // Attempt to initialize ImageCreator to check for device support
             _ = try await ImageCreator()
             self.isImageGenerationAvailable = true
         } catch {
-            print("Image generation not supported on this device: \(error)")
+            print("Image generation not supported: \(error)")
             self.isImageGenerationAvailable = false
         }
     }
     
     func generateImageFromPrompt(prompt: String) async throws -> Data {
         guard isImageGenerationAvailable else { throw DreamError.imageUnavailable }
-        
         let creator = try await ImageCreator()
-        guard let firstAvailable = creator.availableStyles.first else {
-            throw DreamError.imageUnavailable
-        }
-        let selectedStyle: ImagePlaygroundStyle = creator.availableStyles.contains(.illustration) ? .illustration : firstAvailable
-        let concepts: [ImagePlaygroundConcept] = [.text(prompt)]
+        let selectedStyle: ImagePlaygroundStyle = creator.availableStyles.contains(.illustration) ? .illustration : (creator.availableStyles.first ?? .illustration)
         
-        for try await image in creator.images(for: concepts, style: selectedStyle, limit: 1) {
-            let cgImage = image.cgImage
-            let uiImage = UIImage(cgImage: cgImage)
-            if let pngData = uiImage.pngData() {
-                return pngData
-            }
+        for try await image in creator.images(for: [.text(prompt)], style: selectedStyle, limit: 1) {
+            if let data = UIImage(cgImage: image.cgImage).pngData() { return data }
         }
         throw DreamError.imageGenerationFailed
     }
     
     // ... Computed Props ...
     
-    // Helper to get all aliases (children) for a given set of names
     private func resolveAliases(for names: Set<String>, type: String) -> Set<String> {
         guard let context = modelContext else { return names }
         var resolved = names
-        
         for name in names {
             let parentID = "\(type):\(name)"
-            // Find children
             let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.parentID == parentID })
             if let children = try? context.fetch(descriptor) {
-                for child in children {
-                    resolved.insert(child.name)
-                }
+                for child in children { resolved.insert(child.name) }
             }
         }
         return resolved
     }
     
     var filteredDreams: [Dream] {
-        // Resolve aliases for active filter
         let peopleFilter = resolveAliases(for: activeFilter.people, type: "person")
         let placesFilter = resolveAliases(for: activeFilter.places, type: "place")
         let tagsFilter = resolveAliases(for: activeFilter.tags, type: "tag")
@@ -368,7 +294,6 @@ class DreamStore: NSObject, ObservableObject {
         return dreams.filter { dream in
             let matchesSearch = searchQuery.isEmpty || dream.rawTranscript.localizedCaseInsensitiveContains(searchQuery)
             if !matchesSearch { return false }
-            
             if !peopleFilter.isEmpty {
                 let dreamPeople = Set(dream.core?.people ?? [])
                 if peopleFilter.isDisjoint(with: dreamPeople) { return false }
@@ -394,49 +319,29 @@ class DreamStore: NSObject, ObservableObject {
         let sortedDates = dreams.map { $0.date }.sorted(by: >)
         guard let lastDreamDate = sortedDates.first else { return 0 }
         
-        if !calendar.isDateInToday(lastDreamDate) && !calendar.isDateInYesterday(lastDreamDate) {
-            return 0
-        }
+        if !calendar.isDateInToday(lastDreamDate) && !calendar.isDateInYesterday(lastDreamDate) { return 0 }
         
         var streak = 1
         var currentDate = lastDreamDate
-        
         for i in 1..<sortedDates.count {
             let previousDate = sortedDates[i]
-            if calendar.isDate(previousDate, inSameDayAs: currentDate) {
-                continue
-            }
-            
-            if let dayBefore = calendar.date(byAdding: .day, value: -1, to: currentDate),
-               calendar.isDate(previousDate, inSameDayAs: dayBefore) {
+            if calendar.isDate(previousDate, inSameDayAs: currentDate) { continue }
+            if let dayBefore = calendar.date(byAdding: .day, value: -1, to: currentDate), calendar.isDate(previousDate, inSameDayAs: dayBefore) {
                 streak += 1
                 currentDate = previousDate
-            } else {
-                break
-            }
+            } else { break }
         }
         return streak
     }
     
-    // Helper accessors for raw dream data
     private var allPeopleNamesFromDreams: [String] { Array(Set(dreams.flatMap { $0.core?.people ?? [] })).sorted() }
     private var allPlacesNamesFromDreams: [String] { Array(Set(dreams.flatMap { $0.core?.places ?? [] })).sorted() }
     private var allTagsNamesFromDreams: [String] { Array(Set(dreams.flatMap { $0.core?.symbols ?? [] })).sorted() }
     
-    // Public Accessors - Only returns ROOTS (Parents or Orphans) used for lists
-    var allPeople: [String] {
-        return getRootEntities(type: "person").map { $0.name }
-    }
-    
-    var allPlaces: [String] {
-        return getRootEntities(type: "place").map { $0.name }
-    }
-    
+    var allPeople: [String] { getRootEntities(type: "person").map { $0.name } }
+    var allPlaces: [String] { getRootEntities(type: "place").map { $0.name } }
     var allEmotions: [String] { Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })).sorted() }
-    
-    var allTags: [String] {
-        return getRootEntities(type: "tag").map { $0.name }
-    }
+    var allTags: [String] { getRootEntities(type: "tag").map { $0.name } }
     
     func getRecommendations(for item: ChecklistItem) -> [String] {
         if let cached = recommendationCache[item.id] { return cached }
@@ -542,7 +447,7 @@ class DreamStore: NSObject, ObservableObject {
         activeQuestion = questions.first
         
         let extendedScenarios = [
-            "Um... so, I woke up feeling really strange today. In the dream, I was walking through this... dense, foggy forest. (Pause). It felt like... I don't know, like I was searching for something. Then I saw my grandmother sitting on a mushroom. (Pause). She looked exactly like she did when I was a kid. I felt a sense of calm but also confusion. (Pause). Why was she there?",
+            "Um… I remember walking through a grocery store. (Pause). The aisles were way longer than usual, and I couldn’t find what I came for. People passed by, but no one looked at me. Then I realized I didn’t have shoes on. (Pause). I felt embarrassed, even though no one reacted. It stuck with me. (Pause). Why did that matter so much?",
             "Okay, so I was late for an exam I didn't study for. Classic nightmare, right? The classroom was... weirdly enough, underwater. (Pause). Like, I could breathe, but everything was floating. My teacher was a giant octopus. (Pause). Yeah, an octopus with glasses. I felt anxious, just panic rising in my chest. (Pause). I couldn't find my pen."
         ]
         let text = extendedScenarios[mockIndex % extendedScenarios.count]; mockIndex += 1
