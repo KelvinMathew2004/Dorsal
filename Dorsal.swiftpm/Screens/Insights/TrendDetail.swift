@@ -246,9 +246,17 @@ struct TrendDetailView: View {
         let points = generatePoints(for: metric)
         let values = points.map { $0.value }
         
-        if values.isEmpty || values.allSatisfy({ $0 == 0 }) {
-            if metric == .dreams || metric == .nightmares || metric == .positive { return "None" }
+        // 1. If there's truly no data recorded (empty array), return "No Data".
+        if values.isEmpty {
             return "No Data"
+        }
+        
+        // 2. If data exists but it's all zeros:
+        //    - For count-based metrics (Dreams, Nightmares), "None" is a friendly zero.
+        //    - For value-based metrics (Fatigue, Anxiety), we want to proceed to show "0%".
+        if values.allSatisfy({ $0 == 0 }) {
+            if metric == .dreams || metric == .nightmares || metric == .positive { return "None" }
+            // For other metrics, fall through to display "0%" or "0"
         }
         
         if metric.isPercentage {

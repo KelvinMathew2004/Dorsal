@@ -173,7 +173,7 @@ struct EntityDetailView: View {
                                             store.unlinkEntity(name: child.name, type: child.type)
                                         }
                                     } label: {
-                                        Image(systemName: "link")
+                                        Image(systemName: "minus.circle.fill")
                                             .symbolVariant(.slash)
                                             .font(.system(size: 16, weight: .semibold))
                                             .foregroundStyle(.orange.opacity(0.8))

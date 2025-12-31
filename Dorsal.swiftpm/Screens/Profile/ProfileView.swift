@@ -123,24 +123,6 @@ struct ProfileView: View {
         .onDrop(of: [UTType.text], delegate: RootDropDelegate(draggedItem: $draggedItem, store: store))
         
         // MARK: - Global Dialogs
-        .confirmationDialog("Options", isPresented: Binding(
-            get: { activeActionSheetItem != nil },
-            set: { if !$0 { activeActionSheetItem = nil } }
-        )) {
-            if let item = activeActionSheetItem {
-                Button("View Details") {
-                    selectedEntity = item
-                }
-                Button("Filter Dreams") {
-                    store.jumpToFilter(type: item.type, value: item.name)
-                }
-                Button("Delete Details", role: .destructive) {
-                    itemToDelete = item
-                    showDeleteAlert = true
-                }
-                Button("Cancel", role: .cancel) { }
-            }
-        }
         .alert("Delete Details?", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
                 if let entity = itemToDelete {
@@ -223,14 +205,12 @@ struct ProfileView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal)
             
-            LazyVStack(spacing: 0) { // Zero spacing to allow dividers to look connected
+            LazyVStack(spacing: 0) {
                 ForEach(itemsForCategory, id: \.self) { item in
                     let itemIdentifier = EntityIdentifier(name: item, type: filterTypeForCategory)
                     let children = store.getChildren(for: item, type: filterTypeForCategory)
-                    let isParent = !children.isEmpty
                     
                     VStack(spacing: 0) {
-                        // Parent Item
                         EntityRowView(
                             store: store,
                             identifier: itemIdentifier,
@@ -241,11 +221,30 @@ struct ProfileView: View {
                             onFilter: { store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name) },
                             onDelete: { itemToDelete = itemIdentifier; showDeleteAlert = true }
                         )
+                        .confirmationDialog(
+                            "Options",
+                            isPresented: Binding(
+                                get: { activeActionSheetItem == itemIdentifier },
+                                set: { if !$0 { activeActionSheetItem = nil } }
+                            )
+                        ) {
+                            if let item = activeActionSheetItem {
+                                Button("View Details") {
+                                    selectedEntity = item
+                                }
+                                Button("Filter Dreams") {
+                                    store.jumpToFilter(type: item.type, value: item.name)
+                                }
+                                Button("Delete Details", role: .destructive) {
+                                    itemToDelete = item
+                                    showDeleteAlert = true
+                                }
+                                Button("Cancel", role: .cancel) { }
+                            }
+                        }
                         .padding(.vertical, 8)
                         .padding(.horizontal)
                         .onDrag {
-                            // If parent has children, prevent dragging
-                            if isParent { return NSItemProvider() }
                             self.draggedItem = itemIdentifier
                             return NSItemProvider(object: item as NSString)
                         }
@@ -257,14 +256,13 @@ struct ProfileView: View {
                             scrollViewProxy: proxy
                         ))
                         
-                        // Children
                         ForEach(children, id: \.id) { child in
                             let childIdentifier = EntityIdentifier(name: child.name, type: child.type)
                             
                             SwipeActionRow(
                                 id: childIdentifier.id,
                                 openID: $openSwipeItemID,
-                                actionIcon: "link",
+                                actionIcon: "minus.circle.fill",
                                 actionVariant: .slash,
                                 actionColor: .orange,
                                 onAction: {
@@ -296,7 +294,7 @@ struct ProfileView: View {
                                         store.unlinkEntity(name: child.name, type: child.type)
                                     }
                                 } label: {
-                                    Label("Unlink", systemImage: "link")
+                                    Label("Unlink", systemImage: "minus.circle.fill")
                                         .symbolVariant(.slash)
                                 }
                             }
@@ -304,7 +302,6 @@ struct ProfileView: View {
                                 self.draggedItem = childIdentifier
                                 return NSItemProvider(object: child.name as NSString)
                             }
-                            // Child Drop Delegate: Consumes drop to prevent unlinking when dropped on self/siblings
                             .onDrop(of: [UTType.text], delegate: ChildDropDelegate())
                         }
                     }
@@ -376,24 +373,24 @@ struct SwipeActionRow<Content: View>: View {
                 onAction()
             }) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12).fill(actionColor)
                     Image(systemName: actionIcon)
                         .symbolVariant(actionVariant)
                         .font(.title3)
                         .foregroundStyle(.white)
                 }
-                .frame(width: 80)
+                .padding(12)
+                .glassEffect(.regular.interactive().tint(actionColor), in: Circle())
             }
-            .opacity(offset < -10 ? 1 : 0)
+            .scaleEffect(max(0.1, min(1.0, abs(offset) / 80)))
+            .opacity(min(1.0, abs(offset) / 80.0))
             
             content
-                .background(Color.clear) // Transparent to show gradient if needed, relying on button opacity
+                .background(Color.clear)
                 .cornerRadius(12)
                 .offset(x: offset)
                 .gesture(
                     DragGesture(minimumDistance: 20, coordinateSpace: .local)
                         .onChanged { value in
-                            // Only allow left swipe
                             if value.translation.width < 0 { offset = value.translation.width }
                         }
                         .onEnded { value in
@@ -409,7 +406,6 @@ struct SwipeActionRow<Content: View>: View {
                         }
                 )
                 .onChange(of: openID) { newValue in
-                    // If another row is opened (newValue != id) or everything closed (nil), close this one
                     if newValue != id && offset != 0 {
                         withAnimation { offset = 0 }
                     }
@@ -481,16 +477,18 @@ struct RootDropDelegate: DropDelegate {
     let store: DreamStore
     
     func dropUpdated(info: DropInfo) -> DropProposal {
-        // Drop on background = Move/Unlink
         return DropProposal(operation: .move)
     }
     
     func performDrop(info: DropInfo) -> Bool {
         guard let dragged = draggedItem else { return false }
-        // Dropping on the background/root list -> Unlink (Move to top level)
         withAnimation { store.unlinkEntity(name: dragged.name, type: dragged.type) }
         draggedItem = nil
         return true
+    }
+    
+    func dropProposal(operations: DropOperation, session: DropSession, destinationLocation: CGPoint) -> DropProposal? {
+        return DropProposal(operation: .move)
     }
 }
 
@@ -504,11 +502,15 @@ struct EntityDropDelegate: DropDelegate {
     func dropEntered(info: DropInfo) {
         guard let dragged = draggedItem, dragged.id != item.id else { return }
         
-        // Prevent highlighting if dragged item is already a child of this parent
         if let childEntity = store.getEntity(name: dragged.name, type: dragged.type),
            childEntity.parentID == item.id {
             return
         }
+        
+        if !store.getChildren(for: dragged.name, type: dragged.type).isEmpty {
+            return
+        }
+        
         withAnimation { dropTargetItem = item }
     }
     
@@ -523,19 +525,20 @@ struct EntityDropDelegate: DropDelegate {
             DispatchQueue.main.async { withAnimation { scrollViewProxy.scrollTo("top", anchor: .top) } }
         }
         
-        // Return .copy (Plus) if valid link, else .forbidden or .move
-        if let dragged = draggedItem,
-           let childEntity = store.getEntity(name: dragged.name, type: dragged.type),
-           childEntity.parentID == item.id {
-             return DropProposal(operation: .forbidden) // Already linked
+        if dropTargetItem?.id == item.id {
+            return DropProposal(operation: .copy)
         }
-        return DropProposal(operation: .copy)
+        
+        return DropProposal(operation: .forbidden)
     }
     
     func performDrop(info: DropInfo) -> Bool {
         guard let dragged = draggedItem, dragged.id != item.id else { return false }
         
-        // Link logic: Make dragged item a child of 'item'
+        if !store.getChildren(for: dragged.name, type: dragged.type).isEmpty {
+            return false
+        }
+        
         withAnimation {
             store.linkEntity(childName: dragged.name, childType: dragged.type, parentName: item.name, parentType: item.type)
         }
