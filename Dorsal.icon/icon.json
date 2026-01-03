@@ -1,0 +1,227 @@
+{
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.18431,0.00000,0.46667,1.00000"
+  },
+  "groups" : [
+    {
+      "blend-mode" : "normal",
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.89985,0.71939,0.25676,1.00000",
+                  "srgb:1.00000,0.79216,0.27059,1.00000"
+                ],
+                "orientation" : {
+                  "start" : {
+                    "x" : 0.8839684637702754,
+                    "y" : 0.7906796848721166
+                  },
+                  "stop" : {
+                    "x" : 0.29106151035259203,
+                    "y" : 0.3400898217210782
+                  }
+                }
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "automatic-gradient" : "srgb:1.00000,0.79216,0.27059,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.89985,0.71939,0.25676,1.00000",
+                  "srgb:1.00000,1.00000,1.00000,1.00000"
+                ],
+                "orientation" : {
+                  "start" : {
+                    "x" : 0.8839684637702754,
+                    "y" : 0.7906796848721166
+                  },
+                  "stop" : {
+                    "x" : 0.29106151035259203,
+                    "y" : 0.3400898217210782
+                  }
+                }
+              }
+            }
+          ],
+          "image-name" : "Gemini_Generated_Image_cuu8gccuu8gccuu8-Photoroom.png",
+          "name" : "Gemini_Generated_Image_cuu8gccuu8gccuu8-Photoroom",
+          "position" : {
+            "scale" : 0.6,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 1
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blend-mode" : "normal",
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "blend-mode" : "normal",
+          "fill" : {
+            "automatic-gradient" : "srgb:0.67451,0.35294,0.78431,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 5.png",
+          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 5",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.5
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 8,
+            "translation-in-points" : [
+              -43.86572653306757,
+              254
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "automatic-gradient" : "srgb:0.50588,0.27843,0.68235,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 6.png",
+          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 6",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.5
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 10,
+            "translation-in-points" : [
+              143.6908193275981,
+              190.04245077913902
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "automatic-gradient" : "srgb:0.50980,0.28627,0.64314,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy.png",
+          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.5
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 10,
+            "translation-in-points" : [
+              -142.2092579328346,
+              213.33235655333692
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "automatic-gradient" : "srgb:0.47451,0.25882,0.62353,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview.png",
+          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.5
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 9,
+            "translation-in-points" : [
+              111.19081932759809,
+              31.19581676678922
+            ]
+          }
+        },
+        {
+          "blend-mode" : "normal",
+          "fill" : {
+            "automatic-gradient" : "srgb:0.41961,0.20784,0.57647,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 4.png",
+          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 4",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.5
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 8,
+            "translation-in-points" : [
+              364.1342734669324,
+              -337.4538426656668
+            ]
+          }
+        }
+      ],
+      "opacity" : 0.5,
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

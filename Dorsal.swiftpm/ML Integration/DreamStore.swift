@@ -447,7 +447,7 @@ class DreamStore: NSObject, ObservableObject {
         activeQuestion = questions.first
         
         let extendedScenarios = [
-            "Um… I remember walking through a grocery store. (Pause). The aisles were way longer than usual, and I couldn’t find what I came for. People passed by, but no one looked at me. Then I realized I didn’t have shoes on. (Pause). I felt embarrassed, even though no one reacted. It stuck with me. (Pause). Why did that matter so much?",
+            "So… this one felt personal. I was scrolling through my phone, but none of the messages made sense. (Pause). Some were from people I hadn’t talked to in years. I tried replying, but the text wouldn’t send. Then the screen went blank. (Pause). I felt frustrated and kind of lonely. (Pause). Why couldn’t I reach anyone?",
             "Okay, so I was late for an exam I didn't study for. Classic nightmare, right? The classroom was... weirdly enough, underwater. (Pause). Like, I could breathe, but everything was floating. My teacher was a giant octopus. (Pause). Yeah, an octopus with glasses. I felt anxious, just panic rising in my chest. (Pause). I couldn't find my pen."
         ]
         let text = extendedScenarios[mockIndex % extendedScenarios.count]; mockIndex += 1
