@@ -7,9 +7,18 @@ struct DorsalApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView(store: store)
-                // Register models for persistence
-                .modelContainer(for: [SavedDream.self, SavedWeeklyInsight.self, SavedEntity.self])
+            Group {
+                if store.isOnboardingComplete {
+                    ContentView(store: store)
+                        // Register models for persistence
+                        .modelContainer(for: [SavedDream.self, SavedWeeklyInsight.self, SavedEntity.self])
+                        .transition(.opacity)
+                } else {
+                    OnboardingView(store: store)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut, value: store.isOnboardingComplete)
         }
     }
 }

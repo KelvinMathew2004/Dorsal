@@ -5,61 +5,21 @@
   "groups" : [
     {
       "blend-mode" : "normal",
+      "blur-material" : 0.5,
       "hidden" : false,
       "layers" : [
         {
-          "fill-specializations" : [
-            {
-              "value" : {
-                "linear-gradient" : [
-                  "display-p3:0.89985,0.71939,0.25676,1.00000",
-                  "srgb:1.00000,0.79216,0.27059,1.00000"
-                ],
-                "orientation" : {
-                  "start" : {
-                    "x" : 0.8839684637702754,
-                    "y" : 0.7906796848721166
-                  },
-                  "stop" : {
-                    "x" : 0.29106151035259203,
-                    "y" : 0.3400898217210782
-                  }
-                }
-              }
-            },
-            {
-              "appearance" : "dark",
-              "value" : {
-                "automatic-gradient" : "srgb:1.00000,0.79216,0.27059,1.00000"
-              }
-            },
-            {
-              "appearance" : "tinted",
-              "value" : {
-                "linear-gradient" : [
-                  "display-p3:0.89985,0.71939,0.25676,1.00000",
-                  "srgb:1.00000,1.00000,1.00000,1.00000"
-                ],
-                "orientation" : {
-                  "start" : {
-                    "x" : 0.8839684637702754,
-                    "y" : 0.7906796848721166
-                  },
-                  "stop" : {
-                    "x" : 0.29106151035259203,
-                    "y" : 0.3400898217210782
-                  }
-                }
-              }
-            }
-          ],
-          "image-name" : "Gemini_Generated_Image_cuu8gccuu8gccuu8-Photoroom.png",
-          "name" : "Gemini_Generated_Image_cuu8gccuu8gccuu8-Photoroom",
+          "fill" : {
+            "automatic-gradient" : "srgb:1.00000,0.79216,0.27059,1.00000"
+          },
+          "glass" : true,
+          "image-name" : "image.png",
+          "name" : "image",
           "position" : {
             "scale" : 0.6,
             "translation-in-points" : [
-              0,
-              0
+              3.900000000000091,
+              1.2000000000000455
             ]
           }
         }
@@ -68,6 +28,7 @@
         "kind" : "neutral",
         "opacity" : 1
       },
+      "specular" : true,
       "translucency" : {
         "enabled" : true,
         "value" : 0.5
@@ -81,7 +42,7 @@
         {
           "blend-mode" : "normal",
           "fill" : {
-            "automatic-gradient" : "srgb:0.67451,0.35294,0.78431,1.00000"
+            "automatic-gradient" : "srgb:0.58188,0.21569,1.00000,1.00000"
           },
           "hidden" : false,
           "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 5.png",
@@ -106,7 +67,7 @@
         },
         {
           "fill" : {
-            "automatic-gradient" : "srgb:0.50588,0.27843,0.68235,1.00000"
+            "automatic-gradient" : "srgb:1.00000,0.18574,0.57340,1.00000"
           },
           "hidden" : false,
           "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 6.png",
@@ -131,7 +92,7 @@
         },
         {
           "fill" : {
-            "automatic-gradient" : "srgb:0.50980,0.28627,0.64314,1.00000"
+            "automatic-gradient" : "srgb:1.00000,0.25279,1.00000,1.00000"
           },
           "hidden" : false,
           "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy.png",
@@ -156,7 +117,7 @@
         },
         {
           "fill" : {
-            "automatic-gradient" : "srgb:0.47451,0.25882,0.62353,1.00000"
+            "automatic-gradient" : "srgb:0.58188,0.21569,1.00000,1.00000"
           },
           "hidden" : false,
           "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview.png",
@@ -182,7 +143,7 @@
         {
           "blend-mode" : "normal",
           "fill" : {
-            "automatic-gradient" : "srgb:0.41961,0.20784,0.57647,1.00000"
+            "automatic-gradient" : "srgb:0.57919,0.12801,0.57269,1.00000"
           },
           "hidden" : false,
           "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 4.png",

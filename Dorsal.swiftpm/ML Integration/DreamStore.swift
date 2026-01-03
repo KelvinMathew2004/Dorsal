@@ -3,6 +3,9 @@ import AVFoundation
 import ImagePlayground
 import FoundationModels
 import SwiftData
+import Combine
+import Speech
+import NaturalLanguage
 
 // ... (Filter Structs) ...
 struct DreamFilter: Equatable {
@@ -50,30 +53,64 @@ class DreamStore: NSObject, ObservableObject {
     @Published var permissionError: String?
     @Published var showPermissionAlert: Bool = false
     
+    // MARK: - PERMISSION STATE
+    @Published var hasMicAccess: Bool = false
+    @Published var hasSpeechAccess: Bool = false
+    
+    var isOnboardingComplete: Bool {
+        hasMicAccess && hasSpeechAccess
+    }
+    
     // MARK: - IMAGE GENERATION SUPPORT
     @Published var isImageGenerationAvailable: Bool = false
     
     // MARK: - UI UPDATE TRIGGERS
-    // Used to force views to redraw when entities are updated in the background context
     @Published var entityUpdateTrigger: Int = 0
     
     @Published var currentTranscript: String = ""
     @Published var isRecording: Bool = false
     @Published var isPaused: Bool = false
     @Published var audioPower: Float = 0.0
-    private var mockTimer: Timer?
-    private var mockIndex = 0
+    
+    // Hardware Managers
+    private let audioRecorder = LiveAudioRecorder()
+    private var cancellables = Set<AnyCancellable>()
     
     @Published var activeQuestion: ChecklistItem?
     @Published var isQuestionSatisfied: Bool = false
     @Published var answeredQuestions: Set<UUID> = []
     private var recommendationCache: [UUID: [String]] = [:]
     
-    struct ChecklistItem: Identifiable, Hashable { let id = UUID(); let question: String; let keywords: [String]; let contextType: String }
+    // NLP Embedding for smart matching
+    private let embedding = NLEmbedding.wordEmbedding(for: .english)
+    
+    struct ChecklistItem: Identifiable, Hashable {
+        let id = UUID()
+        let question: String
+        let keywords: [String]
+        let contextType: String
+        let semanticConcepts: [String]
+    }
+    
     private let questions: [ChecklistItem] = [
-        ChecklistItem(question: "Who was in the dream with you?", keywords: ["mom", "dad", "friend", "brother", "sister", "he", "she", "they", "someone", "person", "man", "woman", "grandma", "grandpa", "teacher", "celebrity", "bear", "octopus", "librarian", "taylor", "dad"], contextType: "person"),
-        ChecklistItem(question: "Where did it take place?", keywords: ["home", "school", "work", "outside", "inside", "room", "forest", "city", "water", "place", "house", "building", "kitchen", "hallway", "mountain", "underwater", "library", "party", "car", "downtown"], contextType: "place"),
-        ChecklistItem(question: "How did you feel?", keywords: ["happy", "sad", "scared", "anxious", "excited", "confused", "calm", "angry", "felt", "feeling", "joyful", "terrified", "empowered", "lonely", "relief", "curious", "starstruck"], contextType: "emotion")
+        ChecklistItem(
+            question: "Who was in the dream with you?",
+            keywords: ["mom", "dad", "friend", "brother", "sister", "he", "she", "they", "someone", "person", "man", "woman", "grandma", "grandpa", "teacher", "celebrity", "bear", "octopus", "librarian", "taylor", "dad"],
+            contextType: "person",
+            semanticConcepts: ["relative", "friend", "stranger", "animal", "person", "family", "actor", "musician"]
+        ),
+        ChecklistItem(
+            question: "Where did it take place?",
+            keywords: ["home", "school", "work", "outside", "inside", "room", "forest", "city", "water", "place", "house", "building", "kitchen", "hallway", "mountain", "underwater", "library", "party", "car", "downtown"],
+            contextType: "place",
+            semanticConcepts: ["location", "place", "building", "nature", "landscape", "room", "city", "structure", "area", "environment"]
+        ),
+        ChecklistItem(
+            question: "How did you feel?",
+            keywords: ["happy", "sad", "scared", "anxious", "excited", "confused", "calm", "angry", "felt", "feeling", "joyful", "terrified", "empowered", "lonely", "relief", "curious", "starstruck"],
+            contextType: "emotion",
+            semanticConcepts: ["emotion", "feeling", "mood", "fear", "joy", "anger", "sadness", "surprise"]
+        )
     ]
     private var updateStateTask: Task<Void, Never>?
     
@@ -83,9 +120,53 @@ class DreamStore: NSObject, ObservableObject {
         super.init()
         self.profileImageData = loadProfileImageFromDisk()
         
-        // Check for Image Generation Support
+        checkPermissions()
+        setupObservers()
+        
         Task {
             await checkImageGenerationSupport()
+        }
+    }
+    
+    private func setupObservers() {
+        // Observe Real Audio Recorder
+        audioRecorder.$audioLevel
+            .receive(on: RunLoop.main)
+            .assign(to: \.audioPower, on: self)
+            .store(in: &cancellables)
+            
+        audioRecorder.$liveTranscript
+            .receive(on: RunLoop.main)
+            .sink { [weak self] text in
+                self?.currentTranscript = text
+                self?.updateQuestionState()
+            }
+            .store(in: &cancellables)
+            
+        // Sync permission states if changed externally
+        audioRecorder.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+    }
+    
+    // MARK: - PERMISSION LOGIC
+    func checkPermissions() {
+        let micStatus = AVAudioSession.sharedInstance().recordPermission
+        self.hasMicAccess = (micStatus == .granted)
+        let speechStatus = SFSpeechRecognizer.authorizationStatus()
+        self.hasSpeechAccess = (speechStatus == .authorized)
+    }
+    
+    func requestMicrophoneAccess() {
+        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
+            Task { @MainActor [weak self] in self?.hasMicAccess = granted }
+        }
+    }
+    
+    func requestSpeechAccess() {
+        SFSpeechRecognizer.requestAuthorization { [weak self] status in
+            Task { @MainActor [weak self] in self?.hasSpeechAccess = (status == .authorized) }
         }
     }
     
@@ -345,9 +426,15 @@ class DreamStore: NSObject, ObservableObject {
     
     func getRecommendations(for item: ChecklistItem) -> [String] {
         if let cached = recommendationCache[item.id] { return cached }
-        let newRecs = generateRecommendations(for: item)
-        recommendationCache[item.id] = newRecs
-        return newRecs
+        let recs: [String] = switch item.contextType {
+            case "person": ["My Mom", "A Friend", "Stranger"] + Array(Set(dreams.flatMap { $0.core?.people ?? [] })).prefix(3)
+            case "place": ["Home", "School", "Work"] + Array(Set(dreams.flatMap { $0.core?.places ?? [] })).prefix(3)
+            case "emotion": ["Scared", "Happy", "Confused"] + Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })).prefix(3)
+            default: []
+        }
+        let final = Array(Set(recs))
+        recommendationCache[item.id] = final
+        return final
     }
     
     private func generateRecommendations(for item: ChecklistItem) -> [String] {
@@ -361,35 +448,96 @@ class DreamStore: NSObject, ObservableObject {
         return Array(Set(recs))
     }
     
+    // MARK: - SMART CHECKLIST LOGIC
     private func updateQuestionState() {
         if isQuestionSatisfied { return }
+        
         updateStateTask?.cancel()
-        updateStateTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 100_000_000)
+        updateStateTask = Task {
+            try? await Task.sleep(nanoseconds: 200_000_000) // Debounce 0.2s
             if Task.isCancelled { return }
-            guard let nextQuestion = questions.first(where: { !answeredQuestions.contains($0.id) }) else {
-                if activeQuestion != nil { withAnimation { activeQuestion = nil; isQuestionSatisfied = true } }
-                return
+            
+            let transcriptSnapshot = await MainActor.run { self.currentTranscript }
+            guard !transcriptSnapshot.isEmpty else { return }
+            
+            // Safe optional unwrapping for Active Question ID
+            let activeQID: UUID? = await MainActor.run { () -> UUID? in
+                if let active = self.activeQuestion { return active.id }
+                let unanswered = self.questions.filter { !self.answeredQuestions.contains($0.id) }
+                return unanswered.first?.id
             }
-            let transcriptLower = currentTranscript.lowercased()
-            let isSatisfied = nextQuestion.keywords.contains { keyword in transcriptLower.contains(keyword.lowercased()) }
-            if isSatisfied {
-                if activeQuestion?.id == nextQuestion.id {
-                    withAnimation { isQuestionSatisfied = true }
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    if Task.isCancelled { return }
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        answeredQuestions.insert(nextQuestion.id)
-                        if let following = questions.first(where: { !answeredQuestions.contains($0.id) }) {
-                            activeQuestion = following; isQuestionSatisfied = false
-                        } else {
-                            activeQuestion = nil; isQuestionSatisfied = true
+            
+            guard let qID = activeQID,
+                  let question = questions.first(where: { $0.id == qID }) else { return }
+            
+            let transcriptLower = transcriptSnapshot.lowercased()
+            var isSatisfied = false
+            
+            // 1. Exact Keyword Match
+            if question.keywords.contains(where: { transcriptLower.contains($0.lowercased()) }) {
+                isSatisfied = true
+            }
+            // 2. Semantic Match (Using NLEmbedding)
+            else if let embedding = self.embedding {
+                let tagger = NLTagger(tagSchemes: [.tokenType])
+                
+                let words = transcriptSnapshot.split(separator: " ")
+                let recentText = words.suffix(15).joined(separator: " ")
+                tagger.string = recentText
+                
+                tagger.enumerateTags(in: recentText.startIndex..<recentText.endIndex, unit: .word, scheme: .tokenType, options: [.omitPunctuation, .omitWhitespace]) { _, tokenRange in
+                    let word = String(recentText[tokenRange]).lowercased()
+                    if word.count < 3 { return true }
+                    
+                    // Check semantic concepts - FIXED: Explicit handling of double
+                    for concept in question.semanticConcepts {
+                        // FIX: Directly assign and check, avoiding 'if let' on potential non-optional
+                        let distance = embedding.distance(between: word, and: concept)
+                        // Safety check if distance is a valid number (e.g. not infinity)
+                        if distance < 0.65 {
+                            isSatisfied = true; return false
                         }
                     }
-                } else if activeQuestion == nil { activeQuestion = nextQuestion }
-            } else if activeQuestion?.id != nextQuestion.id {
-                withAnimation { activeQuestion = nextQuestion; isQuestionSatisfied = false }
+                    // Check keywords roughly
+                    for keyword in question.keywords {
+                        let distance = embedding.distance(between: word, and: keyword)
+                        if distance < 0.4 {
+                            isSatisfied = true; return false
+                        }
+                    }
+                    return true
+                }
             }
+            
+            if isSatisfied {
+                await MainActor.run {
+                    self.handleSatisfiedQuestion(questionID: qID)
+                }
+            }
+        }
+    }
+    
+    private func handleSatisfiedQuestion(questionID: UUID) {
+        if answeredQuestions.contains(questionID) { return }
+        
+        if activeQuestion?.id == questionID {
+            withAnimation { self.isQuestionSatisfied = true }
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    self.answeredQuestions.insert(questionID)
+                    if let nextQ = self.questions.first(where: { !self.answeredQuestions.contains($0.id) }) {
+                        self.activeQuestion = nextQ; self.isQuestionSatisfied = false
+                    } else {
+                        self.activeQuestion = nil; self.isQuestionSatisfied = true
+                    }
+                }
+            }
+        } else if activeQuestion == nil {
+             if let nextQ = self.questions.first(where: { !self.answeredQuestions.contains($0.id) }), nextQ.id == questionID {
+                 self.activeQuestion = nextQ
+                 self.handleSatisfiedQuestion(questionID: questionID)
+             }
         }
     }
     
@@ -437,37 +585,18 @@ class DreamStore: NSObject, ObservableObject {
         navigationPath = NavigationPath()
     }
 
-    // MARK: - RECORDING
+    // MARK: - RECORDING (REAL IMPLEMENTATION)
     func startRecording() {
-        withAnimation { isRecording = true; isPaused = false }
         currentTranscript = ""
         answeredQuestions = []
         isQuestionSatisfied = false
         recommendationCache = [:]
         activeQuestion = questions.first
         
-        let extendedScenarios = [
-            "So… this one felt personal. I was scrolling through my phone, but none of the messages made sense. (Pause). Some were from people I hadn’t talked to in years. I tried replying, but the text wouldn’t send. Then the screen went blank. (Pause). I felt frustrated and kind of lonely. (Pause). Why couldn’t I reach anyone?",
-            "Okay, so I was late for an exam I didn't study for. Classic nightmare, right? The classroom was... weirdly enough, underwater. (Pause). Like, I could breathe, but everything was floating. My teacher was a giant octopus. (Pause). Yeah, an octopus with glasses. I felt anxious, just panic rising in my chest. (Pause). I couldn't find my pen."
-        ]
-        let text = extendedScenarios[mockIndex % extendedScenarios.count]; mockIndex += 1
-        let words = text.components(separatedBy: " "); var wordIndex = 0
-        
-        mockTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { [weak self] _ in
+        audioRecorder.startRecording { [weak self] success in
             Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                if self.isPaused { return }
-                if wordIndex < words.count {
-                    let word = words[wordIndex]
-                    if word.contains("(Pause)") { self.audioPower = 0.05 } else {
-                        self.currentTranscript += (self.currentTranscript.isEmpty ? "" : " ") + word
-                        self.audioPower = Float.random(in: 0.3...0.7)
-                        self.updateQuestionState()
-                    }
-                    wordIndex += 1
-                } else {
-                    self.audioPower = 0.1; self.updateQuestionState(); self.mockTimer?.invalidate()
-                }
+                guard let self = self, success else { return }
+                withAnimation { self.isRecording = true; self.isPaused = false }
             }
         }
     }
@@ -476,12 +605,16 @@ class DreamStore: NSObject, ObservableObject {
     func openSettings() {}
     
     func stopRecording(save: Bool) {
-        mockTimer?.invalidate()
+        guard let url = audioRecorder.stopRecording() else {
+            withAnimation { isRecording = false; isPaused = false }
+            return
+        }
         withAnimation { isRecording = false; isPaused = false }
+        
         if save && !currentTranscript.isEmpty {
             processDream(transcript: currentTranscript)
         }
-        currentTranscript = ""
+        if !save { currentTranscript = "" }
     }
 
     // MARK: - PROCESSING PIPELINE (STREAMING)
