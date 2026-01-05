@@ -1,7 +1,5 @@
 import SwiftUI
 import FoundationModels
-import AVFoundation
-import Speech
 
 struct RecordView: View {
     @ObservedObject var store: DreamStore
@@ -93,8 +91,8 @@ struct RecordView: View {
                     
                     // MARK: - Visualization
                     if store.isRecording {
-                        AudioVisualizer(power: store.audioPower)
-                            .frame(height: 100)
+                        AudioVisualizer(power: store.audioPower, isPaused: store.isPaused)
+                            .frame(height: 120) // Slightly taller frame to accommodate jumps
                             .padding(.bottom, 40)
                             .opacity(store.isPaused ? 0.5 : 1.0)
                             .animation(.linear(duration: 0.1), value: store.audioPower)
@@ -196,12 +194,6 @@ struct RecordView: View {
             return
         }
         
-        guard checkMicrophonePermissions() else {
-            availabilityMessage = "Please enable Microphone and Speech Recognition in Settings."
-            showAvailabilityAlert = true
-            return
-        }
-        
         switch SystemLanguageModel.default.availability {
         case .available:
             store.startRecording()
@@ -227,16 +219,6 @@ struct RecordView: View {
             availabilityMessage = "Feature temporarily unavailable."
         }
         showAvailabilityAlert = true
-    }
-    
-    private func checkMicrophonePermissions() -> Bool {
-        let micStatus = AVAudioApplication.shared.recordPermission
-        let speechStatus = SFSpeechRecognizer.authorizationStatus()
-
-        let micAllowed = micStatus == .granted || micStatus == .undetermined
-        let speechAllowed = speechStatus == .authorized || speechStatus == .notDetermined
-        
-        return micAllowed && speechAllowed
     }
 }
 
@@ -327,14 +309,28 @@ struct RecommendationPill: View {
 
 struct AudioVisualizer: View {
     var power: Float
-    let bars = 30
+    var isPaused: Bool
+    let bars = 25
+    
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             ForEach(0..<bars, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 2)
+                let gateThreshold: Float = 0.05
+                // Force gatedPower to 0 if paused
+                let rawGatedPower = power < gateThreshold ? 0 : power
+                let gatedPower = isPaused ? 0 : rawGatedPower
+                
+                let normalizedPower = CGFloat(gatedPower)
+                let sensitivePower = gatedPower > 0 ? pow(normalizedPower, 0.6) : 0
+                let variation = gatedPower > 0 ? CGFloat.random(in: 0.5...1.2) : 1.0
+                let dynamicHeight = (sensitivePower * 100 * variation)
+                let height = 12 + dynamicHeight
+                
+                RoundedRectangle(cornerRadius: 3)
                     .fill(Color.accentColor.gradient)
-                    .frame(width: 4, height: 10 + (CGFloat(power) * CGFloat.random(in: 10...80)))
-                    .animation(.easeInOut(duration: 0.1), value: power)
+                    .frame(width: 6, height: height)
+                    .shadow(color: Color.accentColor.opacity(0.5), radius: 5, x: 0, y: 0)
+                    .animation(.easeOut(duration: 0.15), value: power)
             }
         }
     }

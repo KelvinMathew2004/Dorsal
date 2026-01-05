@@ -205,6 +205,7 @@ struct DreamDetailView: View {
                     .animation(.default, value: liveDream.core)
                     .animation(.default, value: liveDream.extras)
                 }
+                .scrollIndicators(.hidden)
                 .scrollDisabled(isProcessingThisDream)
                 .overlay {
                     if isProcessingThisDream {

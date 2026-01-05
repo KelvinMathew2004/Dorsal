@@ -1,7 +1,7 @@
 import SwiftUI
 import Charts
 
-struct StatsView: View {
+struct WeeklyInsightsView: View {
     @ObservedObject var store: DreamStore
     
     // MARK: - Date Logic

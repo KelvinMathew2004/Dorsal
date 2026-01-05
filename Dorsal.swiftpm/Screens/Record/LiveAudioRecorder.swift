@@ -34,7 +34,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
     
     func startRecording(completion: @escaping @Sendable (Bool) -> Void) {
         // Permission check (Safety)
-        if AVAudioSession.sharedInstance().recordPermission != .granted {
+        if AVAudioApplication.shared.recordPermission != .granted {
             print("Microphone not authorized in Recorder")
             completion(false)
             return
@@ -82,7 +82,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         // 1. Setup Audio Session FIRST
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker, .allowBluetooth])
+            try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             print("Audio Session Error: \(error)")

@@ -151,7 +151,7 @@ struct ShootingStar: View {
             )
             .onAppear {
                 // Linear animation ensures constant speed, no pause at end
-                withAnimation(.linear(duration: 1.5)) {
+                withAnimation(.linear(duration: 2.0)) {
                     progress = 1.0
                 }
             }
@@ -267,7 +267,6 @@ struct StatCard: View {
             
             Spacer()
             
-            // Icon and Optional Arrow centered vertically to the right
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.title2)
@@ -308,7 +307,6 @@ struct RingView: View {
     var showArrow: Bool = false
     
     var body: some View {
-        // Changed back to .topTrailing to position arrow in the corner
         ZStack(alignment: .topTrailing) {
             if showArrow {
                 Image(systemName: "chevron.right")

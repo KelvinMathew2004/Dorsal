@@ -37,7 +37,7 @@ struct ContentView: View {
                 .tabItem { Label("Journal", systemImage: "book.pages.fill") }
                 .tag(1)
             
-            StatsView(store: store)
+            WeeklyInsightsView(store: store)
                 .tabItem { Label("Insights", systemImage: "chart.xyaxis.line") }
                 .tag(2)
                 

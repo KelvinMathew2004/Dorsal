@@ -1,4 +1,6 @@
 import SwiftUI
+import AVFoundation
+import Speech
 
 struct OnboardingView: View {
     @ObservedObject var store: DreamStore
@@ -56,14 +58,32 @@ struct OnboardingView: View {
                         title: "Microphone Access",
                         icon: "mic.fill",
                         isGranted: store.hasMicAccess,
-                        action: { store.requestMicrophoneAccess() }
+                        action: {
+                            let status = AVAudioApplication.shared.recordPermission
+                            if status == .denied || status == .undetermined {
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            } else {
+                                store.requestMicrophoneAccess()
+                            }
+                        }
                     )
                     
                     PermissionRow(
                         title: "Speech Recognition",
                         icon: "text.bubble.fill",
                         isGranted: store.hasSpeechAccess,
-                        action: { store.requestSpeechAccess() }
+                        action: {
+                            let status = SFSpeechRecognizer.authorizationStatus()
+                            if status == .denied || status == .restricted {
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            } else {
+                                store.requestSpeechAccess()
+                            }
+                        }
                     )
                 }
                 .padding(.horizontal, 24)

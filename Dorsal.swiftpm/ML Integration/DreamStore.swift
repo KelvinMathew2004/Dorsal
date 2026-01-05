@@ -152,14 +152,14 @@ class DreamStore: NSObject, ObservableObject {
     
     // MARK: - PERMISSION LOGIC
     func checkPermissions() {
-        let micStatus = AVAudioSession.sharedInstance().recordPermission
+        let micStatus = AVAudioApplication.shared.recordPermission
         self.hasMicAccess = (micStatus == .granted)
         let speechStatus = SFSpeechRecognizer.authorizationStatus()
         self.hasSpeechAccess = (speechStatus == .authorized)
     }
     
     func requestMicrophoneAccess() {
-        AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
+        AVAudioApplication.requestRecordPermission { [weak self] granted in
             Task { @MainActor [weak self] in self?.hasMicAccess = granted }
         }
     }
@@ -623,7 +623,7 @@ class DreamStore: NSObject, ObservableObject {
         let newID = UUID()
         currentDreamID = newID
         
-        var newDream = Dream(id: newID, rawTranscript: transcript)
+        let newDream = Dream(id: newID, rawTranscript: transcript)
         dreams.insert(newDream, at: 0)
         
         persistDream(newDream)

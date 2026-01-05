@@ -374,6 +374,7 @@ struct TrendDetailView: View {
                 }
                 .padding(.top)
             }
+            .scrollIndicators(.hidden)
         }
         .navigationTitle(viewTitle)
         .navigationBarTitleDisplayMode(.large)
