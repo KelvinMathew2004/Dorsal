@@ -252,7 +252,7 @@ struct ProfileView: View {
                         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(dropTargetItem?.name == item ? Color.accentColor.opacity(0.8) : Color.clear, lineWidth: 3)
+                                .stroke(dropTargetItem?.name == item ? Theme.accent.opacity(0.8) : Color.clear, lineWidth: 3)
                         )
                         .padding(.vertical, 8)
                         .padding(.horizontal)

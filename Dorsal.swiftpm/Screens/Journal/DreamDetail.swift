@@ -73,6 +73,8 @@ struct DreamDetailView: View {
                                     .overlay(alignment: .bottomLeading) {
                                         HStack {
                                             Image(systemName: "apple.intelligence")
+                                                .symbolRenderingMode(.palette)
+                                                .symbolColorRenderingMode(.gradient)
                                             Text("Dream Visualizer")
                                                 .font(.caption2.bold())
                                                 .tracking(1)
@@ -360,6 +362,8 @@ struct ContextRow: View {
             Label(title, systemImage: icon)
                 .font(.caption.bold())
                 .foregroundStyle(color)
+                .symbolRenderingMode(.palette)
+                .symbolColorRenderingMode(.gradient)
                 .padding(.horizontal)
             
             ScrollView(.horizontal, showsIndicators: false) {

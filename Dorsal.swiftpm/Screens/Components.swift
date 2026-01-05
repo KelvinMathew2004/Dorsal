@@ -241,6 +241,8 @@ struct MagicCard<Content: View>: View {
             Label(title, systemImage: icon)
                 .font(.headline)
                 .foregroundStyle(color)
+                .symbolRenderingMode(.palette)
+                .symbolColorRenderingMode(.gradient)
             
             content
                 .font(.body)
@@ -276,7 +278,9 @@ struct StatCard: View {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.title2)
-                    .foregroundStyle(color)
+                    .foregroundStyle(color, color.opacity(0.7))
+                    .symbolRenderingMode(.palette)
+                    .symbolColorRenderingMode(.gradient)
                     .frame(width: 44, height: 44)
                     .background(color.opacity(0.15), in: Circle())
                 

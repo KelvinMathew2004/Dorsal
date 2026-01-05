@@ -251,6 +251,8 @@ struct DreamRow: View {
                 Image(systemName: dream.isBookmarked ? "bookmark.fill" : "bookmark")
                     .font(.title3)
                     .foregroundStyle(dream.isBookmarked ? Theme.accent : Theme.secondary)
+                    .symbolRenderingMode(.palette)
+                    .symbolColorRenderingMode(.gradient)
                     .contentShape(Rectangle())
                     .contentTransition(.symbolEffect(.replace))
             }

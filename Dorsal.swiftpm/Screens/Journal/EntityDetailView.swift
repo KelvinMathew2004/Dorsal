@@ -67,6 +67,8 @@ struct EntityDetailView: View {
                                         Image(systemName: iconForType)
                                             .font(.system(size: 50))
                                             .foregroundStyle(.white.opacity(0.3))
+                                            .symbolRenderingMode(.palette)
+                                            .symbolColorRenderingMode(.gradient)
                                     }
                                     .frame(width: 140, height: 140)
                                 }
@@ -175,6 +177,8 @@ struct EntityDetailView: View {
                                     } label: {
                                         Image(systemName: "personalhotspot.slash")
                                             .foregroundStyle(.orange.opacity(0.8))
+                                            .symbolRenderingMode(.palette)
+                                            .symbolColorRenderingMode(.gradient)
                                             .padding(8)
                                     }
                                     .buttonStyle(.glassProminent)

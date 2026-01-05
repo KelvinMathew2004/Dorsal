@@ -209,6 +209,8 @@ struct WeeklyInsightsView: View {
             Label("Mental Health", systemImage: "stethoscope")
                 .font(.headline)
                 .foregroundStyle(.white.opacity(0.8))
+                .symbolRenderingMode(.palette)
+                .symbolColorRenderingMode(.gradient)
                 .padding(.horizontal)
             
             NavigationLink(value: DreamMetric.anxiety) {
@@ -323,6 +325,8 @@ struct WeeklyInsightsView: View {
             Label("Vocal Fatigue", systemImage: "battery.50")
                 .font(.headline)
                 .foregroundStyle(.white.opacity(0.8))
+                .symbolRenderingMode(.palette)
+                .symbolColorRenderingMode(.gradient)
                 .padding(.horizontal)
             
             NavigationLink(value: DreamMetric.fatigue) {
@@ -382,6 +386,8 @@ struct WeeklyInsightsView: View {
             Label("Memory Recall", systemImage: "memorychip")
                 .font(.headline)
                 .foregroundStyle(.white.opacity(0.8))
+                .symbolRenderingMode(.palette)
+                .symbolColorRenderingMode(.gradient)
                 .padding(.horizontal)
             
             HStack(spacing: 16) {
