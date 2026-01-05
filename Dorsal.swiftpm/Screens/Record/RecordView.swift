@@ -74,7 +74,7 @@ struct RecordView: View {
                         VStack(spacing: 16) {
                             Image(systemName: greetingData.icon)
                                 .font(.system(size: 60))
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(Theme.accent)
                                 .symbolEffect(.bounce, value: true)
                             
                             Text(greetingData.text)
@@ -82,7 +82,7 @@ struct RecordView: View {
                             
                             Text("Ready to capture your dreams?")
                                 .font(.body)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.secondary)
                         }
                         .padding(.bottom, 50)
                     }
@@ -144,7 +144,7 @@ struct RecordView: View {
                                 }
                             }
                             .contentShape(Circle())
-                            .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : Color.accentColor.opacity(0.8)), in: Circle())
+                            .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : Theme.accent.opacity(0.8)), in: Circle())
                             .disabled(store.isProcessing)
                             .glassEffectID("recordButton", in: namespace)
                             
@@ -302,7 +302,7 @@ struct RecommendationPill: View {
             .font(.caption)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .glassEffect(.clear.tint(.secondary.opacity(0.2)))
+            .glassEffect(.clear.tint(Theme.secondary.opacity(0.2)))
             .fixedSize(horizontal: true, vertical: false)
     }
 }
@@ -329,7 +329,7 @@ struct AudioVisualizer: View {
                 RoundedRectangle(cornerRadius: 3)
                     .fill(Color.accentColor.gradient)
                     .frame(width: 6, height: height)
-                    .shadow(color: Color.accentColor.opacity(0.5), radius: 5, x: 0, y: 0)
+                    .shadow(color: Theme.accent.opacity(0.5), radius: 5, x: 0, y: 0)
                     .animation(.easeOut(duration: 0.15), value: power)
             }
         }

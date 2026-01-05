@@ -368,7 +368,7 @@ struct WeeklyInsightsView: View {
                     HStack {
                         Text("Higher bars indicate higher vocal fatigue.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                         Spacer()
                     }
                 })

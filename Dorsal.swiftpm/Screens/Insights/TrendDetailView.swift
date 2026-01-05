@@ -418,7 +418,7 @@ struct TrendDetailView: View {
                     Image(systemName: "chevron.left")
                 }
                 .buttonStyle(.glassProminent)
-                .tint(.secondary)
+                .tint(Theme.secondary)
                 Spacer()
                 Text("\(toneWeekStart.formatted(.dateTime.month().day())) - \(toneWeekEnd.formatted(.dateTime.month().day()))")
                     .font(.headline)
@@ -428,7 +428,7 @@ struct TrendDetailView: View {
                     Image(systemName: "chevron.right")
                 }
                 .buttonStyle(.glassProminent)
-                .tint(.secondary)
+                .tint(Theme.secondary)
                 Spacer()
                 Menu {
                     ForEach(availableYears, id: \.self) { year in
@@ -447,10 +447,10 @@ struct TrendDetailView: View {
                             .font(.caption.bold())
                     }
                     .font(.subheadline.bold())
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Theme.accent)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .glassEffect(.regular.interactive().tint(Color.accentColor.opacity(0.1)))
+                    .glassEffect(.regular.interactive().tint(Theme.accent.opacity(0.1)))
                 }
             }
             .padding(16)
@@ -468,7 +468,7 @@ struct TrendDetailView: View {
                                 .foregroundStyle(.white)
                             Text(date.formatted(.dateTime.month().day()))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.secondary)
                         }
                         Spacer()
                         if let data = data {
@@ -478,7 +478,7 @@ struct TrendDetailView: View {
                                     .foregroundStyle(metric.color)
                                 Text("\(data.confidence)% Confidence")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                             }
                         } else {
                             Text("No Data")
@@ -507,7 +507,7 @@ struct TrendDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(aggregateLabel.uppercased())
                     .font(.headline.bold())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                 
                 if metric == .anxiety || metric == .sentiment {
                     HStack(spacing: 12) {
@@ -515,7 +515,7 @@ struct TrendDetailView: View {
                             .foregroundStyle(DreamMetric.anxiety.color)
                         
                         Rectangle()
-                                .fill(Color.secondary)
+                                .fill(Theme.secondary)
                                 .frame(width: 2, height: 28)
                         
                         Text("\(formattedAggregate(for: .sentiment))")
@@ -531,7 +531,7 @@ struct TrendDetailView: View {
                 if selectedTimeFrame != .year {
                     Text(timeFrameSubheading)
                         .font(.headline.bold())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .padding(.top, 4)
                 } else {
                     Menu {
@@ -541,9 +541,9 @@ struct TrendDetailView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Text(String(selectedYear))
-                                .foregroundStyle(Color.secondary)
+                                .foregroundStyle(Theme.secondary)
                             Image(systemName: "chevron.down")
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(Theme.accent)
                         }
                         .font(.headline.bold())
                         .padding(.top, 4)
@@ -704,7 +704,7 @@ struct TrendDetailView: View {
             HStack {
                 Text("Higher bars indicate higher vocal fatigue.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                 Spacer()
             }
             .padding(.top, 4)
@@ -831,12 +831,12 @@ struct TrendDetailView: View {
     var descriptionSection: some View {
         let combinedText: AttributedString = {
             var desc = AttributedString(viewDescription)
-            desc.foregroundColor = .secondary
+            desc.foregroundColor = Theme.secondary
             
             var link = AttributedString(" Learn more...")
             link.link = URL(string: metric.learnMoreLink)
             link.font = .body.bold()
-            link.foregroundColor = .accentColor
+            link.foregroundColor = Theme.accent
             
             return desc + link
         }()

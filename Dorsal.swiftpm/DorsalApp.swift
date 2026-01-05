@@ -45,6 +45,7 @@ struct ContentView: View {
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
                 .tag(3)
         }
+        .tint(Theme.accent)
         .preferredColorScheme(.dark)
         .onAppear {
             store.setContext(modelContext)

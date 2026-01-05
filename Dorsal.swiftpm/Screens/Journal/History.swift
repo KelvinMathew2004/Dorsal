@@ -240,7 +240,7 @@ struct DreamRow: View {
                 RoundedRectangle(cornerRadius: 12).fill(Color.gray.gradient).frame(width: 50, height: 50).overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1)))
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(dream.date.formatted(date: .abbreviated, time: .shortened)).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor)
+                Text(dream.date.formatted(date: .abbreviated, time: .shortened)).font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
                 Text(dream.core?.title ?? "Processing...").font(.subheadline).foregroundStyle(.primary).lineLimit(2)
             }
             Spacer()
@@ -250,7 +250,7 @@ struct DreamRow: View {
             } label: {
                 Image(systemName: dream.isBookmarked ? "bookmark.fill" : "bookmark")
                     .font(.title3)
-                    .foregroundStyle(dream.isBookmarked ? Color.accentColor : .secondary)
+                    .foregroundStyle(dream.isBookmarked ? Theme.accent : Theme.secondary)
                     .contentShape(Rectangle())
                     .contentTransition(.symbolEffect(.replace))
             }

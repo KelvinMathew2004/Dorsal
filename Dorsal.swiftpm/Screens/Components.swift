@@ -1,16 +1,22 @@
 import SwiftUI
 
 // MARK: - THEME
-struct Theme {
+enum Theme {
+
+    // MARK: Background gradient
     static let bgStart = Color(red: 0.05, green: 0.02, blue: 0.10)
-    static let bgMid = Color(red: 0.10, green: 0.05, blue: 0.20)
-    static let bgEnd = Color(red: 0.02, green: 0.02, blue: 0.05)
-        
+    static let bgMid   = Color(red: 0.10, green: 0.05, blue: 0.20)
+    static let bgEnd   = Color(red: 0.02, green: 0.02, blue: 0.05)
+
     static let gradientBackground = LinearGradient(
         colors: [bgStart, bgMid, bgEnd],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+
+    // MARK: Colors
+    static let accent = Color(red: 212/255, green: 175/255, blue: 55/255)   // Gold
+    static let secondary = Color(red: 175/255, green: 143/255, blue: 233/255) // Purple
 }
 
 // MARK: - VISUAL EFFECTS

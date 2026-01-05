@@ -105,7 +105,7 @@ struct EntityDetailView: View {
                             
                             Text(appearanceCount == 1 ? "Dream" : "Dreams")
                                 .font(.system(size: 20, weight: .medium))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.secondary)
                         }
                     }
                     .padding(.top, 20)
@@ -114,7 +114,7 @@ struct EntityDetailView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("DESCRIPTION")
                             .font(.caption.bold())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                             .padding(.leading, 4)
                         
                         ZStack(alignment: .topLeading) {
@@ -150,7 +150,7 @@ struct EntityDetailView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("ALTERNATIVE NAMES")
                                 .font(.caption.bold())
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.secondary)
                                 .padding(.leading, 4)
                             
                             ForEach(childrenEntities, id: \.id) { child in
@@ -173,7 +173,7 @@ struct EntityDetailView: View {
                                             store.unlinkEntity(name: child.name, type: child.type)
                                         }
                                     } label: {
-                                        Image(systemName: "minus.circle.fill")
+                                        Image(systemName: "personalhotspot.slash")
                                             .foregroundStyle(.orange.opacity(0.8))
                                             .padding(8)
                                     }

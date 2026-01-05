@@ -16,8 +16,6 @@ struct ProfileView: View {
     
     // Navigation for Entity Details
     @State private var selectedEntity: EntityIdentifier?
-    // Tracks which specific item currently has its menu open
-    @State private var activeActionSheetItem: EntityIdentifier?
     
     @State private var showDeleteAlert = false
     @State private var itemToDelete: EntityIdentifier?
@@ -25,9 +23,6 @@ struct ProfileView: View {
     // Drag & Drop State
     @State private var draggedItem: EntityIdentifier?
     @State private var dropTargetItem: EntityIdentifier?
-    
-    // Swipe Action State (ID of the item currently swiped open)
-    @State private var openSwipeItemID: String?
     
     struct EntityIdentifier: Hashable, Identifiable, Codable {
         let name: String
@@ -47,11 +42,6 @@ struct ProfileView: View {
                 
                 ScrollViewReader { proxy in
                     scrollableContent(proxy: proxy)
-                        .simultaneousGesture(
-                            TapGesture().onEnded {
-                                withAnimation { openSwipeItemID = nil }
-                            }
-                        )
                 }
             }
             .navigationTitle("Profile")
@@ -176,7 +166,7 @@ struct ProfileView: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(store.firstName).font(.system(size: 28, weight: .bold)).foregroundStyle(.white)
-                    Text(store.lastName).font(.system(size: 20, weight: .medium)).foregroundStyle(.secondary)
+                    Text(store.lastName).font(.system(size: 20, weight: .medium)).foregroundStyle(Theme.secondary)
                 }
                 .frame(width: 120, alignment: .leading)
             }
@@ -209,43 +199,65 @@ struct ProfileView: View {
                 ForEach(itemsForCategory, id: \.self) { item in
                     let itemIdentifier = EntityIdentifier(name: item, type: filterTypeForCategory)
                     let children = store.getChildren(for: item, type: filterTypeForCategory)
+                    let hasChildren = !children.isEmpty
                     
                     VStack(spacing: 0) {
-                        EntityRowView(
-                            store: store,
-                            identifier: itemIdentifier,
-                            iconCategory: iconForCategory,
-                            onTap: { activeActionSheetItem = itemIdentifier },
-                            isDropTarget: dropTargetItem?.name == item,
-                            onViewDetails: { selectedEntity = itemIdentifier },
-                            onFilter: { store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name) },
-                            onDelete: { itemToDelete = itemIdentifier; showDeleteAlert = true }
-                        )
-                        .confirmationDialog(
-                            "Options",
-                            isPresented: Binding(
-                                get: { activeActionSheetItem == itemIdentifier },
-                                set: { if !$0 { activeActionSheetItem = nil } }
-                            )
-                        ) {
-                            if let item = activeActionSheetItem {
-                                Button("View Details") {
-                                    selectedEntity = item
+                        // Parent Item Row Container
+                        HStack(spacing: 16) {
+                            // Navigation Button (Left Side)
+                            Button {
+                                selectedEntity = itemIdentifier
+                            } label: {
+                                HStack(spacing: 16) {
+                                    EntityListImage(store: store, name: itemIdentifier.name, type: itemIdentifier.type, icon: iconForCategory)
+                                    
+                                    Text(itemIdentifier.name.capitalized)
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(.white)
+                                    
+                                    Spacer()
                                 }
-                                Button("Filter Dreams") {
-                                    store.jumpToFilter(type: item.type, value: item.name)
+                                .contentShape(Rectangle()) // Ensures the whole area is tappable for navigation
+                            }
+                            .buttonStyle(.plain) // Prevents button styling from interfering with the menu
+                            
+                            // Parent Options Menu (Right Side - Actual Button)
+                            Menu {
+                                Button {
+                                    selectedEntity = itemIdentifier
+                                } label: {
+                                    Label("View Details", systemImage: "info")
                                 }
-                                Button("Delete Details", role: .destructive) {
-                                    itemToDelete = item
+                                
+                                Button {
+                                    store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
+                                } label: {
+                                    Label("Filter Dreams", systemImage: "line.3.horizontal.decrease")
+                                }
+                                
+                                Button(role: .destructive) {
+                                    itemToDelete = itemIdentifier
                                     showDeleteAlert = true
+                                } label: {
+                                    Label("Delete Details", systemImage: "trash")
                                 }
-                                Button("Cancel", role: .cancel) { }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .foregroundStyle(Theme.secondary)
+                                    .font(.title2)
+                                    .padding()
                             }
                         }
+                        .padding()
+                        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(dropTargetItem?.name == item ? Color.accentColor.opacity(0.8) : Color.clear, lineWidth: 3)
+                        )
                         .padding(.vertical, 8)
                         .padding(.horizontal)
-                        // Drag conditional: Only enabled when no swipe action is active
-                        .draggableIf(openSwipeItemID == nil) {
+                        // Drag conditional: Only draggable if it DOES NOT have children
+                        .draggableIf(!hasChildren) {
                             self.draggedItem = itemIdentifier
                             return NSItemProvider(object: item as NSString)
                         }
@@ -260,45 +272,64 @@ struct ProfileView: View {
                         ForEach(children, id: \.id) { child in
                             let childIdentifier = EntityIdentifier(name: child.name, type: child.type)
                             
-                            SwipeActionRow(
-                                id: childIdentifier.id,
-                                openID: $openSwipeItemID,
-                                actionIcon: "minus.circle.fill",
-                                actionColor: .orange,
-                                onAction: {
-                                    withAnimation {
-                                        store.unlinkEntity(name: child.name, type: child.type)
+                            // Child Row Container
+                            HStack(spacing: 16) {
+                                // Navigation Button (Left Side)
+                                Button {
+                                    selectedEntity = itemIdentifier // Clicking child goes to parent (as per logic)
+                                } label: {
+                                    HStack(spacing: 16) {
+                                        Image(systemName: "arrow.turn.down.right")
+                                            .font(.system(size: 20, weight: .regular))
+                                            .foregroundStyle(.white.opacity(0.3))
+                                            .frame(width: 40, height: 40)
+                                        
+                                        Text(child.name.capitalized)
+                                            .font(.body.weight(.medium))
+                                            .foregroundStyle(.white)
+                                        
+                                        Spacer()
                                     }
+                                    .contentShape(Rectangle())
                                 }
-                            ) {
-                                HStack(spacing: 16) {
-                                    Image(systemName: "arrow.turn.down.right")
-                                        .font(.system(size: 20, weight: .regular))
-                                        .foregroundStyle(.white.opacity(0.3))
-                                        .frame(width: 40, height: 40)
+                                .buttonStyle(.plain)
+                                
+                                // Child Options Menu (Right Side - Actual Button)
+                                Menu {
+                                    // Option to view details (Parent)
+                                    Button {
+                                        selectedEntity = itemIdentifier
+                                    } label: {
+                                        Label("View Details", systemImage: "info")
+                                    }
                                     
-                                    Text(child.name.capitalized)
-                                        .font(.body.weight(.medium))
-                                        .foregroundStyle(.white)
+                                    // Option to filter by PARENT
+                                    Button {
+                                        store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
+                                    } label: {
+                                        Label("Filter Dreams", systemImage: "line.3.horizontal.decrease")
+                                    }
                                     
-                                    Spacer()
-                                }
-                                .padding()
-                                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
-                            }
-                            .padding(.vertical, 8)
-                            .padding(.horizontal)
-                            .contextMenu(openSwipeItemID == nil ? ContextMenu {
-                                Button(role: .destructive) {
-                                    withAnimation {
-                                        store.unlinkEntity(name: child.name, type: child.type)
+                                    Button(role: .destructive) {
+                                        withAnimation {
+                                            store.unlinkEntity(name: child.name, type: child.type)
+                                        }
+                                    } label: {
+                                        Label("Unlink", systemImage: "personalhotspot.slash")
                                     }
                                 } label: {
-                                    Label("Unlink", systemImage: "minus.circle.fill")
+                                    Image(systemName: "ellipsis")
+                                        .foregroundStyle(Theme.secondary)
+                                        .font(.title2)
+                                        .padding()
                                 }
-                            } : nil)
+                            }
+                            .padding()
+                            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal)
                             // Drag conditional for children
-                            .draggableIf(openSwipeItemID == nil) {
+                            .draggableIf(true) {
                                 self.draggedItem = childIdentifier
                                 return NSItemProvider(object: child.name as NSString)
                             }
@@ -349,110 +380,6 @@ extension View {
             self.onDrag(payload)
         } else {
             self
-        }
-    }
-}
-
-struct SwipeActionRow<Content: View>: View {
-    let id: String
-    @Binding var openID: String?
-    let actionIcon: String
-    let actionColor: Color
-    let onAction: () -> Void
-    let content: Content
-    
-    @State private var offset: CGFloat = 0
-    
-    init(id: String, openID: Binding<String?>, actionIcon: String, actionColor: Color, onAction: @escaping () -> Void, @ViewBuilder content: () -> Content) {
-        self.id = id
-        self._openID = openID
-        self.actionIcon = actionIcon
-        self.actionColor = actionColor
-        self.onAction = onAction
-        self.content = content()
-    }
-    
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            Button(action: {
-                withAnimation {
-                    openID = nil
-                    offset = 0
-                }
-                onAction()
-            }) {
-                ZStack {
-                    Image(systemName: actionIcon)
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                }
-                .padding(12)
-                .glassEffect(.regular.interactive().tint(actionColor), in: Circle())
-            }
-            .scaleEffect(max(0.1, min(1.0, abs(offset) / 80)))
-            .opacity(min(1.0, abs(offset) / 80.0))
-            
-            content
-                .background(Color.clear)
-                .cornerRadius(12)
-                .offset(x: offset)
-                .gesture(
-                    DragGesture(minimumDistance: 20, coordinateSpace: .local)
-                        .onChanged { value in
-                            if value.translation.width < 0 { offset = value.translation.width }
-                        }
-                        .onEnded { value in
-                            withAnimation(.spring()) {
-                                if value.translation.width < -50 {
-                                    offset = -80
-                                    openID = id
-                                } else {
-                                    offset = 0
-                                    openID = nil
-                                }
-                            }
-                        }
-                )
-                .onChange(of: openID) { newValue in
-                    if newValue != id && offset != 0 {
-                        withAnimation { offset = 0 }
-                    }
-                }
-        }
-    }
-}
-
-struct EntityRowView: View {
-    @ObservedObject var store: DreamStore
-    let identifier: ProfileView.EntityIdentifier
-    let iconCategory: String
-    let onTap: () -> Void
-    let isDropTarget: Bool
-    
-    var onViewDetails: (() -> Void)?
-    var onFilter: (() -> Void)?
-    var onDelete: (() -> Void)?
-    
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 16) {
-                EntityListImage(store: store, name: identifier.name, type: identifier.type, icon: iconCategory)
-                
-                Text(identifier.name.capitalized)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.white)
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.white.opacity(0.3))
-            }
-            .padding()
-            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isDropTarget ? Color.accentColor.opacity(0.8) : Color.clear, lineWidth: 3)
-            )
         }
     }
 }

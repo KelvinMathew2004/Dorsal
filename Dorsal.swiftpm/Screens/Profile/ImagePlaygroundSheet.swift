@@ -97,7 +97,7 @@ struct ImagePlaygroundSheet: View {
                                                     .font(.subheadline.bold())
                                                     .padding(.horizontal, 16)
                                                     .padding(.vertical, 8)
-                                                    .background(selectedStyle == style ? Color.accentColor : .white.opacity(0.1))
+                                                    .background(selectedStyle == style ? Theme.accent : .white.opacity(0.1))
                                                     .foregroundStyle(.white)
                                                     .clipShape(Capsule())
                                             }
@@ -134,7 +134,7 @@ struct ImagePlaygroundSheet: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(prompt.isEmpty ? Color.gray.opacity(0.3) : Color.accentColor)
+                        .background(prompt.isEmpty ? Color.gray.opacity(0.3) : Theme.accent)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
                     .disabled(prompt.isEmpty || isGenerating || !store.isImageGenerationAvailable)

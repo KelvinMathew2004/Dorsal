@@ -86,7 +86,7 @@ struct DreamDetailView: View {
                             if let summary = liveDream.core?.summary {
                                 Text("\(Text("Summary: ").bold())\(summary)")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                                     .multilineTextAlignment(.leading)
                                     .padding(20)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -174,7 +174,7 @@ struct DreamDetailView: View {
                                             if let conf = liveDream.core?.tone?.confidence {
                                                 Text("\(conf)% Confidence")
                                                     .font(.caption)
-                                                    .foregroundStyle(.secondary)
+                                                    .foregroundStyle(Theme.secondary)
                                             }
                                         }
                                         .padding(20)
@@ -343,6 +343,18 @@ struct ContextRow: View {
     @Binding var showDeleteAlert: Bool
     @ObservedObject var store: DreamStore
     
+    // Helper to get parent info
+    func getParentInfo(for itemName: String) -> (name: String, type: String)? {
+        guard let entity = store.getEntity(name: itemName, type: type),
+              let parentID = entity.parentID else { return nil }
+        
+        let components = parentID.split(separator: ":")
+        if components.count == 2 {
+            return (String(components[1]), String(components[0]))
+        }
+        return nil
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: icon)
@@ -355,10 +367,8 @@ struct ContextRow: View {
                     ForEach(items, id: \.self) { item in
                         Button {
                             if type == "emotion" {
-                                // Emotions bypass dialog and jump directly to filter
                                 store.jumpToFilter(type: type, value: item)
                             } else {
-                                // Other types trigger the dialog
                                 activeEntity = DreamDetailView.EntityIdentifier(name: item, type: type)
                             }
                         } label: {
@@ -367,25 +377,54 @@ struct ContextRow: View {
                         .buttonStyle(.glassProminent)
                         .tint(color.opacity(0.2))
                         .foregroundStyle(color)
-                        // ATTACHMENT: Confirmation Dialog attached directly to the button for the specific item
                         .confirmationDialog(
                             "Options",
                             isPresented: Binding(
                                 get: { activeEntity?.id == DreamDetailView.EntityIdentifier(name: item, type: type).id },
                                 set: { if !$0 { activeEntity = nil } }
-                            )
+                            ),
+                            titleVisibility: .hidden
                         ) {
-                            Button("View Details") {
-                                selectedEntity = DreamDetailView.EntityIdentifier(name: item, type: type)
+                            let parentInfo = getParentInfo(for: item)
+                            
+                            Button {
+                                if let parent = parentInfo {
+                                    // Open Parent details
+                                    selectedEntity = DreamDetailView.EntityIdentifier(name: parent.name, type: parent.type)
+                                } else {
+                                    // Open own details
+                                    selectedEntity = DreamDetailView.EntityIdentifier(name: item, type: type)
+                                }
+                            } label: {
+                                Label("View Details", systemImage: "info.circle")
                             }
-                            Button("Filter Dreams") {
-                                store.jumpToFilter(type: type, value: item)
+                            
+                            Button {
+                                if let parent = parentInfo {
+                                    store.jumpToFilter(type: parent.type, value: parent.name)
+                                } else {
+                                    store.jumpToFilter(type: type, value: item)
+                                }
+                            } label: {
+                                Label("Filter Dreams", systemImage: "line.3.horizontal.decrease.circle")
                             }
-                            Button("Delete Details", role: .destructive) {
-                                entityToDelete = DreamDetailView.EntityIdentifier(name: item, type: type)
-                                showDeleteAlert = true
+                            
+                            if let parent = parentInfo {
+                                Button(role: .destructive) {
+                                    withAnimation {
+                                        store.unlinkEntity(name: item, type: type)
+                                    }
+                                } label: {
+                                    Label("Unlink", systemImage: "personalhotspot.slash")
+                                }
+                            } else {
+                                Button(role: .destructive) {
+                                    entityToDelete = DreamDetailView.EntityIdentifier(name: item, type: type)
+                                    showDeleteAlert = true
+                                } label: {
+                                    Label("Delete Details", systemImage: "trash")
+                                }
                             }
-                            Button("Cancel", role: .cancel) { }
                         }
                     }
                 }
@@ -399,7 +438,7 @@ struct ContextRow: View {
 struct DreamTranscriptSection: View {
     let transcript: String
     var body: some View {
-        MagicCard(title: "Transcript", icon: "quote.opening", color: .secondary) {
+        MagicCard(title: "Transcript", icon: "quote.opening", color: Theme.secondary) {
             Text(transcript)
                 .font(.callout.monospaced())
                 .frame(maxWidth: .infinity, alignment: .leading)
