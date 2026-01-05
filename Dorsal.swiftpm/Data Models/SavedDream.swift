@@ -36,6 +36,8 @@ final class SavedDream {
     var imagePrompt: String
     @Attribute(.externalStorage) var generatedImageData: Data?
     
+    var isBookmarked: Bool = false
+    
     // Designated Initializer
     init(
         id: UUID = UUID(),
@@ -59,7 +61,8 @@ final class SavedDream {
         coherenceScore: Int,
         isNightmare: Bool,
         imagePrompt: String,
-        generatedImageData: Data? = nil
+        generatedImageData: Data? = nil,
+        isBookmarked: Bool = false
     ) {
         self.id = id
         self.date = date
@@ -83,11 +86,11 @@ final class SavedDream {
         self.isNightmare = isNightmare
         self.imagePrompt = imagePrompt
         self.generatedImageData = generatedImageData
+        self.isBookmarked = isBookmarked
     }
 }
 
 extension SavedDream {
-    // FIX: Use convenience init instead of static factory to resolve call site confusion
     convenience init(from dream: Dream) {
         self.init(
             id: dream.id,
@@ -111,7 +114,8 @@ extension SavedDream {
             coherenceScore: dream.extras?.coherenceScore ?? 0,
             isNightmare: dream.extras?.isNightmare ?? false,
             imagePrompt: dream.core?.summary ?? "",
-            generatedImageData: dream.generatedImageData
+            generatedImageData: dream.generatedImageData,
+            isBookmarked: dream.isBookmarked
         )
     }
 }

@@ -93,7 +93,6 @@ struct DreamDetailView: View {
                             }
                         }
                         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
-                        .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
                         .padding(.horizontal)
                         
                         // 3. Core Analysis (Context Tags)
@@ -150,7 +149,7 @@ struct DreamDetailView: View {
                                     }
                                     .padding(20)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
                                     .overlay(alignment: .trailing) {
                                         Image(systemName: "chevron.right")
                                             .font(.body.bold())
@@ -159,7 +158,6 @@ struct DreamDetailView: View {
                                     }
                                     .contentShape(RoundedRectangle(cornerRadius: 24))
                                 }
-                                .buttonStyle(PlainButtonStyle())
                                 
                                 // Tone Card
                                 if let tone = liveDream.core?.tone?.label {
@@ -181,7 +179,7 @@ struct DreamDetailView: View {
                                         }
                                         .padding(20)
                                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                                        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
                                         .overlay(alignment: .trailing) {
                                             Image(systemName: "chevron.right")
                                                 .font(.body.bold())
@@ -190,7 +188,6 @@ struct DreamDetailView: View {
                                         }
                                         .contentShape(RoundedRectangle(cornerRadius: 24))
                                     }
-                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
                             .fixedSize(horizontal: false, vertical: true)
@@ -240,7 +237,6 @@ struct DreamDetailView: View {
                 .disabled(store.isProcessing)
             }
         }
-        // Only global alert for deletion; ConfirmationDialog is now local to ContextRow
         .alert("Delete Details?", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
                 if let entity = entityToDelete {

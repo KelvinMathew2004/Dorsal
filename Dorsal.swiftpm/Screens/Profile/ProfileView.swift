@@ -244,7 +244,8 @@ struct ProfileView: View {
                         }
                         .padding(.vertical, 8)
                         .padding(.horizontal)
-                        .onDrag {
+                        // Drag conditional: Only enabled when no swipe action is active
+                        .draggableIf(openSwipeItemID == nil) {
                             self.draggedItem = itemIdentifier
                             return NSItemProvider(object: item as NSString)
                         }
@@ -263,7 +264,6 @@ struct ProfileView: View {
                                 id: childIdentifier.id,
                                 openID: $openSwipeItemID,
                                 actionIcon: "minus.circle.fill",
-                                actionVariant: .slash,
                                 actionColor: .orange,
                                 onAction: {
                                     withAnimation {
@@ -284,21 +284,21 @@ struct ProfileView: View {
                                     Spacer()
                                 }
                                 .padding()
-                                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
                             }
                             .padding(.vertical, 8)
                             .padding(.horizontal)
-                            .contextMenu {
+                            .contextMenu(openSwipeItemID == nil ? ContextMenu {
                                 Button(role: .destructive) {
                                     withAnimation {
                                         store.unlinkEntity(name: child.name, type: child.type)
                                     }
                                 } label: {
                                     Label("Unlink", systemImage: "minus.circle.fill")
-                                        .symbolVariant(.slash)
                                 }
-                            }
-                            .onDrag {
+                            } : nil)
+                            // Drag conditional for children
+                            .draggableIf(openSwipeItemID == nil) {
                                 self.draggedItem = childIdentifier
                                 return NSItemProvider(object: child.name as NSString)
                             }
@@ -340,24 +340,33 @@ struct ProfileView: View {
     }
 }
 
-// MARK: - Helper Views
+// MARK: - Helper Views & Extensions
+
+extension View {
+    @ViewBuilder
+    func draggableIf(_ condition: Bool, _ payload: @escaping () -> NSItemProvider) -> some View {
+        if condition {
+            self.onDrag(payload)
+        } else {
+            self
+        }
+    }
+}
 
 struct SwipeActionRow<Content: View>: View {
     let id: String
     @Binding var openID: String?
     let actionIcon: String
-    var actionVariant: SymbolVariants = .none
     let actionColor: Color
     let onAction: () -> Void
     let content: Content
     
     @State private var offset: CGFloat = 0
     
-    init(id: String, openID: Binding<String?>, actionIcon: String, actionVariant: SymbolVariants = .none, actionColor: Color, onAction: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+    init(id: String, openID: Binding<String?>, actionIcon: String, actionColor: Color, onAction: @escaping () -> Void, @ViewBuilder content: () -> Content) {
         self.id = id
         self._openID = openID
         self.actionIcon = actionIcon
-        self.actionVariant = actionVariant
         self.actionColor = actionColor
         self.onAction = onAction
         self.content = content()
@@ -374,7 +383,6 @@ struct SwipeActionRow<Content: View>: View {
             }) {
                 ZStack {
                     Image(systemName: actionIcon)
-                        .symbolVariant(actionVariant)
                         .font(.title3)
                         .foregroundStyle(.white)
                 }
@@ -440,7 +448,7 @@ struct EntityRowView: View {
                     .foregroundStyle(.white.opacity(0.3))
             }
             .padding()
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(isDropTarget ? Color.accentColor.opacity(0.8) : Color.clear, lineWidth: 3)
@@ -477,14 +485,30 @@ struct RootDropDelegate: DropDelegate {
     let store: DreamStore
     
     func dropUpdated(info: DropInfo) -> DropProposal {
-        return DropProposal(operation: .move)
+        guard let dragged = draggedItem else { return DropProposal(operation: .cancel) }
+        
+        // Check if the dragged item is currently a child of someone
+        if let entity = store.getEntity(name: dragged.name, type: dragged.type), entity.parentID != nil {
+            // It's a child, so dropping it on root means unlinking (returning to parent/root level)
+            return DropProposal(operation: .move)
+        }
+        
+        // If it's already a root item, we don't do anything
+        return DropProposal(operation: .forbidden)
     }
     
     func performDrop(info: DropInfo) -> Bool {
         guard let dragged = draggedItem else { return false }
-        withAnimation { store.unlinkEntity(name: dragged.name, type: dragged.type) }
+        
+        // Perform unlink if it was a child
+        if let entity = store.getEntity(name: dragged.name, type: dragged.type), entity.parentID != nil {
+            withAnimation { store.unlinkEntity(name: dragged.name, type: dragged.type) }
+            draggedItem = nil
+            return true
+        }
+        
         draggedItem = nil
-        return true
+        return false
     }
     
     func dropProposal(operations: DropOperation, session: DropSession, destinationLocation: CGPoint) -> DropProposal? {
@@ -502,15 +526,18 @@ struct EntityDropDelegate: DropDelegate {
     func dropEntered(info: DropInfo) {
         guard let dragged = draggedItem, dragged.id != item.id else { return }
         
+        // 1. Forbidden if dragged item is a parent (has children)
+        if !store.getChildren(for: dragged.name, type: dragged.type).isEmpty {
+            return
+        }
+        
+        // 2. Forbidden if dragging over own parent
         if let childEntity = store.getEntity(name: dragged.name, type: dragged.type),
            childEntity.parentID == item.id {
             return
         }
         
-        if !store.getChildren(for: dragged.name, type: dragged.type).isEmpty {
-            return
-        }
-        
+        // If passed checks, it's a valid target
         withAnimation { dropTargetItem = item }
     }
     
@@ -521,24 +548,42 @@ struct EntityDropDelegate: DropDelegate {
     }
     
     func dropUpdated(info: DropInfo) -> DropProposal {
-        if info.location.y < 100 {
-            DispatchQueue.main.async { withAnimation { scrollViewProxy.scrollTo("top", anchor: .top) } }
+        // ... scroll handling ...
+        
+        guard let dragged = draggedItem, dragged.id != item.id else {
+            // Not dragging anything valid, clear target if it was us
+            if dropTargetItem?.id == item.id {
+                DispatchQueue.main.async {
+                    withAnimation { dropTargetItem = nil }
+                }
+            }
+            return DropProposal(operation: .cancel)
         }
         
-        if dropTargetItem?.id == item.id {
+        // Validate drop target
+        let isValid = store.getChildren(for: dragged.name, type: dragged.type).isEmpty &&
+                      !(store.getEntity(name: dragged.name, type: dragged.type)?.parentID == item.id)
+        
+        if isValid && dropTargetItem?.id == item.id {
             return DropProposal(operation: .copy)
+        } else {
+            // Clear highlighting if we're no longer valid or not over this item
+            if dropTargetItem?.id == item.id {
+                DispatchQueue.main.async {
+                    withAnimation { dropTargetItem = nil }
+                }
+            }
+            return DropProposal(operation: .forbidden)
         }
-        
-        return DropProposal(operation: .forbidden)
     }
     
     func performDrop(info: DropInfo) -> Bool {
         guard let dragged = draggedItem, dragged.id != item.id else { return false }
         
-        if !store.getChildren(for: dragged.name, type: dragged.type).isEmpty {
-            return false
-        }
-        
+        // Double check validations
+        if !store.getChildren(for: dragged.name, type: dragged.type).isEmpty { return false }
+        if let childEntity = store.getEntity(name: dragged.name, type: dragged.type), childEntity.parentID == item.id { return false }
+
         withAnimation {
             store.linkEntity(childName: dragged.name, childType: dragged.type, parentName: item.name, parentType: item.type)
         }
@@ -550,7 +595,7 @@ struct EntityDropDelegate: DropDelegate {
 }
 
 struct ChildDropDelegate: DropDelegate {
-    func performDrop(info: DropInfo) -> Bool { return true }
+    func performDrop(info: DropInfo) -> Bool { return false }
     func dropUpdated(info: DropInfo) -> DropProposal { return DropProposal(operation: .forbidden) }
 }
 
@@ -563,7 +608,7 @@ struct ContinuousStatBlock: View {
                 Text(value).font(.system(size: 24, weight: .bold, design: .rounded)).foregroundStyle(.white).minimumScaleFactor(0.8).lineLimit(1)
                 Text(title.uppercased()).font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.6)).tracking(0.5)
             }.padding(.vertical, 24)
-        }.frame(maxWidth: .infinity).frame(height: 100).glassEffect(.clear.tint(color.opacity(0.15)), in: CustomCorner(corners: corners, radius: 20))
+        }.frame(maxWidth: .infinity).frame(height: 100).glassEffect(.regular.tint(color.opacity(0.15)), in: CustomCorner(corners: corners, radius: 20))
     }
 }
 

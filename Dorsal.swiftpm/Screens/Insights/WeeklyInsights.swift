@@ -106,8 +106,9 @@ struct WeeklyInsightsView: View {
                         }
                         Spacer(minLength: 50)
                     }
-                    .padding(.top)
+                    .padding()
                 }
+                .scrollIndicators(.hidden)
                 .scrollDisabled(store.isGeneratingInsights)
                 .overlay {
                     if store.isGeneratingInsights {
@@ -198,7 +199,6 @@ struct WeeklyInsightsView: View {
                 Text(insights.strategicAdvice ?? "").italic()
             }
         }
-        .padding(.horizontal)
     }
     
     private var mentalHealthSection: some View {
@@ -288,8 +288,6 @@ struct WeeklyInsightsView: View {
                 })
                 .contentShape(Rectangle())
             }
-            .buttonStyle(PlainButtonStyle())
-            .padding(.horizontal)
         }
     }
     
@@ -299,13 +297,11 @@ struct WeeklyInsightsView: View {
                 StatCard(title: "Dreams", value: "\(totalDreams)", icon: "book.fill", color: .blue, showArrow: true)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(PlainButtonStyle())
 
             NavigationLink(value: DreamMetric.nightmares) {
                 StatCard(title: "Nightmares", value: "\(nightmareCount)", icon: "exclamationmark.triangle.fill", color: .purple, showArrow: true)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(PlainButtonStyle())
 
             NavigationLink(value: DreamMetric.lucidity) {
                 StatCard(title: "Lucidity", value: "\(Int(avgLucidity))%", icon: "eye.fill", color: .teal, showArrow: true)
@@ -317,9 +313,7 @@ struct WeeklyInsightsView: View {
                 StatCard(title: "Positive", value: "\(positiveDreams)", icon: "hand.thumbsup.fill", color: .green, showArrow: true)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(PlainButtonStyle())
         }
-        .padding(.horizontal)
     }
     
     private var vocalFatigueSection: some View {
@@ -380,8 +374,6 @@ struct WeeklyInsightsView: View {
                 })
                 .contentShape(Rectangle())
             }
-            .buttonStyle(PlainButtonStyle())
-            .padding(.horizontal)
         }
     }
     
@@ -398,16 +390,13 @@ struct WeeklyInsightsView: View {
                         .frame(maxWidth: .infinity)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(PlainButtonStyle())
                 
                 NavigationLink(value: DreamMetric.coherence) {
                     RingView(percentage: Double(avgMetric { $0.extras?.coherenceScore ?? 0 }), title: "Coherence", color: .cyan, showArrow: true)
                         .frame(maxWidth: .infinity)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(PlainButtonStyle())
             }
-            .padding(.horizontal)
         }
     }
     

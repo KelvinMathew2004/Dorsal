@@ -174,13 +174,11 @@ struct EntityDetailView: View {
                                         }
                                     } label: {
                                         Image(systemName: "minus.circle.fill")
-                                            .symbolVariant(.slash)
-                                            .font(.system(size: 16, weight: .semibold))
                                             .foregroundStyle(.orange.opacity(0.8))
                                             .padding(8)
-                                            .background(Color.orange.opacity(0.1))
-                                            .clipShape(Circle())
                                     }
+                                    .buttonStyle(.glassProminent)
+                                    .tint(Color.orange.opacity(0.1))
                                 }
                                 .padding()
                                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))

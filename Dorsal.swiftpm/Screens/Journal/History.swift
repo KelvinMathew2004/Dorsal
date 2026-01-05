@@ -6,6 +6,13 @@ struct HistoryView: View {
     @State private var showingDeleteAlert = false
     @State private var dreamToDelete: Dream?
     
+    var hasActivePills: Bool {
+        !store.activeFilter.people.isEmpty ||
+        !store.activeFilter.places.isEmpty ||
+        !store.activeFilter.emotions.isEmpty ||
+        !store.activeFilter.tags.isEmpty
+    }
+    
     var body: some View {
         NavigationStack(path: $store.navigationPath) {
             ZStack {
@@ -16,8 +23,8 @@ struct HistoryView: View {
                     FilterBar(store: store)
                         .padding(.bottom, 10)
                     
-                    // Active Filters
-                    if !store.activeFilter.isEmpty {
+                    // Active Filters - Only show if there are actual pills to display
+                    if hasActivePills {
                         ActiveFiltersView(store: store)
                             .padding(.horizontal)
                             .padding(.bottom, 8)
@@ -26,7 +33,7 @@ struct HistoryView: View {
                     
                     // List
                     if store.filteredDreams.isEmpty {
-                        // NO DREAMS FOUND - FIXED AT TOP
+                        // NO DREAMS FOUND
                         VStack(spacing: 20) {
                             Color.clear.frame(height: 20)
                             
@@ -47,7 +54,7 @@ struct HistoryView: View {
                                     }
                                     .opacity(0)
                                     
-                                    DreamRow(dream: dream)
+                                    DreamRow(store: store, dream: dream)
                                 }
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
@@ -137,16 +144,18 @@ struct FilterBar: View {
             }
             .frame(maxWidth: .infinity)
 
-            if !store.activeFilter.isEmpty {
-                Button("Clear", role: .destructive) {
-                    withAnimation { store.clearFilter() }
+            Button {
+                withAnimation { store.toggleBookmarkFilter() }
+            } label: {
+                HStack {
+                    Image(systemName: store.activeFilter.showBookmarksOnly ? "bookmark.fill" : "bookmark")
                 }
                 .font(.subheadline.bold())
-                .foregroundStyle(.red)
-                .tint(.red.opacity(0.2))
-                .buttonStyle(.glassProminent)
-                .transition(.opacity.combined(with: .scale))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .glassEffect(.regular.interactive())
             }
+            .frame(maxWidth: .infinity)
         }
         .padding(.horizontal)
         .padding(.vertical, 6)
@@ -182,7 +191,7 @@ struct FilterDropdown: View {
             .font(.subheadline.bold())
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, minHeight: 40)
-            .glassEffect()
+            .glassEffect(.regular.interactive())
         }
     }
 }
@@ -195,6 +204,14 @@ struct ActiveFiltersView: View {
             ForEach(Array(store.activeFilter.places), id: \.self) { item in RemovablePill(text: item, icon: "map.fill", color: .green) { withAnimation { store.togglePlaceFilter(item) } } }
             ForEach(Array(store.activeFilter.emotions), id: \.self) { item in RemovablePill(text: item, icon: "heart.fill", color: .pink) { withAnimation { store.toggleEmotionFilter(item) } } }
             ForEach(Array(store.activeFilter.tags), id: \.self) { item in RemovablePill(text: item, icon: "star.fill", color: .purple) { withAnimation { store.toggleTagFilter(item) } } }
+            
+            Button("Clear All") {
+                withAnimation { store.clearFilter() }
+            }
+            .font(.caption.bold())
+            .foregroundStyle(.red)
+            .tint(.red.opacity(0.2))
+            .buttonStyle(.glassProminent)
         }
     }
 }
@@ -212,7 +229,9 @@ struct RemovablePill: View {
 }
 
 struct DreamRow: View {
+    @ObservedObject var store: DreamStore
     let dream: Dream
+    
     var body: some View {
         HStack(spacing: 16) {
             if let imageData = dream.generatedImageData, let uiImage = UIImage(data: imageData) {
@@ -225,9 +244,19 @@ struct DreamRow: View {
                 Text(dream.core?.title ?? "Processing...").font(.subheadline).foregroundStyle(.primary).lineLimit(2)
             }
             Spacer()
-            Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
+            
+            Button {
+                store.toggleBookmark(id: dream.id)
+            } label: {
+                Image(systemName: dream.isBookmarked ? "bookmark.fill" : "bookmark")
+                    .font(.title3)
+                    .foregroundStyle(dream.isBookmarked ? Color.accentColor : .secondary)
+                    .contentShape(Rectangle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(PlainButtonStyle())
         }
         .padding(16)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 20))
     }
 }

@@ -13,7 +13,8 @@ struct DreamFilter: Equatable {
     var places: Set<String> = []
     var emotions: Set<String> = []
     var tags: Set<String> = []
-    var isEmpty: Bool { people.isEmpty && places.isEmpty && emotions.isEmpty && tags.isEmpty }
+    var showBookmarksOnly: Bool = false // Renamed from showFavoritesOnly
+    var isEmpty: Bool { people.isEmpty && places.isEmpty && emotions.isEmpty && tags.isEmpty && !showBookmarksOnly }
 }
 
 @MainActor
@@ -375,6 +376,10 @@ class DreamStore: NSObject, ObservableObject {
         return dreams.filter { dream in
             let matchesSearch = searchQuery.isEmpty || dream.rawTranscript.localizedCaseInsensitiveContains(searchQuery)
             if !matchesSearch { return false }
+            
+            // Bookmarks Filter - Renamed from Favorites
+            if activeFilter.showBookmarksOnly && !dream.isBookmarked { return false }
+            
             if !peopleFilter.isEmpty {
                 let dreamPeople = Set(dream.core?.people ?? [])
                 if peopleFilter.isDisjoint(with: dreamPeople) { return false }
@@ -570,6 +575,7 @@ class DreamStore: NSObject, ObservableObject {
     func togglePlaceFilter(_ item: String) { if activeFilter.places.contains(item) { activeFilter.places.remove(item) } else { activeFilter.places.insert(item) } }
     func toggleEmotionFilter(_ item: String) { if activeFilter.emotions.contains(item) { activeFilter.emotions.remove(item) } else { activeFilter.emotions.insert(item) } }
     func toggleTagFilter(_ item: String) { if activeFilter.tags.contains(item) { activeFilter.tags.remove(item) } else { activeFilter.tags.insert(item) } }
+    func toggleBookmarkFilter() { activeFilter.showBookmarksOnly.toggle() } // Renamed from toggleFavoriteFilter
     func clearFilter() { activeFilter = DreamFilter() }
     
     func jumpToFilter(type: String, value: String) {
@@ -583,6 +589,21 @@ class DreamStore: NSObject, ObservableObject {
         }
         selectedTab = 1
         navigationPath = NavigationPath()
+    }
+    
+    func toggleBookmark(id: UUID) { // Renamed from toggleFavorite
+        if let index = dreams.firstIndex(where: { $0.id == id }) {
+            dreams[index].isBookmarked.toggle() // Renamed property
+            // Persist
+            if let context = modelContext {
+                let dreamID = id
+                let descriptor = FetchDescriptor<SavedDream>(predicate: #Predicate { $0.id == dreamID })
+                if let saved = try? context.fetch(descriptor).first {
+                    saved.isBookmarked = dreams[index].isBookmarked // Renamed property
+                    try? context.save()
+                }
+            }
+        }
     }
 
     // MARK: - RECORDING (REAL IMPLEMENTATION)

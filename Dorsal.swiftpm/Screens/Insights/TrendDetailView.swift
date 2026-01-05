@@ -243,38 +243,69 @@ struct TrendDetailView: View {
     }
     
     func formattedAggregate(for metric: DreamMetric) -> String {
-        let points = generatePoints(for: metric)
-        let values = points.map { $0.value }
+        // Calculate based on raw dreams in the timeframe to match WeeklyInsights
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
+        let now = Date()
         
-        // 1. If there's truly no data recorded (empty array), return "No Data".
-        if values.isEmpty {
-            return "No Data"
+        var relevantDreams: [Dream] = []
+        
+        switch selectedTimeFrame {
+        case .day:
+            let start = calendar.startOfDay(for: now)
+            if let end = calendar.date(byAdding: .day, value: 1, to: start) {
+                relevantDreams = store.dreams.filter { $0.date >= start && $0.date < end }
+            }
+        case .week:
+            if let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now) {
+                relevantDreams = store.dreams.filter { weekInterval.contains($0.date) }
+            }
+        case .month:
+            let components = calendar.dateComponents([.year, .month], from: now)
+            if let start = calendar.date(from: components),
+               let range = calendar.range(of: .day, in: .month, for: start),
+               let end = calendar.date(byAdding: .day, value: range.count, to: start) {
+                relevantDreams = store.dreams.filter { $0.date >= start && $0.date < end }
+            }
+        case .year:
+            if let start = calendar.date(from: DateComponents(year: selectedYear, month: 1, day: 1)),
+               let end = calendar.date(from: DateComponents(year: selectedYear + 1, month: 1, day: 1)) {
+                relevantDreams = store.dreams.filter { $0.date >= start && $0.date < end }
+            }
         }
         
-        // 2. If data exists but it's all zeros:
-        //    - For count-based metrics (Dreams, Nightmares), "None" is a friendly zero.
-        //    - For value-based metrics (Fatigue, Anxiety), we want to proceed to show "0%".
-        if values.allSatisfy({ $0 == 0 }) {
-            if metric == .dreams || metric == .nightmares || metric == .positive { return "None" }
-            // For other metrics, fall through to display "0%" or "0"
+        if relevantDreams.isEmpty { return "No Data" }
+        
+        if metric == .dreams { return "\(relevantDreams.count)" }
+        if metric == .nightmares { return "\(relevantDreams.filter { $0.extras?.isNightmare ?? false }.count)" }
+        if metric == .positive { return "\(relevantDreams.filter { ($0.extras?.sentimentScore ?? 0) > 60 }.count)" }
+        
+        let total = relevantDreams.reduce(0.0) { sum, dream in
+            switch metric {
+            case .anxiety: return sum + Double(dream.extras?.anxietyLevel ?? 0)
+            case .sentiment: return sum + Double(dream.extras?.sentimentScore ?? 50)
+            case .lucidity: return sum + Double(dream.extras?.lucidityScore ?? 0)
+            case .vividness: return sum + Double(dream.extras?.vividnessScore ?? 0)
+            case .fatigue: return sum + Double(dream.core?.voiceFatigue ?? 0)
+            case .coherence: return sum + Double(dream.extras?.coherenceScore ?? 0)
+            default: return sum
+            }
         }
+        
+        let avg = total / Double(relevantDreams.count)
         
         if metric.isPercentage {
-            let nonZero = values.filter { $0 > 0 }
-            if nonZero.isEmpty { return "0%" }
-            let avg = nonZero.reduce(0, +) / Double(nonZero.count)
             return String(format: "%.0f", avg) + "%"
         } else {
-            if selectedTimeFrame == .day {
-                return "\(Int(values.reduce(0, +)))"
-            } else {
-                let avg = values.reduce(0, +) / Double(values.count)
-                return String(format: "%.1f", avg)
-            }
+            return String(format: "%.1f", avg)
         }
     }
     
     var aggregateLabel: String {
+        if metric == .dreams || metric == .nightmares || metric == .positive {
+            return "Total"
+        }
+        
         switch selectedTimeFrame {
         case .day: return "Total"
         case .week: return "Daily Average"
@@ -384,20 +415,20 @@ struct TrendDetailView: View {
         VStack(spacing: 24) {
             HStack {
                 Button { moveWeek(by: -1) } label: {
-                    Image(systemName: "chevron.left.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.white.opacity(0.3))
+                    Image(systemName: "chevron.left")
                 }
+                .buttonStyle(.glassProminent)
+                .tint(.secondary)
                 Spacer()
                 Text("\(toneWeekStart.formatted(.dateTime.month().day())) - \(toneWeekEnd.formatted(.dateTime.month().day()))")
                     .font(.headline)
                     .foregroundStyle(.white)
                 Spacer()
                 Button { moveWeek(by: 1) } label: {
-                    Image(systemName: "chevron.right.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.white.opacity(0.3))
+                    Image(systemName: "chevron.right")
                 }
+                .buttonStyle(.glassProminent)
+                .tint(.secondary)
                 Spacer()
                 Menu {
                     ForEach(availableYears, id: \.self) { year in
@@ -416,10 +447,10 @@ struct TrendDetailView: View {
                             .font(.caption.bold())
                     }
                     .font(.subheadline.bold())
+                    .foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.1), in: Capsule())
-                    .foregroundStyle(Color.accentColor)
+                    .glassEffect(.regular.interactive().tint(Color.accentColor.opacity(0.1)))
                 }
             }
             .padding(16)
@@ -798,27 +829,22 @@ struct TrendDetailView: View {
     }
     
     var descriptionSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(viewDescription)
-                .font(.body)
-                .foregroundStyle(.white.opacity(0.8))
-            + Text(" Learn more...")
-                .font(.body.bold())
-                .foregroundStyle(Color.accentColor)
-        }
-        .lineSpacing(4)
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal)
-        .onTapGesture {
-            // Updated to use the new variable
-            if let url = URL(string: metric.learnMoreLink) {
-                UIApplication.shared.open(url)
-            } else {
-                print("Invalid URL for \(metric.rawValue)")
-            }
-        }
+        let combinedText: AttributedString = {
+            var desc = AttributedString(viewDescription)
+            desc.foregroundColor = .secondary
+            
+            var link = AttributedString(" Learn more...")
+            link.link = URL(string: metric.learnMoreLink)
+            link.font = .body.bold()
+            link.foregroundColor = .accentColor
+            
+            return desc + link
+        }()
+
+        return Text(combinedText)
+            .padding(24)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal)
     }
 }
 

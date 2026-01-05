@@ -228,6 +228,8 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     var extras: DreamExtraAnalysis?
     var generatedImageData: Data?
     
+    var isBookmarked: Bool
+    
     var analysisError: String?
     
     // Legacy Helpers
@@ -276,6 +278,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         core: DreamCoreAnalysis? = nil,
         extras: DreamExtraAnalysis? = nil,
         generatedImageData: Data? = nil,
+        isBookmarked: Bool = false,
         analysisError: String? = nil
     ) {
         self.id = id
@@ -284,6 +287,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.core = core
         self.extras = extras
         self.generatedImageData = generatedImageData
+        self.isBookmarked = isBookmarked
         self.analysisError = analysisError
     }
     
@@ -293,6 +297,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.date = saved.date
         self.rawTranscript = saved.rawText
         self.generatedImageData = saved.generatedImageData
+        self.isBookmarked = saved.isBookmarked
         
         // Reconstruct Core Analysis from flat properties
         self.core = DreamCoreAnalysis(

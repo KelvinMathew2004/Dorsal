@@ -151,7 +151,7 @@ struct ShootingStar: View {
             )
             .onAppear {
                 // Linear animation ensures constant speed, no pause at end
-                withAnimation(.linear(duration: 2.0)) {
+                withAnimation(.linear(duration: 4.0)) {
                     progress = 1.0
                 }
             }
@@ -242,7 +242,7 @@ struct MagicCard<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(24)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
@@ -282,7 +282,7 @@ struct StatCard: View {
             }
         }
         .padding()
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
@@ -296,7 +296,7 @@ struct ChartCard<Content: View, Caption: View>: View {
             caption
         }
         .padding(20)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 20))
     }
 }
 
@@ -329,22 +329,7 @@ struct RingView: View {
             .frame(maxWidth: .infinity)
             .padding(20)
         }
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
-    }
-}
-
-struct TagPill: View {
-    let text: String
-    var isSelected: Bool = false
-    
-    var body: some View {
-        Text(text)
-            .font(.caption.bold())
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .foregroundStyle(isSelected ? .black : .secondary)
-            .glassEffect(isSelected ? .regular.tint(Color.accentColor) : .regular, in: .capsule)
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
