@@ -29,21 +29,21 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $store.selectedTab) {
-            RecordView(store: store)
-                .tabItem { Label("Record", systemImage: "sparkles") }
-                .tag(0)
+            Tab("Record", systemImage: "sparkles", value: 0) {
+                RecordView(store: store)
+            }
             
-            HistoryView(store: store)
-                .tabItem { Label("Journal", systemImage: "book.pages.fill") }
-                .tag(1)
+            Tab("Journal", systemImage: "book.pages.fill", value: 1) {
+                HistoryView(store: store)
+            }
             
-            WeeklyInsightsView(store: store)
-                .tabItem { Label("Insights", systemImage: "chart.xyaxis.line") }
-                .tag(2)
-                
-            ProfileView(store: store)
-                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
-                .tag(3)
+            Tab("Insights", systemImage: "chart.xyaxis.line", value: 2) {
+                WeeklyInsightsView(store: store)
+            }
+            
+            Tab("Profile", systemImage: "person.crop.circle", value: 3) {
+                ProfileView(store: store)
+            }
         }
         .tint(Theme.accent)
         .preferredColorScheme(.dark)

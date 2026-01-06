@@ -17,29 +17,18 @@ struct OnboardingView: View {
     @ObservedObject var store: DreamStore
     @State private var currentStep: OnboardingStep = .welcome
     
+    // Warp Drive State
+    @State private var warpSpeed: Double = 0.05 // Normal cruising speed
+    // Starting with a Deep Space Blue/Purple
+    @State private var galaxyColor: Color = Color(red: 0.2, green: 0.1, blue: 0.5)
+    
     var body: some View {
         ZStack {
-            // 1. Base Layer: Deep Black
-            Color.black.ignoresSafeArea()
-            
-            // 2. Star Field: Explicitly ensuring opacity is high enough and it's visible
-            // Note: Assuming WarpStarField is defined elsewhere in your project
-            WarpStarField(starCount: 300, speed: 0.2)
-                .opacity(1.0)
+            // 1. Warp Drive Background (Metal + Galaxy Gradients)
+            WarpDriveView(targetSpeed: warpSpeed, targetColor: galaxyColor)
                 .ignoresSafeArea()
             
-            // 3. Gradient Overlay: Lighter to ensure stars show through
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.1),
-                    Color.black.opacity(0.3),
-                    Color.black.opacity(0.6)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-            
+            // 2. Content
             VStack(spacing: 0) {
                 // Progress Tracker (Hidden on Welcome and All Set)
                 if currentStep != .welcome && currentStep != .allSet {
@@ -48,37 +37,87 @@ struct OnboardingView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 
-                // Content Switcher
+                // Content Switcher with Custom Transition
                 Group {
                     switch currentStep {
                     case .welcome:
-                        WelcomeIntroView(currentStep: $currentStep)
-                            .transition(.asymmetric(insertion: .opacity, removal: .move(edge: .leading).combined(with: .opacity)))
+                        WelcomeIntroView(onNext: {
+                            // Warp to Profile: Crimson Red (Changed from Purple/Indigo)
+                            triggerWarp(to: .profile, color: Color(red: 0.8, green: 0.0, blue: 0.2))
+                        })
+                        .transition(.warpContent)
                     case .profile:
-                        ProfileSetupView(store: store, currentStep: $currentStep)
-                            .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading).combined(with: .opacity)))
+                        ProfileSetupView(store: store, onNext: {
+                            // Warp to Permissions: Deep Blue
+                            triggerWarp(to: .permissions, color: Color(red: 0.0, green: 0.4, blue: 1.0))
+                        })
+                        .transition(.warpContent)
                     case .permissions:
-                        PermissionsView(store: store, currentStep: $currentStep)
-                            .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading).combined(with: .opacity)))
+                        PermissionsView(store: store, onNext: {
+                            // Warp to Notifications: Red-Orange
+                            triggerWarp(to: .notifications, color: Color(red: 1.0, green: 0.3, blue: 0.0))
+                        })
+                        .transition(.warpContent)
                     case .notifications:
-                        NotificationOnboardingView(store: store, currentStep: $currentStep)
-                            .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading).combined(with: .opacity)))
+                        NotificationOnboardingView(store: store, onNext: {
+                            // Warp to All Set: Emerald Green
+                            triggerWarp(to: .allSet, color: Color(red: 0.0, green: 0.8, blue: 0.3))
+                        })
+                        .transition(.warpContent)
                     case .allSet:
                         AllSetView(store: store)
-                            .transition(.scale.combined(with: .opacity))
+                            .transition(.warpContent)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Use .id to force transition when step changes
+                .id(currentStep)
             }
         }
-        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: currentStep)
+    }
+    
+    // MARK: - WARP LOGIC
+    private func triggerWarp(to nextStep: OnboardingStep, color: Color) {
+        // Continuous flow: Accelerate -> Switch -> Decelerate
+        
+        // 1. Immediate acceleration
+        withAnimation(.easeIn(duration: 0.5)) {
+            warpSpeed = 6.0 // High streak speed
+        }
+        
+        // 2. Switch View slightly before peak speed ends to hide the swap
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                currentStep = nextStep
+                galaxyColor = color
+            }
+        }
+        
+        // 3. Decelerate immediately after switch
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.easeOut(duration: 1.0)) {
+                warpSpeed = 0.05 // Return to cruise
+            }
+        }
+    }
+}
+
+// MARK: - Custom Transition
+extension AnyTransition {
+    static var warpContent: AnyTransition {
+        // New View: Scales up from small (0.5) to Normal (1.0), Fades In
+        // Old View: Scales up from Normal (1.0) to Huge (2.0), Fades Out
+        .asymmetric(
+            insertion: .scale(scale: 0.5).combined(with: .opacity).animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1)),
+            removal: .scale(scale: 3.0).combined(with: .opacity).animation(.easeIn(duration: 0.4))
+        )
     }
 }
 
 // MARK: - Step 1: Welcome Intro (Logo Only)
 
 struct WelcomeIntroView: View {
-    @Binding var currentStep: OnboardingStep
+    var onNext: () -> Void
     
     var body: some View {
         VStack(spacing: 40) {
@@ -93,7 +132,6 @@ struct WelcomeIntroView: View {
                     .cornerRadius(30)
                     .shadow(color: .white.opacity(0.2), radius: 20, x: 0, y: 0)
             } else {
-                // Fallback if "logo" isn't found
                 Image(systemName: "waveform.circle.fill")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -117,9 +155,7 @@ struct WelcomeIntroView: View {
             
             Spacer()
             
-            Button(action: {
-                withAnimation { currentStep = .profile }
-            }) {
+            Button(action: onNext) {
                 Text("Get Started")
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -135,7 +171,7 @@ struct WelcomeIntroView: View {
 
 struct ProfileSetupView: View {
     @ObservedObject var store: DreamStore
-    @Binding var currentStep: OnboardingStep
+    var onNext: () -> Void
     @State private var selectedItem: PhotosPickerItem?
     
     var body: some View {
@@ -197,9 +233,7 @@ struct ProfileSetupView: View {
             Spacer()
             
             // Continue Button
-            Button(action: {
-                withAnimation { currentStep = .permissions }
-            }) {
+            Button(action: onNext) {
                 Text("Continue")
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -216,7 +250,7 @@ struct ProfileSetupView: View {
 
 struct PermissionsView: View {
     @ObservedObject var store: DreamStore
-    @Binding var currentStep: OnboardingStep
+    var onNext: () -> Void
     @State private var animate = false
     
     var body: some View {
@@ -224,13 +258,12 @@ struct PermissionsView: View {
             Spacer()
             
             ZStack {
-                // Glow effect
+                // Glow effect (Blue)
                 Circle()
-                    .fill(Color.cyan.opacity(0.2))
+                    .fill(Color.blue.opacity(0.2))
                     .frame(width: 160, height: 160)
                     .blur(radius: 20)
                     .scaleEffect(animate ? 1.2 : 0)
-                    .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: animate)
                 
                 // Icon
                 Image(systemName: "waveform.circle.fill")
@@ -238,7 +271,7 @@ struct PermissionsView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 120, height: 120)
                     .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, .cyan)
+                    .foregroundStyle(.white, Color.blue)
                     .symbolColorRenderingMode(.gradient)
                     .symbolEffect(.drawOn.individually, options: .repeating, isActive: !animate)
             }
@@ -307,11 +340,7 @@ struct PermissionsView: View {
             
             // Continue Button
             if store.hasMicAccess && store.hasSpeechAccess {
-                Button(action: {
-                    withAnimation {
-                        currentStep = .notifications
-                    }
-                }) {
+                Button(action: onNext) {
                     Text("Continue")
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 44)
@@ -340,7 +369,7 @@ struct PermissionsView: View {
 
 struct NotificationOnboardingView: View {
     @ObservedObject var store: DreamStore
-    @Binding var currentStep: OnboardingStep
+    var onNext: () -> Void
     @State private var selectedTime: Date = {
         let calendar = Calendar.current
         // Default to 8:00 AM
@@ -354,20 +383,19 @@ struct NotificationOnboardingView: View {
             Spacer()
             
             ZStack {
-                // Glow effect
+                // Glow effect (Red-Orange)
                 Circle()
                     .fill(Color.orange.opacity(0.2))
                     .frame(width: 160, height: 160)
                     .blur(radius: 20)
                     .scaleEffect(animate ? 1.2 : 0)
-                    .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: animate)
                 
                 Image(systemName: "bell.badge.circle.fill")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 120, height: 120)
                     .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, .orange)
+                    .foregroundStyle(.white, Color(red: 1.0, green: 0.3, blue: 0.0))
                     .symbolColorRenderingMode(.gradient)
                     .symbolEffect(.drawOn.wholeSymbol, options: .nonRepeating, isActive: !animate)
             }
@@ -472,16 +500,13 @@ struct NotificationOnboardingView: View {
                     if store.hasNotificationAccess {
                         store.scheduleDailyReminder()
                     }
-                    withAnimation {
-                        currentStep = .allSet
-                    }
+                    onNext()
                 }) {
                     Text(store.hasNotificationAccess ? "Continue" : "Skip for Now")
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.glass)
-                .disabled(!store.hasNotificationAccess)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 20)
@@ -512,7 +537,6 @@ struct AllSetView: View {
                     .frame(width: 160, height: 160)
                     .blur(radius: 20)
                     .scaleEffect(iconAppear ? 1.2 : 0)
-                    .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: iconAppear)
                 
                 Image(systemName: "checkmark.circle.fill")
                     .resizable()
@@ -596,6 +620,7 @@ struct PermissionRow: View {
             
             if isGranted {
                 Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color(red: 0.6, green: 0.85, blue: 0.6))
             } else {
                 Button(action: action) {
@@ -623,8 +648,10 @@ struct OnboardingProgressView: View {
                 isActive: currentStep == .profile,
                 isCompleted: currentStep == .permissions || currentStep == .notifications || currentStep == .allSet
             )
+            .zIndex(1)
             
             Connector(isActive: currentStep == .permissions || currentStep == .notifications || currentStep == .allSet)
+                .zIndex(0)
             
             // Step 2: Permissions
             StepIcon(
@@ -632,8 +659,10 @@ struct OnboardingProgressView: View {
                 isActive: currentStep == .permissions,
                 isCompleted: currentStep == .notifications || currentStep == .allSet
             )
+            .zIndex(1)
             
             Connector(isActive: currentStep == .notifications || currentStep == .allSet)
+                .zIndex(0)
             
             // Step 3: Notifications
             StepIcon(
@@ -641,6 +670,7 @@ struct OnboardingProgressView: View {
                 isActive: currentStep == .notifications,
                 isCompleted: currentStep == .allSet
             )
+            .zIndex(1)
         }
         .padding(.top, 60)
         .padding(.bottom, 20)
@@ -651,9 +681,9 @@ struct Connector: View {
     let isActive: Bool
     var body: some View {
         Rectangle()
-            .fill(isActive ? Color.white : Color.white.opacity(0.3))
             .frame(height: 2)
             .frame(maxWidth: 40)
+            .glassEffect(.clear.tint(isActive ? Color.white : Color.white.opacity(0.3)))
     }
 }
 
@@ -664,20 +694,14 @@ struct StepIcon: View {
     
     var body: some View {
         ZStack {
-            Circle()
-                .fill(isActive || isCompleted ? Color.white : Color.white.opacity(0.2))
-                .frame(width: 44, height: 44)
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                )
-                .shadow(color: isActive ? .white.opacity(0.5) : .clear, radius: 10)
-            
             Image(systemName: isCompleted ? "checkmark" : icon)
                 .font(.system(size: 18, weight: .bold))
+                .padding()
                 .foregroundStyle(isActive || isCompleted ? .black : .white.opacity(0.5))
+                .shadow(color: isActive ? .white.opacity(0.5) : .clear, radius: 10)
                 .contentTransition(.symbolEffect(.replace))
         }
+        .glassEffect(.clear.tint(isActive || isCompleted ? Color.white : Color.white.opacity(0.2)), in: Circle())
         .scaleEffect(isActive ? 1.1 : 1.0)
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isActive)
     }
