@@ -6,6 +6,7 @@ import SwiftData
 import Combine
 import Speech
 import NaturalLanguage
+import UserNotifications
 
 // ... (Filter Structs) ...
 struct DreamFilter: Equatable {
@@ -13,7 +14,7 @@ struct DreamFilter: Equatable {
     var places: Set<String> = []
     var emotions: Set<String> = []
     var tags: Set<String> = []
-    var showBookmarksOnly: Bool = false // Renamed from showFavoritesOnly
+    var showBookmarksOnly: Bool = false
     var isEmpty: Bool { people.isEmpty && places.isEmpty && emotions.isEmpty && tags.isEmpty && !showBookmarksOnly }
 }
 
@@ -32,7 +33,7 @@ class DreamStore: NSObject, ObservableObject {
         didSet { UserDefaults.standard.set(lastName, forKey: "userLastName") }
     }
     
-    // Profile Image backed by FileManager (more robust for large data)
+    // Profile Image backed by FileManager
     @Published var profileImageData: Data? {
         didSet { saveProfileImageToDisk(data: profileImageData) }
     }
@@ -58,8 +59,20 @@ class DreamStore: NSObject, ObservableObject {
     @Published var hasMicAccess: Bool = false
     @Published var hasSpeechAccess: Bool = false
     
+    // NEW: Notification Permission & Settings
+    @Published var hasNotificationAccess: Bool = false
+    @AppStorage("reminderTime") var reminderTime: Double = 0
+    
+    // NOTE: This now checks notification access too, but for legacy reasons we can keep it as is
+    // or update it to include notifications if that's a hard requirement.
+    // For now, I'll leave it as Mic/Speech since those are critical for functionality.
     var isOnboardingComplete: Bool {
-        hasMicAccess && hasSpeechAccess
+        hasMicAccess && hasSpeechAccess && UserDefaults.standard.bool(forKey: "isOnboardingFullyComplete")
+    }
+    
+    func completeOnboarding() {
+        UserDefaults.standard.set(true, forKey: "isOnboardingFullyComplete")
+        objectWillChange.send()
     }
     
     // MARK: - IMAGE GENERATION SUPPORT
@@ -122,6 +135,7 @@ class DreamStore: NSObject, ObservableObject {
         self.profileImageData = loadProfileImageFromDisk()
         
         checkPermissions()
+        checkNotificationStatus() // NEW
         setupObservers()
         
         Task {
@@ -169,6 +183,48 @@ class DreamStore: NSObject, ObservableObject {
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
             Task { @MainActor [weak self] in self?.hasSpeechAccess = (status == .authorized) }
         }
+    }
+    
+    // NEW: NOTIFICATION LOGIC (Concurrency Fix)
+    func checkNotificationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            // Capture the specific value type needed (UNAuthorizationStatus is Sendable)
+            // to avoid capturing the 'settings' object in the MainActor closure.
+            let status = settings.authorizationStatus
+            Task { @MainActor in
+                self.hasNotificationAccess = (status == .authorized)
+            }
+        }
+    }
+    
+    func requestNotificationAccess() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            Task { @MainActor in
+                self.hasNotificationAccess = granted
+                if granted {
+                    self.scheduleDailyReminder()
+                }
+            }
+        }
+    }
+    
+    func scheduleDailyReminder() {
+        guard hasNotificationAccess else { return }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Record your dream"
+        content.body = "Take a moment to capture what you dreamt about last night."
+        content.sound = .default
+        
+        let date = Date(timeIntervalSince1970: reminderTime)
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+        let request = UNNotificationRequest(identifier: "dailyDreamReminder", content: content, trigger: trigger)
+        
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        UNUserNotificationCenter.current().add(request)
     }
     
     // MARK: - PERSISTENCE HELPERS

@@ -21,6 +21,81 @@ enum Theme {
 
 // MARK: - VISUAL EFFECTS
 
+struct WarpStarField: View {
+    var starCount: Int = 300
+    var speed: Double = 0.2
+    
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                // Dark background
+                Color.black.ignoresSafeArea()
+                
+                TimelineView(.animation) { timeline in
+                    Canvas { context, size in
+                        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                        let time = timeline.date.timeIntervalSinceReferenceDate
+                        
+                        for i in 0..<starCount {
+                            var rng = SeededRandomGenerator(seed: i)
+                            
+                            // Randomize start times and positions
+                            let randomOffset = Double.random(in: 0...100, using: &rng)
+                            let angle = Double.random(in: 0...(2 * .pi), using: &rng)
+                            
+                            // Varied speed for parallax effect
+                            let speedFactor = Double.random(in: 0.1...1.5, using: &rng)
+                            
+                            // Calculate "Z" depth (0 is close, 1 is far)
+                            let rawZ = (time * speed * speedFactor + randomOffset).truncatingRemainder(dividingBy: 1.0)
+                            let z = 1.0 - rawZ
+                            
+                            // Perspective projection
+                            let depth = max(z, 0.001)
+                            let perspective = 1.0 / depth
+                            
+                            // Move star outward from center
+                            let spread: CGFloat = max(size.width, size.height) * 0.7
+                            let x = center.x + cos(angle) * spread * perspective
+                            let y = center.y + sin(angle) * spread * perspective
+                            
+                            // Visibility check
+                            let margin: CGFloat = 50
+                            if x >= -margin && x <= size.width + margin &&
+                               y >= -margin && y <= size.height + margin {
+                                
+                                // SIZE LOGIC: Grow significantly as they approach (z -> 0)
+                                let baseSize = Double.random(in: 1.5...4.0, using: &rng)
+                                let visualSize = min(60.0, max(1.5, baseSize * perspective * 0.4))
+                                
+                                // Opacity: Fade in from distance
+                                var opacity = 1.0
+                                if z > 0.8 { opacity = (1.0 - z) * 5.0 }
+                                
+                                let rect = CGRect(
+                                    x: x - visualSize/2,
+                                    y: y - visualSize/2,
+                                    width: visualSize,
+                                    height: visualSize
+                                )
+                                
+                                context.opacity = opacity
+                                context.fill(Path(ellipseIn: rect), with: .color(.white))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct SeededRandomGenerator: RandomNumberGenerator {
+    init(seed: Int) { srand48(seed) }
+    func next() -> UInt64 { return UInt64(drand48() * Double(UInt64.max)) }
+}
+
 struct StarryBackground: View {
     var body: some View {
         ZStack {

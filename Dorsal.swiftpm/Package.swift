@@ -16,7 +16,7 @@ let package = Package(
         .iOSApplication(
             name: "Dorsal",
             targets: ["AppModule"],
-            bundleIdentifier: "cpp.Dorsal",
+            bundleIdentifier: "cpp.Dorsalv1",
             teamIdentifier: "879HFN9R93",
             displayVersion: "1.0",
             bundleVersion: "1",
