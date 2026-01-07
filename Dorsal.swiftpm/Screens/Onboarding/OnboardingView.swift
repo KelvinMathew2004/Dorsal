@@ -42,7 +42,7 @@ struct OnboardingView: View {
                     switch currentStep {
                     case .welcome:
                         WelcomeIntroView(onNext: {
-                            // Warp to Profile: Crimson Red (Changed from Purple/Indigo)
+                            // Warp to Profile: Crimson Red (Distinct from Welcome Purple)
                             triggerWarp(to: .profile, color: Color(red: 0.8, green: 0.0, blue: 0.2))
                         })
                         .transition(.warpContent)
@@ -147,10 +147,10 @@ struct WelcomeIntroView: View {
                     .foregroundStyle(.white)
                 
                 Text("Your personal dream journal and analyzer.")
-                    .font(.title3)
-                    .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    .font(.body)
+                    .foregroundStyle(.gray)
+                    .padding(.horizontal, 32)
             }
             
             Spacer()
@@ -193,15 +193,11 @@ struct ProfileSetupView: View {
                         .clipShape(Circle())
                         .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 2))
                 } else {
-                    Circle()
-                        .fill(Color.white.opacity(0.1))
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 40))
                         .frame(width: 120, height: 120)
-                        .overlay(
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 40))
-                                .foregroundStyle(.white.opacity(0.5))
-                        )
-                        .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .glassEffect(.clear, in: Circle())
                 }
                 
                 PhotosPicker(selection: $selectedItem, matching: .images) {
@@ -211,7 +207,7 @@ struct ProfileSetupView: View {
                         .foregroundStyle(.white)
                         .padding(.vertical, 6)
                         .padding(.horizontal, 12)
-                        .glassEffect(.regular)
+                        .glassEffect(.regular.interactive())
                 }
                 .padding(.top, -20)
             }
@@ -257,24 +253,14 @@ struct PermissionsView: View {
         VStack(spacing: 30) {
             Spacer()
             
-            ZStack {
-                // Glow effect (Blue)
-                Circle()
-                    .fill(Color.blue.opacity(0.2))
-                    .frame(width: 160, height: 160)
-                    .blur(radius: 20)
-                    .scaleEffect(animate ? 1.2 : 0)
-                
-                // Icon
-                Image(systemName: "waveform.circle.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 120, height: 120)
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, Color.blue)
-                    .symbolColorRenderingMode(.gradient)
-                    .symbolEffect(.drawOn.individually, options: .repeating, isActive: !animate)
-            }
+            Image(systemName: "waveform.circle.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 120, height: 120)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color.blue)
+                .symbolColorRenderingMode(.gradient)
+                .symbolEffect(.drawOn.individually, options: .repeating, isActive: !animate)
             
             VStack(spacing: 16) {
                 Text("Enable Access")
@@ -282,7 +268,7 @@ struct PermissionsView: View {
                     .fontWeight(.bold)
                     .foregroundStyle(.white)
                 
-                Text("To analyze your dreams, we need access to your microphone and speech recognition.")
+                Text("Access is needed to analyze dreams.")
                     .multilineTextAlignment(.center)
                     .font(.body)
                     .foregroundStyle(.gray)
@@ -352,7 +338,7 @@ struct PermissionsView: View {
             } else {
                  Text("Please enable permissions to continue")
                     .font(.caption)
-                    .foregroundStyle(.gray.opacity(0.5))
+                    .foregroundStyle(.gray)
                     .padding(.bottom, 40)
             }
         }
@@ -382,23 +368,14 @@ struct NotificationOnboardingView: View {
         VStack(spacing: 32) {
             Spacer()
             
-            ZStack {
-                // Glow effect (Red-Orange)
-                Circle()
-                    .fill(Color.orange.opacity(0.2))
-                    .frame(width: 160, height: 160)
-                    .blur(radius: 20)
-                    .scaleEffect(animate ? 1.2 : 0)
-                
-                Image(systemName: "bell.badge.circle.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 120, height: 120)
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, Color(red: 1.0, green: 0.3, blue: 0.0))
-                    .symbolColorRenderingMode(.gradient)
-                    .symbolEffect(.drawOn.wholeSymbol, options: .nonRepeating, isActive: !animate)
-            }
+            Image(systemName: "bell.badge.circle.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 120, height: 120)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color(red: 1.0, green: 0.3, blue: 0.0))
+                .symbolColorRenderingMode(.gradient)
+                .symbolEffect(.drawOn.wholeSymbol, options: .nonRepeating, isActive: !animate)
             
             // Text
             VStack(spacing: 12) {
@@ -410,7 +387,7 @@ struct NotificationOnboardingView: View {
                 Text("Set a time to record your dreams right after you wake up.")
                     .multilineTextAlignment(.center)
                     .font(.body)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(.gray)
                     .padding(.horizontal, 32)
             }
             
@@ -529,24 +506,15 @@ struct AllSetView: View {
     var body: some View {
         VStack(spacing: 40) {
             Spacer()
-            
-            ZStack {
-                // Glow effect
-                Circle()
-                    .fill(Color.green.opacity(0.2))
-                    .frame(width: 160, height: 160)
-                    .blur(radius: 20)
-                    .scaleEffect(iconAppear ? 1.2 : 0)
-                
-                Image(systemName: "checkmark.circle.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 120, height: 120)
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, .green)
-                    .symbolColorRenderingMode(.gradient)
-                    .symbolEffect(.drawOn.individually, options: .nonRepeating, isActive: !iconAppear)
-            }
+
+            Image(systemName: "checkmark.circle.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 120, height: 120)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .green)
+                .symbolColorRenderingMode(.gradient)
+                .symbolEffect(.drawOn.individually, options: .nonRepeating, isActive: !iconAppear)
             
             VStack(spacing: 16) {
                 Text("You're All Set!")
@@ -555,8 +523,8 @@ struct AllSetView: View {
                     .foregroundStyle(.white)
                 
                 Text("Your dream journal is ready. Sleep well!")
-                    .font(.title3)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(.body)
+                    .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
             }
             
@@ -592,7 +560,7 @@ struct CustomTextField: View {
         TextField("", text: $text, prompt: Text(placeholder).foregroundColor(.gray))
             .padding()
             .foregroundStyle(.white)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -620,7 +588,8 @@ struct PermissionRow: View {
             
             if isGranted {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 20, weight: .bold))
+                    .padding(3)
                     .foregroundStyle(Color(red: 0.6, green: 0.85, blue: 0.6))
             } else {
                 Button(action: action) {
@@ -633,7 +602,7 @@ struct PermissionRow: View {
             }
         }
         .padding()
-        .glassEffect(.regular.tint(isGranted ? Color.mint.opacity(0.2) : Color.clear), in: RoundedRectangle(cornerRadius: 16))
+        .glassEffect(.clear.tint(isGranted ? Color.mint.opacity(0.2) : Color.clear), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
@@ -683,7 +652,7 @@ struct Connector: View {
         Rectangle()
             .frame(height: 2)
             .frame(maxWidth: 40)
-            .glassEffect(.clear.tint(isActive ? Color.white : Color.white.opacity(0.3)))
+            .glassEffect(.clear.tint(isActive ? Color.white.opacity(0.5) : Color.clear))
     }
 }
 
@@ -698,10 +667,9 @@ struct StepIcon: View {
                 .font(.system(size: 18, weight: .bold))
                 .padding()
                 .foregroundStyle(isActive || isCompleted ? .black : .white.opacity(0.5))
-                .shadow(color: isActive ? .white.opacity(0.5) : .clear, radius: 10)
                 .contentTransition(.symbolEffect(.replace))
         }
-        .glassEffect(.clear.tint(isActive || isCompleted ? Color.white : Color.white.opacity(0.2)), in: Circle())
+        .glassEffect(.clear.tint(isActive || isCompleted ? Color.white.opacity(0.5) : Color.clear), in: Circle())
         .scaleEffect(isActive ? 1.1 : 1.0)
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isActive)
     }

@@ -15,7 +15,7 @@ struct GalaxyMeshGradient: View {
                 ZStack {
                     // Blob 1: Top Left Rotating
                     Circle()
-                        .fill(color.opacity(0.4)) // Increased opacity for visibility
+                        .fill(color.opacity(0.4))
                         .frame(width: proxy.size.width * 1.5)
                         .blur(radius: 100)
                         .offset(x: -proxy.size.width * 0.5, y: -proxy.size.height * 0.5)
@@ -24,7 +24,7 @@ struct GalaxyMeshGradient: View {
                     
                     // Blob 2: Bottom Right Counter-Rotating
                     Circle()
-                        .fill(Color(red: 0.1, green: 0.0, blue: 0.2).opacity(0.5)) // Increased opacity
+                        .fill(Color(red: 0.1, green: 0.0, blue: 0.2).opacity(0.5))
                         .frame(width: proxy.size.width * 1.2)
                         .blur(radius: 80)
                         .offset(x: proxy.size.width * 0.4, y: proxy.size.height * 0.4)
@@ -81,7 +81,6 @@ struct WarpDriveView: View {
             if MTLCreateSystemDefaultDevice() != nil {
                 MetalWarpRenderer(speed: targetSpeed, tint: targetColor)
                     .ignoresSafeArea()
-                    // Allow touches to pass through metal view if needed
                     .allowsHitTesting(false)
             } else {
                 CanvasStarFieldFallback(color: targetColor)
@@ -101,12 +100,11 @@ struct MetalWarpRenderer: UIViewRepresentable {
         view.delegate = context.coordinator
         view.framebufferOnly = true
         view.colorPixelFormat = .bgra8Unorm
-        // Transparent clear color is CRITICAL for seeing background
+        // Transparent clear color
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         view.preferredFramesPerSecond = 60
         view.isPaused = false
         view.enableSetNeedsDisplay = false
-        // Ensure background is transparent
         view.layer.isOpaque = false
         view.backgroundColor = .clear
         
@@ -134,7 +132,8 @@ class WarpCoordinator: NSObject, MTKViewDelegate {
     var pipelineState: MTLRenderPipelineState!
     var starBuffer: MTLBuffer!
     
-    let starCount = 1_500
+    // REDUCED STAR COUNT
+    let starCount = 400
     var startTime: Date = Date()
     
     var targetSpeed: Float = 0.0
@@ -160,11 +159,6 @@ class WarpCoordinator: NSObject, MTKViewDelegate {
         self.device = device
         self.commandQueue = device.makeCommandQueue()
         
-        // --- SHADER FIXES ---
-        // 1. Fixed "bookmark" shape by ensuring UV masking makes round stars.
-        // 2. Fixed aspect ratio stretching logic.
-        // 3. Ensuring transparency output for background visibility.
-        
         let shader = """
         #include <metal_stdlib>
         using namespace metal;
@@ -175,7 +169,8 @@ class WarpCoordinator: NSObject, MTKViewDelegate {
             float2 uv;
             float fade;
             float speed;
-            float distFromCenter;
+            float isWarping;
+            float randomVal;
         };
 
         struct Uniforms {
@@ -200,84 +195,93 @@ class WarpCoordinator: NSObject, MTKViewDelegate {
             StarData star = stars[instanceID];
             VertexOut out;
             
-            // Speed scaling
-            float effectiveSpeed = 0.2 + (uniforms.speed * 6.0);
+            // 1. Speed Calculation
+            float effectiveSpeed = 0.1 + (uniforms.speed * 3.0);
             
             // Z Depth: 10.0 (Far) -> 0.0 (Near)
             float z = fmod(star.zOffset - (uniforms.time * effectiveSpeed), 10.0);
             if (z < 0) z += 10.0;
             
-            // Perspective
+            // 3. Perspective
             float depth = max(z, 0.01);
             float perspective = 1.0 / depth;
             
-            // Position on screen
+            // 4. Position (Uniform Space - calculations in square space first)
             float x = cos(star.angle) * star.radius;
             float y = sin(star.angle) * star.radius;
             
-            float2 projectedPos = float2(x * perspective, y * perspective);
-            out.distFromCenter = length(projectedPos);
+            // posSq is in uniform coordinate space (Y is -1..1, X is proportional)
+            float2 posSq = float2(x * perspective, y * perspective);
             
-            // Aspect Ratio Correction
+            // Aspect Ratio
             float aspect = uniforms.resolution.x / uniforms.resolution.y;
-            projectedPos.x /= aspect;
             
-            // --- QUAD GENERATION ---
+            // --- QUAD SIZE ---
+            // Randomize size based on instanceID to prevent uniform look
+            // Simple pseudo-random
+            float rnd = fract(sin(float(instanceID) * 12.9898) * 43758.5453);
             
-            // Base size
-            float baseSize = 0.05 * perspective;
-            baseSize = max(0.002, min(baseSize, 0.1));
+            // SIZE VARIATION: 0.5x to 1.2x (Smaller average)
+            float sizeVariation = 0.5 + (rnd * 0.7);
             
-            // Warp/Streak Logic
-            // If fast, stretch length. If slow, length == width (Square/Circle)
-            float warpFactor = max(1.0, uniforms.speed * 8.0);
-            float streakLen = baseSize * warpFactor;
-            float width = baseSize * (uniforms.speed > 1.0 ? 0.4 : 1.0);
+            // REDUCED BASE SIZE (0.12 -> 0.07)
+            float baseSize = 0.07 * perspective * sizeVariation;
+            baseSize = max(0.002, min(baseSize, 0.15));
             
-            // Direction vector for alignment
-            float2 dir = normalize(projectedPos);
-            // Fix degenerate direction at center
-            if (length(projectedPos) < 0.0001) dir = float2(0, 1);
+            float isWarping = step(1.0, uniforms.speed);
             
-            // Perpendicular vector
+            // Streak Calculation
+            float targetStreak = 1.0 + (isWarping * 10.0); 
+            float currentStreak = mix(1.0, targetStreak, smoothstep(0.0, 5.0, uniforms.speed));
+            
+            float streakLen = baseSize * currentStreak;
+            float width = baseSize * (isWarping > 0.5 ? 0.3 : 1.0);
+            
+            // Orientation (In Uniform Space)
+            float2 dir = normalize(posSq);
+            if (length(posSq) < 0.0001) dir = float2(0, 1);
             float2 perp = float2(-dir.y, dir.x);
             
-            // Vertex Offset
+            // Vertex Expansion (In Uniform Space)
             float2 offset = float2(0,0);
             float2 uv = float2(0,0);
             
-            // 0: Tail Left, 1: Tail Right, 2: Head Left, 3: Head Right
-            if (vertexID == 0) {
-                offset = (-dir * streakLen) - (perp * width);
-                uv = float2(0, 0);
-            } else if (vertexID == 1) {
-                offset = (-dir * streakLen) + (perp * width);
-                uv = float2(1, 0);
-            } else if (vertexID == 2) {
-                offset = (perp * width); // Head
-                uv = float2(0, 1);
-            } else if (vertexID == 3) {
-                offset = -(perp * width); // Head
-                uv = float2(1, 1);
+            if (vertexID == 0) {      // Bottom Left
+                 offset = (-dir * streakLen) - (perp * width);
+                 uv = float2(0, 0);
+            } else if (vertexID == 1) { // Bottom Right
+                 offset = (-dir * streakLen) + (perp * width);
+                 uv = float2(1, 0);
+            } else if (vertexID == 2) { // Top Left
+                 offset = (dir * streakLen) - (perp * width); 
+                 uv = float2(0, 1);
+            } else if (vertexID == 3) { // Top Right
+                 offset = (dir * streakLen) + (perp * width);
+                 uv = float2(1, 1);
             }
             
-            out.position = float4(projectedPos + offset, 0.0, 1.0);
+            // Apply offset to uniform position
+            float2 finalPosSq = posSq + offset;
+            
+            // Convert to NDC (Divide X by Aspect Ratio to correct for screen shape)
+            out.position = float4(finalPosSq.x / aspect, finalPosSq.y, 0.0, 1.0);
+            
             out.uv = uv;
             out.speed = uniforms.speed;
+            out.isWarping = isWarping;
+            out.randomVal = rnd; 
             
-            // --- COLOR & FADE ---
-            float alpha = 1.0;
-            // Fade in from distance
-            if (z > 7.0) alpha = (10.0 - z) * 0.3;
-            // Fade out near camera
-            if (z < 0.5) alpha = z * 2.0;
+            // --- FADE LOGIC ---
             
+            // Distance Fade
+            float alpha = 1.0 - (z / 10.0);
+            alpha = max(0.0, alpha);
+            
+            // Near Clip Fade
+            if (z < 0.2) alpha *= (z / 0.2);
+            
+            // Tint
             float4 c = mix(star.color, uniforms.tint, 0.3);
-            
-            // Brighten slightly during warp
-            if (uniforms.speed > 1.0) {
-                c.rgb += 0.2;
-            }
             
             out.color = c;
             out.fade = alpha;
@@ -289,37 +293,54 @@ class WarpCoordinator: NSObject, MTKViewDelegate {
             float alpha = 0.0;
             
             if (in.speed > 1.0) {
-                // -- WARP MODE (Streak) --
-                // Gaussian fade width-wise
+                // -- WARP MODE (Streaks) --
+                
+                // FEWER LINES
+                if (in.randomVal > 0.5) {
+                    discard_fragment();
+                }
+                
+                // Cross-section
                 float distX = abs(in.uv.x - 0.5) * 2.0;
-                float coreX = 1.0 - smoothstep(0.0, 1.0, distX);
+                float coreX = pow(max(0.0, 1.0 - distX), 3.0);
                 
-                // Linear fade length-wise (Head brightest)
                 float tail = in.uv.y; 
-                alpha = coreX * tail;
                 
-                // Center Fade to avoid blob
-                float centerFade = smoothstep(0.0, 0.5, in.distFromCenter);
-                alpha *= centerFade;
+                alpha = coreX * tail * 0.6;
                 
             } else {
-                // -- NORMAL MODE (Round Star) --
-                // Use Circular Mask! This fixes the "bookmark" shape.
-                float2 center = in.uv - 0.5;
-                float dist = length(center) * 2.0; // 0.0 to 1.0 edge
+                // -- NORMAL MODE (Stars) --
                 
-                // Hard circular cut + soft glow
-                if (dist > 1.0) discard_fragment(); // Cut off corners of quad
+                float2 center = in.uv * 2.0 - 1.0;
                 
-                float core = 1.0 - smoothstep(0.0, 0.3, dist);
-                float glow = 1.0 - smoothstep(0.0, 1.0, dist);
+                // RANDOM SHAPES based on rnd val
                 
-                alpha = core + (glow * 0.5);
+                if (in.randomVal < 0.5) {
+                    // Type A: Soft Circle (Standard)
+                    float dist = length(center);
+                    if (dist < 1.0) {
+                        alpha = pow(1.0 - dist, 4.0);
+                        alpha += pow(1.0 - dist, 10.0) * 0.5;
+                    }
+                } else if (in.randomVal < 0.8) {
+                    // Type B: Diamond / 4-Point Star (Twinkle)
+                    // Manhattan distance |x| + |y| creates a diamond
+                    float dist = abs(center.x) + abs(center.y);
+                    if (dist < 1.0) {
+                        alpha = pow(1.0 - dist, 5.0);
+                        alpha += pow(1.0 - dist, 15.0); // Hot core
+                    }
+                } else {
+                    // Type C: Sharp Point (Distant/Small)
+                    float dist = length(center);
+                    if (dist < 1.0) {
+                        alpha = pow(1.0 - dist, 8.0);
+                    }
+                }
             }
             
-            alpha *= in.fade;
+            alpha = saturate(alpha) * in.fade;
             
-            // Ensure we don't output opaque black by accident
             return float4(in.color.rgb, in.color.a * alpha);
         }
         """
@@ -334,7 +355,6 @@ class WarpCoordinator: NSObject, MTKViewDelegate {
             desc.fragmentFunction = frag
             desc.colorAttachments[0].pixelFormat = .bgra8Unorm
             
-            // Additive Blending
             desc.colorAttachments[0].isBlendingEnabled = true
             desc.colorAttachments[0].rgbBlendOperation = .add
             desc.colorAttachments[0].alphaBlendOperation = .add
