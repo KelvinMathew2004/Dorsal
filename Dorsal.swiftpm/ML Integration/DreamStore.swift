@@ -63,9 +63,6 @@ class DreamStore: NSObject, ObservableObject {
     @Published var hasNotificationAccess: Bool = false
     @AppStorage("reminderTime") var reminderTime: Double = 0
     
-    // NOTE: This now checks notification access too, but for legacy reasons we can keep it as is
-    // or update it to include notifications if that's a hard requirement.
-    // For now, I'll leave it as Mic/Speech since those are critical for functionality.
     var isOnboardingComplete: Bool {
         hasMicAccess && hasSpeechAccess && UserDefaults.standard.bool(forKey: "isOnboardingFullyComplete")
     }
@@ -135,7 +132,7 @@ class DreamStore: NSObject, ObservableObject {
         self.profileImageData = loadProfileImageFromDisk()
         
         checkPermissions()
-        checkNotificationStatus() // NEW
+        checkNotificationStatus()
         setupObservers()
         
         Task {
@@ -144,7 +141,6 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     private func setupObservers() {
-        // Observe Real Audio Recorder
         audioRecorder.$audioLevel
             .receive(on: RunLoop.main)
             .assign(to: \.audioPower, on: self)
@@ -158,7 +154,6 @@ class DreamStore: NSObject, ObservableObject {
             }
             .store(in: &cancellables)
             
-        // Sync permission states if changed externally
         audioRecorder.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }
@@ -185,11 +180,8 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
     
-    // NEW: NOTIFICATION LOGIC (Concurrency Fix)
     func checkNotificationStatus() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            // Capture the specific value type needed (UNAuthorizationStatus is Sendable)
-            // to avoid capturing the 'settings' object in the MainActor closure.
             let status = settings.authorizationStatus
             Task { @MainActor in
                 self.hasNotificationAccess = (status == .authorized)
@@ -355,7 +347,8 @@ class DreamStore: NSObject, ObservableObject {
         self.entityUpdateTrigger += 1
     }
     
-    func updateEntity(name: String, type: String, description: String, image: Data?) {
+    // UPDATED: Added contactId parameter
+    func updateEntity(name: String, type: String, description: String, image: Data?, contactId: String? = nil) {
         guard let context = modelContext else { return }
         let id = "\(type):\(name)"
         do {
@@ -363,9 +356,12 @@ class DreamStore: NSObject, ObservableObject {
             if let existing = try context.fetch(descriptor).first {
                 existing.details = description
                 existing.imageData = image
+                existing.contactId = contactId // Save Contact ID
                 existing.lastUpdated = Date()
             } else {
-                context.insert(SavedEntity(name: name, type: type, details: description, imageData: image))
+                let newEntity = SavedEntity(name: name, type: type, details: description, imageData: image)
+                newEntity.contactId = contactId // Save Contact ID
+                context.insert(newEntity)
             }
             try context.save()
             self.entityUpdateTrigger += 1
@@ -433,7 +429,6 @@ class DreamStore: NSObject, ObservableObject {
             let matchesSearch = searchQuery.isEmpty || dream.rawTranscript.localizedCaseInsensitiveContains(searchQuery)
             if !matchesSearch { return false }
             
-            // Bookmarks Filter - Renamed from Favorites
             if activeFilter.showBookmarksOnly && !dream.isBookmarked { return false }
             
             if !peopleFilter.isEmpty {
@@ -534,11 +529,9 @@ class DreamStore: NSObject, ObservableObject {
             let transcriptLower = transcriptSnapshot.lowercased()
             var isSatisfied = false
             
-            // 1. Exact Keyword Match
             if question.keywords.contains(where: { transcriptLower.contains($0.lowercased()) }) {
                 isSatisfied = true
             }
-            // 2. Semantic Match (Using NLEmbedding)
             else if let embedding = self.embedding {
                 let tagger = NLTagger(tagSchemes: [.tokenType])
                 
@@ -550,16 +543,12 @@ class DreamStore: NSObject, ObservableObject {
                     let word = String(recentText[tokenRange]).lowercased()
                     if word.count < 3 { return true }
                     
-                    // Check semantic concepts - FIXED: Explicit handling of double
                     for concept in question.semanticConcepts {
-                        // FIX: Directly assign and check, avoiding 'if let' on potential non-optional
                         let distance = embedding.distance(between: word, and: concept)
-                        // Safety check if distance is a valid number (e.g. not infinity)
                         if distance < 0.65 {
                             isSatisfied = true; return false
                         }
                     }
-                    // Check keywords roughly
                     for keyword in question.keywords {
                         let distance = embedding.distance(between: word, and: keyword)
                         if distance < 0.4 {
@@ -631,7 +620,7 @@ class DreamStore: NSObject, ObservableObject {
     func togglePlaceFilter(_ item: String) { if activeFilter.places.contains(item) { activeFilter.places.remove(item) } else { activeFilter.places.insert(item) } }
     func toggleEmotionFilter(_ item: String) { if activeFilter.emotions.contains(item) { activeFilter.emotions.remove(item) } else { activeFilter.emotions.insert(item) } }
     func toggleTagFilter(_ item: String) { if activeFilter.tags.contains(item) { activeFilter.tags.remove(item) } else { activeFilter.tags.insert(item) } }
-    func toggleBookmarkFilter() { activeFilter.showBookmarksOnly.toggle() } // Renamed from toggleFavoriteFilter
+    func toggleBookmarkFilter() { activeFilter.showBookmarksOnly.toggle() }
     func clearFilter() { activeFilter = DreamFilter() }
     
     func jumpToFilter(type: String, value: String) {
@@ -647,22 +636,21 @@ class DreamStore: NSObject, ObservableObject {
         navigationPath = NavigationPath()
     }
     
-    func toggleBookmark(id: UUID) { // Renamed from toggleFavorite
+    func toggleBookmark(id: UUID) {
         if let index = dreams.firstIndex(where: { $0.id == id }) {
-            dreams[index].isBookmarked.toggle() // Renamed property
-            // Persist
+            dreams[index].isBookmarked.toggle()
             if let context = modelContext {
                 let dreamID = id
                 let descriptor = FetchDescriptor<SavedDream>(predicate: #Predicate { $0.id == dreamID })
                 if let saved = try? context.fetch(descriptor).first {
-                    saved.isBookmarked = dreams[index].isBookmarked // Renamed property
+                    saved.isBookmarked = dreams[index].isBookmarked
                     try? context.save()
                 }
             }
         }
     }
 
-    // MARK: - RECORDING (REAL IMPLEMENTATION)
+    // MARK: - RECORDING
     func startRecording() {
         currentTranscript = ""
         answeredQuestions = []
@@ -694,7 +682,7 @@ class DreamStore: NSObject, ObservableObject {
         if !save { currentTranscript = "" }
     }
 
-    // MARK: - PROCESSING PIPELINE (STREAMING)
+    // MARK: - PROCESSING PIPELINE
     private func processDream(transcript: String) {
         isProcessing = true
         let newID = UUID()

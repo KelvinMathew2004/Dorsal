@@ -1,6 +1,8 @@
 import SwiftUI
 import PhotosUI
 import CoreImage
+import Contacts
+import ContactsUI
 
 struct EntityDetailView: View {
     @ObservedObject var store: DreamStore
@@ -15,15 +17,26 @@ struct EntityDetailView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isGenerating = false
     
+    // Contact Linking State
+    @State private var contactId: String?
+    @State private var resolvedContact: CNContact?
+    @State private var showingContactPicker = false
+    @State private var showingContactDetail = false
+    
     @FocusState private var isDescriptionFocused: Bool
     
     // Gradient State
-    @State private var gradientColors: [Color] = EntityDetailView.cachedGradientColors
+    @State private var gradientColors: [Color] = []
+    
     var textColor: Color {
         let baseColor = gradientColors.first ?? .white
         return baseColor.mix(with: .white, by: 0.7)
     }
-    static var cachedGradientColors: [Color] = []
+    
+    var buttonColor: Color {
+        let baseColor = gradientColors.first ?? .black
+        return baseColor.mix(with: .black, by: 0.7)
+    }
     
     @Environment(\.dismiss) var dismiss
     
@@ -127,13 +140,13 @@ struct EntityDetailView: View {
                                     .foregroundStyle(textColor)
                                     .padding(.vertical, 6)
                                     .padding(.horizontal, 12)
-                                    .glassEffect(.clear.tint((gradientColors.first ?? .white).opacity(0.3)).interactive())
+                                    .glassEffect(.clear.tint(buttonColor.opacity(0.6)).interactive())
                                 }
                                 .offset(y: 12)
                             }
                         }
                         .padding(.top, 40)
-                        .padding(.bottom, 40)
+                        .padding(.bottom, 20)
                         
                         // MARK: - Description Section
                         VStack(alignment: .leading, spacing: 12) {
@@ -197,7 +210,6 @@ struct EntityDetailView: View {
                                                 .foregroundStyle(.orange.opacity(0.8))
                                                 .symbolRenderingMode(.palette)
                                                 .symbolColorRenderingMode(.gradient)
-                                                .padding(8)
                                         }
                                         .buttonStyle(.glassProminent)
                                         .tint(Color.orange.opacity(0.1))
@@ -209,6 +221,82 @@ struct EntityDetailView: View {
                             .padding(.horizontal)
                         }
                         
+                        // MARK: - Contact Linking (People Only)
+                        if type == "person" {
+                            if let contact = resolvedContact {
+                                // Linked Contact View
+                                Button {
+                                    showingContactDetail = true
+                                } label: {
+                                    HStack(spacing: 16) {
+                                        if let contactImageData = contact.thumbnailImageData, let uiImage = UIImage(data: contactImageData) {
+                                            Image(uiImage: uiImage)
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
+                                                .frame(width: 50, height: 50)
+                                                .clipShape(Circle())
+                                                .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
+                                        } else {
+                                            ZStack {
+                                                Circle().fill(.white.opacity(0.1))
+                                                Text(String(contact.givenName.prefix(1)) + String(contact.familyName.prefix(1)))
+                                                    .font(.headline)
+                                                    .foregroundStyle(.white)
+                                            }
+                                            .frame(width: 50, height: 50)
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("\(contact.givenName) \(contact.familyName)")
+                                                .font(.headline)
+                                                .foregroundStyle(.white)
+                                            Text("Linked Contact")
+                                                .font(.caption)
+                                                .foregroundStyle(textColor.opacity(0.7))
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        // Unlink Button
+                                        Button {
+                                            unlinkContact()
+                                        } label: {
+                                            Image(systemName: "personalhotspot.slash")
+                                                .foregroundStyle(.orange.opacity(0.8))
+                                                .symbolRenderingMode(.palette)
+                                                .symbolColorRenderingMode(.gradient)
+                                        }
+                                        .buttonStyle(.glassProminent)
+                                        .tint(Color.orange.opacity(0.1))
+                                    }
+                                    .padding()
+                                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal)
+                                .sheet(isPresented: $showingContactDetail) {
+                                    ContactDetailView(contact: contact)
+                                        .presentationDetents([.medium, .large])
+                                }
+                            } else {
+                                // Add Link Button
+                                Button {
+                                    showingContactPicker = true
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "person.crop.circle.badge.plus")
+                                        Text("Link to Contact")
+                                    }
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(textColor)
+                                    .padding()
+                                    .frame(maxWidth: .infinity)
+                                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+
                         Spacer()
                     }
                 }
@@ -216,27 +304,56 @@ struct EntityDetailView: View {
             .navigationTitle(name.capitalized)
             .navigationSubtitle("\(appearanceCount) \(appearanceCount == 1 ? "Dream" : "Dreams")")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
                         dismiss()
                     }
-                    .tint(gradientColors.first)
+                    .tint(buttonColor)
                 }
             }
             .onAppear {
                 loadData()
+                
+                if let data = imageData, let uiImage = UIImage(data: data) {
+                    let color = uiImage.dominantColor
+                    let newColors = [color, color.opacity(0.8), color.opacity(0.6)]
+                    self.gradientColors = newColors
+                } else {
+                    setInitialGradient()
+                }
+                
                 updateGradient()
             }
             .onDisappear {
                 saveData()
             }
+            .sheet(isPresented: $showingContactPicker) {
+                ContactPicker(selection: $resolvedContact) { contact in
+                    self.contactId = contact.identifier
+                    // Re-fetch to ensure keys
+                    self.fetchContact()
+                    
+                    if let contactImage = contact.imageData ?? contact.thumbnailImageData {
+                        // Animate the image change
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            self.imageData = contactImage
+                        }
+                    }
+                    saveData()
+                }
+                .ignoresSafeArea() // Helps prevent some transition artifacts
+            }
             .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhoto, matching: .images)
             .onChange(of: selectedPhoto) {
                 Task {
                     if let data = try? await selectedPhoto?.loadTransferable(type: Data.self) {
-                        withAnimation { imageData = data }
-                        saveData() // Save immediately on image change
+                        // Smooth transition for image change
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            imageData = data
+                        }
+                        saveData()
                     }
                 }
             }
@@ -246,12 +363,32 @@ struct EntityDetailView: View {
                     entityName: name,
                     entityDescription: descriptionText
                 ) { data in
-                    withAnimation { self.imageData = data }
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        self.imageData = data
+                    }
                     saveData()
                 }
             }
             // Update gradient when image data changes
-            .onChange(of: imageData) { updateGradient() }
+            .onChange(of: imageData) {
+                // Ensure this transition is animated
+                withAnimation(.easeInOut(duration: 1.0)) {
+                    updateGradient()
+                }
+            }
+        }
+    }
+    
+    private func setInitialGradient() {
+        if gradientColors.isEmpty {
+            let fallbackColor: Color
+            switch type {
+            case "person": fallbackColor = .blue.opacity(0.6)
+            case "place": fallbackColor = .green.opacity(0.6)
+            case "tag": fallbackColor = .yellow.opacity(0.6)
+            default: fallbackColor = .gray.opacity(0.6)
+            }
+            self.gradientColors = [fallbackColor, fallbackColor.opacity(0.8), fallbackColor.opacity(0.6)]
         }
     }
     
@@ -261,22 +398,16 @@ struct EntityDetailView: View {
                 let color = uiImage.dominantColor
                 DispatchQueue.main.async {
                     let newColors = [color, color.opacity(0.8), color.opacity(0.6)]
-                    self.gradientColors = newColors
-                    EntityDetailView.cachedGradientColors = newColors
+                    // Use withAnimation inside the async callback to smooth the transition
+                    withAnimation(.easeInOut(duration: 1.0)) {
+                        self.gradientColors = newColors
+                    }
                 }
             }
         } else {
-            // Fallback for no image based on category
-            let fallbackColor: Color
-            switch type {
-            case "person": fallbackColor = .blue.opacity(0.6) // Darker blue
-            case "place": fallbackColor = .green.opacity(0.6) // Darker green
-            case "tag": fallbackColor = .yellow.opacity(0.6) // Darker yellow
-            default: fallbackColor = .gray.opacity(0.6)
+            withAnimation(.easeInOut(duration: 1.0)) {
+                setInitialGradient()
             }
-            
-            self.gradientColors = [fallbackColor, fallbackColor.opacity(0.8), fallbackColor.opacity(0.6)]
-            EntityDetailView.cachedGradientColors = self.gradientColors
         }
     }
     
@@ -288,27 +419,68 @@ struct EntityDetailView: View {
         }
     }
     
+    private func fetchContact() {
+        guard let id = contactId else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let store = CNContactStore()
+            let keys = [
+                CNContactGivenNameKey,
+                CNContactFamilyNameKey,
+                CNContactThumbnailImageDataKey,
+                CNContactImageDataKey,
+                CNContactPhoneNumbersKey,
+                CNContactEmailAddressesKey,
+                CNContactBirthdayKey,
+                CNContactOrganizationNameKey,
+                CNContactJobTitleKey,
+                CNContactPostalAddressesKey,
+                CNContactSocialProfilesKey
+            ] as [CNKeyDescriptor]
+            
+            do {
+                let contact = try store.unifiedContact(withIdentifier: id, keysToFetch: keys)
+                DispatchQueue.main.async {
+                    self.resolvedContact = contact
+                }
+            } catch {
+                print("Failed to fetch contact: \(error)")
+            }
+        }
+    }
+    
+    private func unlinkContact() {
+        withAnimation {
+            self.contactId = nil
+            self.resolvedContact = nil
+        }
+        saveData()
+    }
+    
     private func loadData() {
         if let entity = store.getEntity(name: name, type: type) {
             self.descriptionText = entity.details
             self.imageData = entity.imageData
+            self.contactId = entity.contactId
+            
+            if let id = self.contactId {
+                fetchContact()
+            }
         }
     }
     
     private func saveData() {
-        store.updateEntity(name: name, type: type, description: descriptionText, image: imageData)
+        store.updateEntity(name: name, type: type, description: descriptionText, image: imageData, contactId: contactId)
     }
     
     private func generateAutoImage() {
         guard store.isImageGenerationAvailable else { return }
         isGenerating = true
         Task {
-            // Standardized Styling from Dream Analyzer
             let prompt = "\(name) \(descriptionText). Artistic style: Dreamlike, surreal, soft lighting."
             
             do {
                 let data = try await store.generateImageFromPrompt(prompt: prompt)
-                withAnimation {
+                withAnimation(.easeInOut(duration: 0.5)) {
                     self.imageData = data
                 }
                 saveData()
@@ -334,5 +506,36 @@ extension UIImage {
         context.render(outputImage, toBitmap: &bitmap, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
 
         return Color(red: Double(bitmap[0]) / 255.0, green: Double(bitmap[1]) / 255.0, blue: Double(bitmap[2]) / 255.0)
+    }
+}
+
+// MARK: - Contact Picker Helper
+struct ContactPicker: UIViewControllerRepresentable {
+    @Binding var selection: CNContact?
+    var onSelect: (CNContact) -> Void
+    
+    func makeUIViewController(context: Context) -> CNContactPickerViewController {
+        let picker = CNContactPickerViewController()
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: CNContactPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, CNContactPickerDelegate {
+        let parent: ContactPicker
+        
+        init(_ parent: ContactPicker) {
+            self.parent = parent
+        }
+        
+        func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) {
+            parent.selection = contact
+            parent.onSelect(contact)
+        }
     }
 }

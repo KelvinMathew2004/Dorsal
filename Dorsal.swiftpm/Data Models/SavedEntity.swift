@@ -13,7 +13,10 @@ final class SavedEntity {
     // New field for hierarchy
     var parentID: String?
     
-    init(name: String, type: String, details: String = "", imageData: Data? = nil, parentID: String? = nil) {
+    // New field for Contact Linking
+    var contactId: String?
+    
+    init(name: String, type: String, details: String = "", imageData: Data? = nil, parentID: String? = nil, contactId: String? = nil) {
         self.name = name
         self.type = type
         self.id = "\(type):\(name)"
@@ -21,5 +24,6 @@ final class SavedEntity {
         self.imageData = imageData
         self.lastUpdated = Date()
         self.parentID = parentID
+        self.contactId = contactId
     }
 }
