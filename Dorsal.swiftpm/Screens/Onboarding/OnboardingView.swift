@@ -125,12 +125,22 @@ struct WelcomeIntroView: View {
             
             // Logo
             if let uiImage = UIImage(named: "logo") {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 150, height: 150)
-                    .cornerRadius(30)
-                    .shadow(color: .white.opacity(0.2), radius: 20, x: 0, y: 0)
+                LinearGradient(
+                    colors: [
+                        Color(red: 130/255, green: 100/255, blue: 25/255),  // falloff
+                        Color(red: 212/255, green: 175/255, blue: 55/255), // highlight gold
+                        Color(red: 150/255, green: 120/255, blue: 30/255), // base gold
+                        Color(red: 92/255, green: 72/255, blue: 18/255)    // deep shadow gold
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .mask(
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                )
+                .frame(width: 150, height: 150)
             } else {
                 Image(systemName: "waveform.circle.fill")
                     .resizable()
@@ -201,13 +211,15 @@ struct ProfileSetupView: View {
                 }
                 
                 PhotosPicker(selection: $selectedItem, matching: .images) {
-                    Text("Set Photo")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 12)
-                        .glassEffect(.regular.interactive())
+                    HStack(spacing: 4) {
+                        Image(systemName: "camera.fill")
+                        Text("Set Photo")
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .glassEffect(.clear.interactive())
                 }
                 .padding(.top, -20)
             }
@@ -407,7 +419,7 @@ struct NotificationOnboardingView: View {
                         .foregroundStyle(store.hasNotificationAccess ? .white : .gray)
                 }
                 .padding()
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
             }
             .disabled(!store.hasNotificationAccess)
             .padding(.horizontal, 24)
@@ -560,7 +572,7 @@ struct CustomTextField: View {
         TextField("", text: $text, prompt: Text(placeholder).foregroundColor(.gray))
             .padding()
             .foregroundStyle(.white)
-            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
+            .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 

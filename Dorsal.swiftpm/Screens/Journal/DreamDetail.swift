@@ -4,6 +4,8 @@ struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
     let dream: Dream
     
+    @Namespace private var namespace
+    
     // Interaction State
     @State private var activeEntity: EntityIdentifier?
     @State private var selectedEntity: EntityIdentifier?
@@ -105,7 +107,8 @@ struct DreamDetailView: View {
                                 selectedEntity: $selectedEntity,
                                 entityToDelete: $entityToDelete,
                                 showDeleteAlert: $showDeleteAlert,
-                                store: store
+                                store: store,
+                                namespace: namespace
                             )
                             .transition(.opacity)
                         }
@@ -249,8 +252,10 @@ struct DreamDetailView: View {
         } message: {
             Text("This will remove the custom image and description. The item will remain in the dream list.")
         }
-        .navigationDestination(item: $selectedEntity) { entity in
+        .sheet(item: $selectedEntity) { entity in
             EntityDetailView(store: store, name: entity.name, type: entity.type)
+                .presentationDetents([.large])
+                .navigationTransition(.zoom(sourceID: entity.id, in: namespace))
         }
     }
 }
@@ -265,6 +270,7 @@ struct DreamContextSection: View {
     @Binding var entityToDelete: DreamDetailView.EntityIdentifier?
     @Binding var showDeleteAlert: Bool
     @ObservedObject var store: DreamStore
+    var namespace: Namespace.ID
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -280,7 +286,8 @@ struct DreamContextSection: View {
                     selectedEntity: $selectedEntity,
                     entityToDelete: $entityToDelete,
                     showDeleteAlert: $showDeleteAlert,
-                    store: store
+                    store: store,
+                    namespace: namespace
                 )
             }
             
@@ -295,7 +302,8 @@ struct DreamContextSection: View {
                     selectedEntity: $selectedEntity,
                     entityToDelete: $entityToDelete,
                     showDeleteAlert: $showDeleteAlert,
-                    store: store
+                    store: store,
+                    namespace: namespace
                 )
             }
             
@@ -310,7 +318,8 @@ struct DreamContextSection: View {
                     selectedEntity: $selectedEntity,
                     entityToDelete: $entityToDelete,
                     showDeleteAlert: $showDeleteAlert,
-                    store: store
+                    store: store,
+                    namespace: namespace
                 )
             }
             
@@ -325,7 +334,8 @@ struct DreamContextSection: View {
                     selectedEntity: $selectedEntity,
                     entityToDelete: $entityToDelete,
                     showDeleteAlert: $showDeleteAlert,
-                    store: store
+                    store: store,
+                    namespace: namespace
                 )
             }
         }
@@ -344,6 +354,7 @@ struct ContextRow: View {
     @Binding var entityToDelete: DreamDetailView.EntityIdentifier?
     @Binding var showDeleteAlert: Bool
     @ObservedObject var store: DreamStore
+    var namespace: Namespace.ID
     
     // Helper to get parent info
     func getParentInfo(for itemName: String) -> (name: String, type: String)? {
@@ -381,6 +392,7 @@ struct ContextRow: View {
                         .buttonStyle(.glassProminent)
                         .tint(color.opacity(0.2))
                         .foregroundStyle(color)
+                        .matchedTransitionSource(id: DreamDetailView.EntityIdentifier(name: item, type: type).id, in: namespace)
                         .confirmationDialog(
                             "Options",
                             isPresented: Binding(

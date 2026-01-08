@@ -64,7 +64,7 @@ struct ImagePlaygroundSheet: View {
                         VStack(spacing: 24) {
                             // Prompt Input
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("PROMPT")
+                                Text("Prompt")
                                     .font(.caption.bold())
                                     .foregroundStyle(.white.opacity(0.6))
                                 
@@ -83,7 +83,7 @@ struct ImagePlaygroundSheet: View {
                             
                             // Style Selector
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("STYLE")
+                                Text("Style")
                                     .font(.caption.bold())
                                     .foregroundStyle(.white.opacity(0.6))
                                 

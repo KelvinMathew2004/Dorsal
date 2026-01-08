@@ -29,31 +29,51 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $store.selectedTab) {
-            Tab("Record", systemImage: "sparkles", value: 0) {
+            Tab(value: 0) {
                 RecordView(store: store)
+            } label: {
+                Label("Record", systemImage: "sparkles")
+                    .labelStyle(iPhoneIconOnlyLabelStyle())
             }
             
-            Tab("Journal", systemImage: "book.pages.fill", value: 1) {
+            Tab(value: 1) {
                 HistoryView(store: store)
+            } label: {
+                Label("Journal", systemImage: "book.pages.fill")
+                    .labelStyle(iPhoneIconOnlyLabelStyle())
             }
             
-            Tab("Insights", systemImage: "chart.xyaxis.line", value: 2) {
+            Tab(value: 2) {
                 WeeklyInsightsView(store: store)
+            } label: {
+                Label("Insights", systemImage: "chart.xyaxis.line")
+                    .labelStyle(iPhoneIconOnlyLabelStyle())
             }
             
-            Tab("Profile", systemImage: "person.crop.circle", value: 3) {
+            Tab(value: 3) {
                 ProfileView(store: store)
+            } label: {
+                Label("Profile", systemImage: "person.crop.circle")
+                    .labelStyle(iPhoneIconOnlyLabelStyle())
             }
         }
         .tint(Theme.accent)
         .preferredColorScheme(.dark)
         .onAppear {
             store.setContext(modelContext)
-            
-            // Pre-warm the model
-            Task {
-                await DreamAnalyzer.shared.prewarm()
-            }
+            Task { await DreamAnalyzer.shared.prewarm() }
+        }
+    }
+}
+
+struct iPhoneIconOnlyLabelStyle: LabelStyle {
+    @Environment(\.horizontalSizeClass) var sizeClass
+    
+    func makeBody(configuration: Configuration) -> some View {
+        if sizeClass == .compact {
+            configuration.icon
+        } else {
+            Label(configuration)
         }
     }
 }

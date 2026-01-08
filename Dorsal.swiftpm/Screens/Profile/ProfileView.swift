@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+import CoreImage
 
 struct ProfileView: View {
     @ObservedObject var store: DreamStore
@@ -9,8 +10,6 @@ struct ProfileView: View {
     @State private var selectedCategory: String = "People"
     @State private var showEditSheet = false
     
-    // Profile Picture Action Sheet
-    @State private var showProfilePicOptions = false
     @State private var showImagePlayground = false
     @State private var showPhotoPicker = false
     
@@ -23,6 +22,10 @@ struct ProfileView: View {
     // Drag & Drop State
     @State private var draggedItem: EntityIdentifier?
     @State private var dropTargetItem: EntityIdentifier?
+    
+    // Gradient State - Cached in View to persist across tab changes
+    @State private var gradientColors: [Color] = ProfileView.cachedGradientColors
+    static var cachedGradientColors: [Color] = []
     
     struct EntityIdentifier: Hashable, Identifiable, Codable {
         let name: String
@@ -38,17 +41,38 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             ZStack {
+                // Background Layer 1: Default Theme (Always visible)
                 Theme.gradientBackground.ignoresSafeArea()
+                
+                // Background Layer 2: Dynamic Gradient (Fades in)
+                if !gradientColors.isEmpty {
+                    Group {
+                        MeshGradient(
+                            width: 3, height: 3,
+                            points: [
+                                [0.0, 0.0], [0.5, 0.0], [1.0, 0.0],
+                                [0.0, 0.5], [0.5, 0.5], [1.0, 0.5],
+                                [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
+                            ],
+                            colors: [
+                                gradientColors[0], gradientColors[1], gradientColors[2],
+                                gradientColors[2], gradientColors[0], gradientColors[1],
+                                gradientColors[1], gradientColors[2], gradientColors[0]
+                            ]
+                        )
+                    }
+                    .ignoresSafeArea()
+                    .overlay(Color.black.opacity(0.6))
+                    .transition(.opacity)
+                }
                 
                 ScrollViewReader { proxy in
                     scrollableContent(proxy: proxy)
                 }
             }
+            .animation(.easeInOut(duration: 1.0), value: gradientColors)
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(item: $selectedEntity) { entity in
-                EntityDetailView(store: store, name: entity.name, type: entity.type)
-            }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -63,25 +87,80 @@ struct ProfileView: View {
             .sheet(isPresented: $showEditSheet) {
                 NavigationStack {
                     Form {
+                        Section {
+                            HStack {
+                                Spacer()
+                                ZStack(alignment: .bottom) {
+                                    // Profile Image
+                                    if let data = store.profileImageData, let uiImage = UIImage(data: data) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 120, height: 120)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
+                                    } else {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.white.opacity(0.1))
+                                                .frame(width: 120, height: 120)
+                                                .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
+                                            Image(systemName: "person.fill").font(.system(size: 50)).foregroundStyle(.white.opacity(0.5))
+                                        }
+                                    }
+                                    
+                                    // The Edit Pill
+                                    Menu {
+                                        Button { showPhotoPicker = true } label: { Label("Photo Library", systemImage: "photo") }
+                                        if store.isImageGenerationAvailable {
+                                            Button { showImagePlayground = true } label: { Label("Generate with AI", systemImage: "wand.and.stars") }
+                                        }
+                                        if store.profileImageData != nil {
+                                            Button(role: .destructive) { store.profileImageData = nil } label: { Label("Remove Photo", systemImage: "trash") }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "camera.fill")
+                                            Text("Edit")
+                                        }
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(.white.opacity(0.8))
+                                        .padding(.vertical, 6)
+                                        .padding(.horizontal, 12)
+                                        .background(Color(.secondarySystemBackground).opacity(0.7))
+                                        .clipShape(Capsule())
+                                        .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                                    }
+                                    .offset(y: 10)
+                                }
+                                Spacer()
+                            }
+                            .listRowBackground(Color.clear)
+                            .padding(.bottom, 10)
+                        }
+                        
                         Section("Profile Details") {
                             TextField("First Name", text: $editFirstName)
                             TextField("Last Name", text: $editLastName)
                         }
                     }
                     .navigationTitle("Edit Profile")
+                    .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button(role: .cancel) { showEditSheet = false } }
-                        ToolbarItem(placement: .confirmationAction) { Button(role: .confirm) { store.firstName = editFirstName; store.lastName = editLastName; showEditSheet = false } }
+                        ToolbarItem(placement: .confirmationAction) { Button(role: .confirm) { store.firstName = editFirstName; store.lastName = editLastName; showEditSheet = false }
+                                .disabled(editFirstName.isEmpty || editLastName.isEmpty)
+                        }
                     }
                 }
                 .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showImagePlayground) {
-                ImagePlaygroundSheet(store: store, entityName: "Profile Picture", entityDescription: "A cool avatar") { data in
-                    withAnimation { store.profileImageData = data }
+                .photosPicker(isPresented: $showPhotoPicker, selection: $selectedItem, matching: .images)
+                .sheet(isPresented: $showImagePlayground) {
+                    ImagePlaygroundSheet(store: store, entityName: "Profile Picture", entityDescription: "A cool avatar") { data in
+                        withAnimation { store.profileImageData = data }
+                    }
                 }
             }
-            .photosPicker(isPresented: $showPhotoPicker, selection: $selectedItem, matching: .images)
             .onChange(of: selectedItem) {
                 Task {
                     if let data = try? await selectedItem?.loadTransferable(type: Data.self) {
@@ -89,6 +168,28 @@ struct ProfileView: View {
                     }
                 }
             }
+            .onChange(of: store.profileImageData) { updateGradient() }
+            .task { updateGradient() }
+            .sheet(item: $selectedEntity) { entity in
+                EntityDetailView(store: store, name: entity.name, type: entity.type)
+                    .presentationDetents([.large])
+            }
+        }
+    }
+    
+    private func updateGradient() {
+        if let data = store.profileImageData, let uiImage = UIImage(data: data) {
+            DispatchQueue.global(qos: .userInitiated).async {
+                let color = uiImage.dominantColor
+                DispatchQueue.main.async {
+                    let newColors = [color, color.opacity(0.8), color.opacity(0.6)]
+                    self.gradientColors = newColors
+                    ProfileView.cachedGradientColors = newColors
+                }
+            }
+        } else {
+            self.gradientColors = []
+            ProfileView.cachedGradientColors = []
         }
     }
     
@@ -125,18 +226,6 @@ struct ProfileView: View {
         } message: {
             Text("This will remove the custom image and description. The item will remain in your list as long as it appears in your dreams.")
         }
-        .confirmationDialog("Profile Picture", isPresented: $showProfilePicOptions) {
-            Button("Photo Library") { showPhotoPicker = true }
-            if store.isImageGenerationAvailable {
-                Button("Create with Image Playground") { showImagePlayground = true }
-            }
-            if store.profileImageData != nil {
-                Button("Remove Image", role: .destructive) {
-                    store.profileImageData = nil
-                }
-            }
-            Button("Cancel", role: .cancel) { }
-        }
     }
     
     // MARK: - Subviews
@@ -145,25 +234,25 @@ struct ProfileView: View {
         HStack {
             Spacer(minLength: 0)
             HStack(spacing: 24) {
-                Button {
-                    showProfilePicOptions = true
-                } label: {
-                    if let data = store.profileImageData, let uiImage = UIImage(data: data) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
+                // Just Display Image, No Action
+                if let data = store.profileImageData, let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 90, height: 90)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 2))
+                        .shadow(color: .black.opacity(0.3), radius: 10)
+                } else {
+                    ZStack {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 35))
                             .frame(width: 90, height: 90)
-                            .clipShape(Circle())
-                            .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 2))
-                            .shadow(color: .black.opacity(0.3), radius: 10)
-                    } else {
-                        ZStack {
-                            Circle().fill(.white.opacity(0.1)).frame(width: 90, height: 90)
-                                .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 2))
-                            Image(systemName: "person.fill").font(.system(size: 35)).foregroundStyle(.white.opacity(0.5))
-                        }
+                            .foregroundStyle(.white.opacity(0.5))
+                            .glassEffect(.clear, in: Circle())
                     }
                 }
+                
                 VStack(alignment: .leading, spacing: 2) {
                     Text(store.firstName).font(.system(size: 28, weight: .bold)).foregroundStyle(.white)
                     Text(store.lastName).font(.system(size: 20, weight: .medium)).foregroundStyle(Theme.secondary)
@@ -249,9 +338,9 @@ struct ProfileView: View {
                             }
                         }
                         .padding()
-                        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
+                        .glassEffect(.clear.interactive(), in: Capsule())
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12)
+                            Capsule()
                                 .stroke(dropTargetItem?.name == item ? Theme.accent.opacity(0.8) : Color.clear, lineWidth: 3)
                         )
                         .padding(.vertical, 8)
@@ -325,7 +414,7 @@ struct ProfileView: View {
                                 }
                             }
                             .padding()
-                            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 12))
+                            .glassEffect(.clear.interactive(), in: Capsule())
                             .padding(.vertical, 8)
                             .padding(.horizontal)
                             // Drag conditional for children
@@ -401,6 +490,7 @@ struct EntityListImage: View {
         } else {
             Image(systemName: icon).foregroundStyle(.white.opacity(0.7)).frame(width: 40, height: 40)
                 .background(Circle().fill(.white.opacity(0.1)))
+                .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 1))
         }
     }
 }
@@ -535,7 +625,7 @@ struct ContinuousStatBlock: View {
                 Text(value).font(.system(size: 24, weight: .bold, design: .rounded)).foregroundStyle(.white).minimumScaleFactor(0.8).lineLimit(1)
                 Text(title.uppercased()).font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.6)).tracking(0.5)
             }.padding(.vertical, 24)
-        }.frame(maxWidth: .infinity).frame(height: 100).glassEffect(.regular.tint(color.opacity(0.15)), in: CustomCorner(corners: corners, radius: 20))
+        }.frame(maxWidth: .infinity).frame(height: 100).glassEffect(.clear.tint(color.opacity(0.15)), in: CustomCorner(corners: corners, radius: 20))
     }
 }
 
