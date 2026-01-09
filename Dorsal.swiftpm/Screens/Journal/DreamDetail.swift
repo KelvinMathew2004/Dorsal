@@ -111,6 +111,7 @@ struct DreamDetailView: View {
                                 namespace: namespace
                             )
                             .transition(.opacity)
+                            .padding()
                         }
                         
                         if let interp = liveDream.core?.interpretation {

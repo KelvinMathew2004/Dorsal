@@ -327,7 +327,7 @@ struct AudioVisualizer: View {
                 let height = 12 + dynamicHeight
                 
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.accentColor.gradient)
+                    .fill(Theme.accent.gradient)
                     .frame(width: 6, height: height)
                     .shadow(color: Theme.accent.opacity(0.5), radius: 5, x: 0, y: 0)
                     .animation(.easeOut(duration: 0.15), value: power)

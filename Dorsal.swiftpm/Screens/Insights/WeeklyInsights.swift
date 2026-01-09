@@ -171,11 +171,7 @@ struct WeeklyInsightsView: View {
     
     private func weeklyOverviewSection(insights: WeeklyInsightResult) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Overview", systemImage: "sparkles.rectangle.stack")
-                .font(.headline)
-                .foregroundStyle(.white.opacity(0.8))
-            
-            MagicCard(title: "Period Summary", icon: "calendar", color: .indigo) {
+            MagicCard(title: "Overview", icon: "sparkles.rectangle.stack", color: .indigo) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(insights.periodOverview ?? "Generating...")
                         .fixedSize(horizontal: false, vertical: true)

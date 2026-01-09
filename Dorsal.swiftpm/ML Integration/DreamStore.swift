@@ -121,6 +121,18 @@ class DreamStore: NSObject, ObservableObject {
             keywords: ["happy", "sad", "scared", "anxious", "excited", "confused", "calm", "angry", "felt", "feeling", "joyful", "terrified", "empowered", "lonely", "relief", "curious", "starstruck"],
             contextType: "emotion",
             semanticConcepts: ["emotion", "feeling", "mood", "fear", "joy", "anger", "sadness", "surprise"]
+        ),
+        ChecklistItem(
+            question: "How long did the dream feel?",
+            keywords: ["minute", "minutes", "hour", "hours", "second", "seconds", "long", "short", "forever", "quick", "brief", "time", "eternity", "instant", "while", "lasted"],
+            contextType: "duration",
+            semanticConcepts: ["duration", "time", "length", "span"]
+        ),
+        ChecklistItem(
+            question: "Any recent events that might have triggered this?",
+            keywords: ["yesterday", "today", "recently", "watched", "saw", "movie", "show", "read", "book", "talked", "news", "happened", "because", "reminded", "trigger", "context", "real life", "work"],
+            contextType: "context",
+            semanticConcepts: ["cause", "reason", "event", "memory", "media", "day"]
         )
     ]
     private var updateStateTask: Task<Void, Never>?
@@ -493,18 +505,6 @@ class DreamStore: NSObject, ObservableObject {
         return final
     }
     
-    private func generateRecommendations(for item: ChecklistItem) -> [String] {
-        var recs: [String] = []
-        switch item.contextType {
-        case "person": recs = ["My Mom", "A Friend", "Stranger"]; let history = Array(Set(dreams.flatMap { $0.core?.people ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
-        case "place": recs = ["Home", "School", "Work"]; let history = Array(Set(dreams.flatMap { $0.core?.places ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
-        case "emotion": recs = ["Scared", "Happy", "Confused", "Calm"]; let history = Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })).prefix(3); recs.insert(contentsOf: history, at: 0)
-        default: break
-        }
-        return Array(Set(recs))
-    }
-    
-    // MARK: - SMART CHECKLIST LOGIC
     private func updateQuestionState() {
         if isQuestionSatisfied { return }
         
@@ -516,52 +516,56 @@ class DreamStore: NSObject, ObservableObject {
             let transcriptSnapshot = await MainActor.run { self.currentTranscript }
             guard !transcriptSnapshot.isEmpty else { return }
             
-            // Safe optional unwrapping for Active Question ID
-            let activeQID: UUID? = await MainActor.run { () -> UUID? in
-                if let active = self.activeQuestion { return active.id }
-                let unanswered = self.questions.filter { !self.answeredQuestions.contains($0.id) }
-                return unanswered.first?.id
+            // Check ALL unanswered questions for a match, not just the active one
+            let unansweredQuestions = await MainActor.run {
+                self.questions.filter { !self.answeredQuestions.contains($0.id) }
             }
             
-            guard let qID = activeQID,
-                  let question = questions.first(where: { $0.id == qID }) else { return }
+            guard !unansweredQuestions.isEmpty else { return }
             
             let transcriptLower = transcriptSnapshot.lowercased()
-            var isSatisfied = false
             
-            if question.keywords.contains(where: { transcriptLower.contains($0.lowercased()) }) {
-                isSatisfied = true
-            }
-            else if let embedding = self.embedding {
-                let tagger = NLTagger(tagSchemes: [.tokenType])
+            // Prepare NLTagger once for reuse
+            let tagger = NLTagger(tagSchemes: [.tokenType])
+            let words = transcriptSnapshot.split(separator: " ")
+            let recentText = words.suffix(15).joined(separator: " ")
+            tagger.string = recentText
+            
+            for question in unansweredQuestions {
+                var isSatisfied = false
                 
-                let words = transcriptSnapshot.split(separator: " ")
-                let recentText = words.suffix(15).joined(separator: " ")
-                tagger.string = recentText
-                
-                tagger.enumerateTags(in: recentText.startIndex..<recentText.endIndex, unit: .word, scheme: .tokenType, options: [.omitPunctuation, .omitWhitespace]) { _, tokenRange in
-                    let word = String(recentText[tokenRange]).lowercased()
-                    if word.count < 3 { return true }
-                    
-                    for concept in question.semanticConcepts {
-                        let distance = embedding.distance(between: word, and: concept)
-                        if distance < 0.65 {
-                            isSatisfied = true; return false
-                        }
-                    }
-                    for keyword in question.keywords {
-                        let distance = embedding.distance(between: word, and: keyword)
-                        if distance < 0.4 {
-                            isSatisfied = true; return false
-                        }
-                    }
-                    return true
+                // 1. Keyword check
+                if question.keywords.contains(where: { transcriptLower.contains($0.lowercased()) }) {
+                    isSatisfied = true
                 }
-            }
-            
-            if isSatisfied {
-                await MainActor.run {
-                    self.handleSatisfiedQuestion(questionID: qID)
+                // 2. Semantic check (if embedding available)
+                else if let embedding = self.embedding {
+                    tagger.enumerateTags(in: recentText.startIndex..<recentText.endIndex, unit: .word, scheme: .tokenType, options: [.omitPunctuation, .omitWhitespace]) { _, tokenRange in
+                        let word = String(recentText[tokenRange]).lowercased()
+                        if word.count < 3 { return true }
+                        
+                        // Check broad concepts
+                        for concept in question.semanticConcepts {
+                            let distance = embedding.distance(between: word, and: concept)
+                            if distance < 0.65 {
+                                isSatisfied = true; return false
+                            }
+                        }
+                        // Check specific keywords via embedding
+                        for keyword in question.keywords {
+                            let distance = embedding.distance(between: word, and: keyword)
+                            if distance < 0.4 {
+                                isSatisfied = true; return false
+                            }
+                        }
+                        return true
+                    }
+                }
+                
+                if isSatisfied {
+                    await MainActor.run {
+                        self.handleSatisfiedQuestion(questionID: question.id)
+                    }
                 }
             }
         }
@@ -571,6 +575,7 @@ class DreamStore: NSObject, ObservableObject {
         if answeredQuestions.contains(questionID) { return }
         
         if activeQuestion?.id == questionID {
+            // If the ACTIVE question is answered, show animation
             withAnimation { self.isQuestionSatisfied = true }
             Task {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -583,11 +588,9 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
             }
-        } else if activeQuestion == nil {
-             if let nextQ = self.questions.first(where: { !self.answeredQuestions.contains($0.id) }), nextQ.id == questionID {
-                 self.activeQuestion = nextQ
-                 self.handleSatisfiedQuestion(questionID: questionID)
-             }
+        } else {
+            // If a FUTURE/BACKGROUND question is answered, just mark it done
+            self.answeredQuestions.insert(questionID)
         }
     }
     
@@ -600,13 +603,6 @@ class DreamStore: NSObject, ObservableObject {
                 try? context.save()
             }
         }
-    }
-    
-    private func deleteDreamFromPersistenceOnly(_ dream: Dream) {
-        guard let context = modelContext else { return }
-        let id = dream.id
-        try? context.delete(model: SavedDream.self, where: #Predicate { $0.id == id })
-        try? context.save()
     }
     
     func ignoreErrorAndKeepDream(_ dream: Dream) {

@@ -56,6 +56,32 @@ enum DreamMetric: String, CaseIterable, Identifiable {
         }
     }
     
+    // MARK: - Tips
+    var tips: String {
+        switch self {
+        case .dreams:
+            return "Keep a journal or voice recorder by your bed. Capturing even small fragments immediately upon waking trains your brain to recall more details over time."
+        case .anxiety:
+            return "If you notice high anxiety trends, try a brief mindfulness exercise or deep breathing for 5 minutes before sleep to help calm your subconscious."
+        case .sentiment:
+            return "Your dream sentiment often mirrors your waking life. Identifying negative patterns here can help you pinpoint and address daily stressors."
+        case .lucidity:
+            return "Perform 'reality checks' during the day, like looking at your hands or reading text twice. This habit can carry over into sleep, triggering lucidity."
+        case .vividness:
+            return "To boost vividness, maintain a consistent sleep schedule and avoid screens for an hour before bed to improve melatonin production."
+        case .fatigue:
+            return "Vocal fatigue can indicate stress or overuse. Ensure you stay hydrated throughout the day and practice vocal rest if this score stays high."
+        case .tone:
+            return "Listen to your recordings to hear the emotional nuance in your voice. Often, how you say something reveals more than what you say."
+        case .coherence:
+            return "A structured narrative suggests good cognitive function during REM. If coherence drops, check if your sleep is being fragmented by external noise."
+        case .nightmares:
+            return "Frequent nightmares? Try 'Imagery Rehearsal Therapy': Write down a nightmare but change the ending to something positive, then visualize it before sleep."
+        case .positive:
+            return "End your day by noting three good things that happened. This 'gratitude practice' can prime your mind for more positive dream content."
+        }
+    }
+    
     // MARK: - Learn More Links
     var learnMoreLink: String {
         switch self {
@@ -242,12 +268,11 @@ struct TrendDetailView: View {
         }
     }
     
-    func formattedAggregate(for metric: DreamMetric) -> String {
-        // Calculate based on raw dreams in the timeframe to match WeeklyInsights
+    // New: Calculate numeric value for trend logic
+    func rawAggregateValue(for metric: DreamMetric) -> Double {
         var calendar = Calendar.current
         calendar.firstWeekday = 2
         let now = Date()
-        
         var relevantDreams: [Dream] = []
         
         switch selectedTimeFrame {
@@ -274,11 +299,11 @@ struct TrendDetailView: View {
             }
         }
         
-        if relevantDreams.isEmpty { return "No Data" }
+        if relevantDreams.isEmpty { return 0 }
         
-        if metric == .dreams { return "\(relevantDreams.count)" }
-        if metric == .nightmares { return "\(relevantDreams.filter { $0.extras?.isNightmare ?? false }.count)" }
-        if metric == .positive { return "\(relevantDreams.filter { ($0.extras?.sentimentScore ?? 0) > 60 }.count)" }
+        if metric == .dreams { return Double(relevantDreams.count) }
+        if metric == .nightmares { return Double(relevantDreams.filter { $0.extras?.isNightmare ?? false }.count) }
+        if metric == .positive { return Double(relevantDreams.filter { ($0.extras?.sentimentScore ?? 0) > 60 }.count) }
         
         let total = relevantDreams.reduce(0.0) { sum, dream in
             switch metric {
@@ -291,13 +316,17 @@ struct TrendDetailView: View {
             default: return sum
             }
         }
-        
-        let avg = total / Double(relevantDreams.count)
+        return total / Double(relevantDreams.count)
+    }
+    
+    func formattedAggregate(for metric: DreamMetric) -> String {
+        let val = rawAggregateValue(for: metric)
+        if val == 0 && store.dreams.isEmpty { return "No Data" }
         
         if metric.isPercentage {
-            return String(format: "%.0f", avg) + "%"
+            return String(format: "%.0f", val) + "%"
         } else {
-            return String(format: "%.1f", avg)
+            return metric == .dreams || metric == .nightmares || metric == .positive ? String(format: "%.0f", val) : String(format: "%.1f", val)
         }
     }
     
@@ -305,7 +334,6 @@ struct TrendDetailView: View {
         if metric == .dreams || metric == .nightmares || metric == .positive {
             return "Total"
         }
-        
         switch selectedTimeFrame {
         case .day: return "Total"
         case .week: return "Daily Average"
@@ -399,8 +427,11 @@ struct TrendDetailView: View {
                     } else {
                         standardChartSection
                     }
-                    
+
                     descriptionSection
+                    
+                    tipsSection
+                    
                     Spacer()
                 }
                 .padding(.top)
@@ -505,49 +536,58 @@ struct TrendDetailView: View {
             .padding(.horizontal)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(aggregateLabel.uppercased())
-                    .font(.headline.bold())
-                    .foregroundStyle(Theme.secondary)
-                
-                if metric == .anxiety || metric == .sentiment {
-                    HStack(spacing: 12) {
-                        Text("\(formattedAggregate(for: .anxiety))")
-                            .foregroundStyle(DreamMetric.anxiety.color)
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(aggregateLabel.uppercased())
+                            .font(.headline.bold())
+                            .foregroundStyle(Theme.secondary)
                         
-                        Rectangle()
-                                .fill(Theme.secondary)
-                                .frame(width: 2, height: 28)
-                        
-                        Text("\(formattedAggregate(for: .sentiment))")
-                            .foregroundStyle(DreamMetric.sentiment.color)
-                    }
-                    .font(.system(size: 35, weight: .bold, design: .rounded))
-                } else {
-                    Text(formattedAggregate(for: metric))
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .foregroundStyle(aggregateColor)
-                }
-                
-                if selectedTimeFrame != .year {
-                    Text(timeFrameSubheading)
-                        .font(.headline.bold())
-                        .foregroundStyle(Theme.secondary)
-                        .padding(.top, 4)
-                } else {
-                    Menu {
-                        ForEach(availableYears, id: \.self) { year in
-                            Button(String(year)) { selectedYear = year }
+                        // Main Aggregate Display
+                        if metric == .anxiety || metric == .sentiment {
+                            HStack(spacing: 12) {
+                                Text("\(formattedAggregate(for: .anxiety))")
+                                    .foregroundStyle(DreamMetric.anxiety.color)
+                                
+                                Rectangle()
+                                        .fill(Theme.secondary)
+                                        .frame(width: 2, height: 28)
+                                
+                                Text("\(formattedAggregate(for: .sentiment))")
+                                    .foregroundStyle(DreamMetric.sentiment.color)
+                            }
+                            .font(.system(size: 35, weight: .bold, design: .rounded))
+                        } else {
+                            Text(formattedAggregate(for: metric))
+                                .font(.system(size: 42, weight: .bold, design: .rounded))
+                                .foregroundStyle(aggregateColor)
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(String(selectedYear))
+                        
+                        // Text/Menu Subheading Part
+                        if selectedTimeFrame != .year {
+                            Text(timeFrameSubheading)
+                                .font(.headline.bold())
                                 .foregroundStyle(Theme.secondary)
-                            Image(systemName: "chevron.down")
-                                .foregroundStyle(Theme.accent)
+                        } else {
+                            Menu {
+                                ForEach(availableYears, id: \.self) { year in
+                                    Button(String(year)) { selectedYear = year }
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(String(selectedYear))
+                                        .foregroundStyle(Theme.secondary)
+                                    Image(systemName: "chevron.down")
+                                        .foregroundStyle(Theme.accent)
+                                }
+                                .font(.headline.bold())
+                            }
                         }
-                        .font(.headline.bold())
-                        .padding(.top, 4)
                     }
+                    
+                    Spacer()
+                    
+                    trendIndicatorView
+                        .padding(.horizontal)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -564,6 +604,116 @@ struct TrendDetailView: View {
             } else {
                 lineChartView
             }
+        }
+    }
+    
+    @ViewBuilder
+    var trendIndicatorView: some View {
+        let result = determineTrend(for: metric)
+        if let icon = result.icon {
+            VStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.title3.bold())
+                Text(result.text)
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(result.color)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 12)
+            .glassEffect(.clear.tint(result.color.opacity(0.15)), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+    
+    func determineTrend(for metric: DreamMetric) -> (icon: String?, text: String, color: Color) {
+        let value = rawAggregateValue(for: metric)
+        if value == 0 && store.dreams.isEmpty { return (nil, "", .clear) }
+        
+        switch metric {
+        case .anxiety:
+            // Clinical anxiety scales often treat >10 as mild, >15 as moderate. Scaled 0-100:
+            // < 25: Low/Normal (Good)
+            // 25 - 50: Moderate
+            // > 50: High (Concerning)
+            if value < 25 { return ("hand.thumbsup.fill", "Low Anxiety", .green) }
+            if value < 50 { return ("minus", "Moderate", .yellow) }
+            return ("hand.thumbsdown.fill", "High Anxiety", .orange)
+            
+        case .sentiment:
+            // Sentiment -1 to 1 scaled to 0-100. Neutral is 50.
+            // > 60: Positive
+            // 40 - 60: Neutral
+            // < 40: Negative
+            if value > 60 { return ("hand.thumbsup.fill", "Positive", .green) }
+            if value >= 40 { return ("minus", "Neutral", .yellow) }
+            return ("hand.thumbsdown.fill", "Negative", .orange)
+            
+        case .lucidity:
+            // Lucidity is rare. Even low scores indicate some awareness.
+            // > 50: High Awareness (Excellent)
+            // 20 - 50: Some Awareness (Good)
+            // < 20: Low Awareness (Normal)
+            if value > 50 { return ("star.fill", "High Lucid", .teal) }
+            if value > 20 { return ("star.leadinghalf.filled", "Some Lucid", .green) }
+            return ("moon.zzz.fill", "Normal", .blue)
+            
+        case .vividness:
+            // Vividness 0-100.
+            // > 75: Highly Vivid (Excellent Recall)
+            // 40 - 75: Moderate
+            // < 40: Hazy
+            if value > 75 { return ("eye.fill", "Vivid", .green) }
+            if value > 40 { return ("eye.square", "Moderate", .yellow) }
+            return ("eye.slash", "Hazy", .orange)
+            
+        case .fatigue:
+            // Vocal fatigue.
+            // < 30: Rested
+            // 30 - 60: Normal Use
+            // > 60: Strained/Fatigued
+            if value < 30 { return ("battery.100", "Rested", .green) }
+            if value < 60 { return ("battery.50", "Normal", .yellow) }
+            return ("battery.0", "Fatigued", .orange)
+            
+        case .coherence:
+            // Narrative cohesion.
+            // > 70: Strong Narrative
+            // 40 - 70: Dream Logic
+            // < 40: Fragmented
+            if value > 70 { return ("text.alignleft", "Coherent", .green) }
+            if value > 40 { return ("text.aligncenter", "Dream Logic", .blue) }
+            return ("text.alignright", "Fragmented", .orange)
+            
+        case .nightmares:
+            // Count.
+            // 0: Great
+            // 1-2: Normal/Occasional
+            // > 2: Frequent
+            if value == 0 { return ("shield.fill", "Peaceful", .green) }
+            if value <= 2 { return ("exclamationmark.shield", "Occasional", .yellow) }
+            return ("exclamationmark.triangle.fill", "Frequent", .red)
+            
+        case .positive:
+            // Count.
+            // > 3: Frequent Positivity
+            // 1-3: Occasional
+            // 0: Low
+            if value >= 3 { return ("sun.max.fill", "Frequent", .green) }
+            if value >= 1 { return ("sun.min", "Occasional", .yellow) }
+            return ("cloud", "Low", .gray)
+            
+        case .dreams:
+            // Dream recall frequency (per week/period).
+            // > 5: High Recall
+            // 2 - 5: Moderate
+            // < 2: Low Recall
+            if value >= 5 { return ("book.fill", "High Recall", .green) }
+            if value >= 2 { return ("book.closed", "Moderate", .blue) }
+            return ("moon.zzz", "Low Recall", .gray)
+            
+        default:
+            return (nil, "", .clear)
         }
     }
     
@@ -845,6 +995,23 @@ struct TrendDetailView: View {
             .padding(24)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
             .padding(.horizontal)
+    }
+    
+    var tipsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Tip", systemImage: "chart.line.text.clipboard.fill")
+                .font(.headline)
+                .foregroundStyle(Theme.accent)
+            
+            Text(metric.tips)
+                .font(.body)
+                .foregroundStyle(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(24)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
     }
 }
 
