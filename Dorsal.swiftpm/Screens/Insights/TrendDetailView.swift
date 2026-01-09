@@ -144,6 +144,8 @@ struct TrendDetailView: View {
     @State private var toneReferenceDate: Date = Date()
     @State private var selectedToneYear: Int = Calendar.current.component(.year, from: Date())
     
+    @State private var rawSelectedDate: Date?
+    
     var availableYears: [Int] {
         let years = store.dreams.map { Calendar.current.component(.year, from: $0.date) }
         let uniqueYears = Set(years)
@@ -161,6 +163,91 @@ struct TrendDetailView: View {
             return "Tracks the relationship between stress levels (Anxiety) and emotional tone (Sentiment). High anxiety often correlates with lower sentiment scores."
         }
         return metric.description
+    }
+    
+    // MARK: - Native Selection Helpers
+    
+    struct SelectionData {
+        let date: Date
+        let items: [(name: String, value: Double, color: Color)]
+        
+        var maxValue: Double {
+            items.map(\.value).max() ?? 0
+        }
+    }
+    
+    var chartUnit: Calendar.Component {
+        switch selectedTimeFrame {
+        case .day: return .hour
+        case .week, .month: return .day
+        case .year: return .month
+        }
+    }
+    
+    var selectionData: SelectionData? {
+        guard let rawDate = rawSelectedDate else { return nil }
+        let calendar = Calendar.current
+        
+        let allSeries = groupedSeries
+        let allPoints = allSeries.flatMap { $0.points }
+        
+        let timeThreshold: TimeInterval = {
+            switch selectedTimeFrame {
+            case .day: return 1800
+            case .week, .month: return 43200
+            case .year: return 15 * 86400
+            }
+        }()
+        
+        let sorted = allPoints.sorted { abs($0.date.timeIntervalSince(rawDate)) < abs($1.date.timeIntervalSince(rawDate)) }
+        guard let closest = sorted.first, abs(closest.date.timeIntervalSince(rawDate)) < timeThreshold else { return nil }
+        
+        let targetDate = closest.date
+        
+        var items: [(name: String, value: Double, color: Color)] = []
+        for series in allSeries {
+            if let p = series.points.first(where: { calendar.isDate($0.date, equalTo: targetDate, toGranularity: chartUnit) }) {
+                 items.append((series.metric.rawValue, p.value, series.metric.color))
+            }
+        }
+        
+        return SelectionData(date: targetDate, items: items)
+    }
+    
+    @ViewBuilder
+    func selectionPopover(data: SelectionData) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .glassEffect(.clear.tint(.black.opacity(0.2)), in: RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
+                )
+    
+            VStack(alignment: .leading, spacing: 4) {
+                Text(data.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.8))
+                
+                ForEach(data.items, id: \.name) { item in
+                    HStack(alignment: .center, spacing: 4) {
+                        Circle()
+                            .fill(item.color)
+                            .frame(width: 6, height: 6)
+                        
+                        Text(item.name + ":")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white)
+                        
+                        Text(String(format: "%.0f%%", item.value))
+                            .font(.caption.bold())
+                            .foregroundStyle(.white)
+                    }
+                }
+            }
+            .padding(10)
+        }
+        .fixedSize()
     }
     
     // MARK: - Data Processing
@@ -319,6 +406,7 @@ struct TrendDetailView: View {
         return total / Double(relevantDreams.count)
     }
     
+    // Replaced static formatting with this builder in usage, but kept if needed elsewhere
     func formattedAggregate(for metric: DreamMetric) -> String {
         let val = rawAggregateValue(for: metric)
         if val == 0 && store.dreams.isEmpty { return "No Data" }
@@ -525,6 +613,8 @@ struct TrendDetailView: View {
         }
     }
     
+    // MARK: - Standard Chart Section
+    
     var standardChartSection: some View {
         VStack(spacing: 24) {
             Picker("Time Frame", selection: $selectedTimeFrame) {
@@ -545,19 +635,19 @@ struct TrendDetailView: View {
                         // Main Aggregate Display
                         if metric == .anxiety || metric == .sentiment {
                             HStack(spacing: 12) {
-                                Text("\(formattedAggregate(for: .anxiety))")
+                                animatedStatView(for: .anxiety)
                                     .foregroundStyle(DreamMetric.anxiety.color)
                                 
                                 Rectangle()
                                         .fill(Theme.secondary)
                                         .frame(width: 2, height: 28)
                                 
-                                Text("\(formattedAggregate(for: .sentiment))")
+                                animatedStatView(for: .sentiment)
                                     .foregroundStyle(DreamMetric.sentiment.color)
                             }
                             .font(.system(size: 35, weight: .bold, design: .rounded))
                         } else {
-                            Text(formattedAggregate(for: metric))
+                            animatedStatView(for: metric)
                                 .font(.system(size: 42, weight: .bold, design: .rounded))
                                 .foregroundStyle(aggregateColor)
                         }
@@ -594,16 +684,43 @@ struct TrendDetailView: View {
             .padding(.horizontal)
             .padding(.top, 16)
             
-            // Separate Chart implementations
-            if (metric == .anxiety || metric == .sentiment) && (selectedTimeFrame == .week || selectedTimeFrame == .month) {
-                mentalHealthChart
-            } else if metric == .fatigue && (selectedTimeFrame == .week || selectedTimeFrame == .month) {
-                vocalFatigueChart
-            } else if selectedTimeFrame == .day || selectedTimeFrame == .year {
-                barChartView
-            } else {
-                lineChartView
+            ZStack(alignment: .top) {
+                if (metric == .anxiety || metric == .sentiment) && (selectedTimeFrame == .week || selectedTimeFrame == .month) {
+                    mentalHealthChart
+                } else if metric == .fatigue && (selectedTimeFrame == .week || selectedTimeFrame == .month) {
+                    vocalFatigueChart
+                } else if selectedTimeFrame == .day || selectedTimeFrame == .year {
+                    barChartView
+                } else {
+                    lineChartView
+                }
             }
+        }
+    }
+    
+    @ViewBuilder
+    func animatedStatView(for m: DreamMetric) -> some View {
+        let val = rawAggregateValue(for: m)
+        let hasData = !(val == 0 && store.dreams.isEmpty)
+        
+        if !hasData {
+            Text("No Data")
+                .contentTransition(.identity)
+        } else {
+            // Determine format based on existing logic
+            // if percentage -> %.0f
+            // if dreams/nightmares/positive -> %.0f
+            // else -> %.1f
+            let fraction = (m.isPercentage || m == .dreams || m == .nightmares || m == .positive) ? 0 : 1
+            
+            // Animated Text
+            HStack(spacing: 0) {
+                Text(val, format: .number.precision(.fractionLength(fraction)))
+                    .contentTransition(.numericText())
+                
+                Text(m.unit)
+            }
+            .animation(.snappy, value: val)
         }
     }
     
@@ -724,7 +841,7 @@ struct TrendDetailView: View {
         let sentimentPoints = generatePoints(for: .sentiment)
         let unit: Calendar.Component = selectedTimeFrame == .year ? .month : .day
         
-        return ChartCard {
+        return DetailedChartCard {
             Chart {
                 ForEach(anxietyPoints) { point in
                     AreaMark(
@@ -767,7 +884,11 @@ struct TrendDetailView: View {
                         series: .value("Metric", "Anxiety")
                     )
                     .interpolationMethod(.linear)
-                    .symbol(.circle)
+                    .symbol{
+                        Circle()
+                            .fill(.pink.gradient)
+                            .frame(width: 8, height: 8)
+                    }
                     .foregroundStyle(Color.pink.gradient)
                 }
                 
@@ -778,10 +899,28 @@ struct TrendDetailView: View {
                         series: .value("Metric", "Sentiment")
                     )
                     .interpolationMethod(.linear)
-                    .symbol(.circle)
+                    .symbol{
+                        Circle()
+                            .fill(.green.gradient)
+                            .frame(width: 8, height: 8)
+                    }
                     .foregroundStyle(Color.green.gradient)
                 }
+                
+                if let data = selectionData {
+                    RuleMark(
+                        x: .value("Selected", data.date, unit: unit),
+                        yStart: .value("", 0),
+                        yEnd: .value("", data.maxValue)
+                    )
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
+                    .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                        selectionPopover(data: data)
+                    }
+                }
             }
+            .chartXSelection(value: $rawSelectedDate)
             .chartYScale(domain: 0...100)
             .chartXScale(domain: xAxisDomain)
             .chartYAxis { AxisMarks { _ in AxisGridLine(); AxisTick(); AxisValueLabel() } }
@@ -811,7 +950,7 @@ struct TrendDetailView: View {
         let points = generatePoints(for: .fatigue)
         let unit: Calendar.Component = selectedTimeFrame == .year ? .month : .day
         
-        return ChartCard {
+        return DetailedChartCard {
             Chart {
                 ForEach(points) { point in
                     AreaMark(
@@ -834,9 +973,27 @@ struct TrendDetailView: View {
                     )
                     .foregroundStyle(.red.gradient)
                     .interpolationMethod(.linear)
-                    .symbol(.circle)
+                    .symbol{
+                        Circle()
+                            .fill(.red.gradient)
+                            .frame(width: 8, height: 8)
+                    }
+                }
+                
+                if let data = selectionData {
+                    RuleMark(
+                        x: .value("Selected", data.date, unit: unit),
+                        yStart: .value("", 0),
+                        yEnd: .value("", data.maxValue)
+                    )
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
+                    .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                        selectionPopover(data: data)
+                    }
                 }
             }
+            .chartXSelection(value: $rawSelectedDate)
             .chartYScale(domain: 0...100)
             .chartXScale(domain: xAxisDomain)
             .chartYAxis { AxisMarks { _ in AxisGridLine(); AxisTick(); AxisValueLabel() } }
@@ -863,7 +1020,7 @@ struct TrendDetailView: View {
     }
     
     var barChartView: some View {
-        ChartCard {
+        DetailedChartCard {
             Chart(groupedSeries) { series in
                 ForEach(series.points) { point in
                     BarMark(
@@ -872,7 +1029,21 @@ struct TrendDetailView: View {
                     )
                     .foregroundStyle(series.metric.color.gradient)
                 }
+                
+                if let data = selectionData {
+                    RuleMark(
+                        x: .value("Selected", data.date, unit: selectedTimeFrame == .year ? .month : .hour),
+                        yStart: .value("", 0),
+                        yEnd: .value("", data.maxValue)
+                    )
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
+                    .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                        selectionPopover(data: data)
+                    }
+                }
             }
+            .chartXSelection(value: $rawSelectedDate)
             .chartXScale(domain: xAxisDomain)
             .chartYScale(domain: metric.isPercentage ? .automatic(includesZero: true) : .automatic)
             .chartYAxis {
@@ -907,7 +1078,7 @@ struct TrendDetailView: View {
     }
     
     var lineChartView: some View {
-        ChartCard {
+        DetailedChartCard {
             Chart(groupedSeries) { series in
                 ForEach(series.points) { point in
                     let unit: Calendar.Component = selectedTimeFrame == .year ? .month : .day
@@ -936,10 +1107,28 @@ struct TrendDetailView: View {
                         series: .value("Metric", series.metric.id)
                     )
                     .interpolationMethod(.linear)
-                    .symbol(.circle)
+                    .symbol {
+                        Circle()
+                            .fill(series.metric.color.gradient)
+                            .frame(width: 8, height: 8)
+                    }
                     .foregroundStyle(series.metric.color.gradient)
                 }
+                
+                if let data = selectionData {
+                    RuleMark(
+                        x: .value("Selected", data.date, unit: selectedTimeFrame == .year ? .month : .day),
+                        yStart: .value("", 0),
+                        yEnd: .value("", data.maxValue)
+                    )
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
+                    .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                        selectionPopover(data: data)
+                    }
+                }
             }
+            .chartXSelection(value: $rawSelectedDate)
             .chartYScale(domain: 0...100)
             .chartXScale(domain: xAxisDomain)
             .chartYAxis {

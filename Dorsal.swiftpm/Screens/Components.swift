@@ -297,7 +297,7 @@ struct StatCard: View {
     }
 }
 
-struct ChartCard<Content: View, Caption: View>: View {
+struct PreviewChartCard<Content: View, Caption: View>: View {
     @ViewBuilder var content: Content
     @ViewBuilder var caption: Caption
     
@@ -307,7 +307,20 @@ struct ChartCard<Content: View, Caption: View>: View {
             caption
         }
         .padding(20)
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 20))
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+struct DetailedChartCard<Content: View, Caption: View>: View {
+    @ViewBuilder var content: Content
+    @ViewBuilder var caption: Caption
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content
+            caption
+        }
+        .padding(20)
     }
 }
 
@@ -341,6 +354,38 @@ struct RingView: View {
             .padding(20)
         }
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+struct ProgressBarView: View {
+    let value: Double
+    let total: Double
+    let color: Color
+    
+    @State private var progress: Double = 0
+    
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(color.opacity(0.2))
+                
+                Capsule()
+                    .fill(color)
+                    .frame(width: max(0, min(proxy.size.width * (progress / total), proxy.size.width)))
+            }
+        }
+        .frame(height: 8)
+        .onAppear {
+            withAnimation(.easeOut(duration: 1.0)) {
+                progress = value
+            }
+        }
+        .onChange(of: value) {
+            withAnimation(.easeOut(duration: 1.0)) {
+                progress = value
+            }
+        }
     }
 }
 

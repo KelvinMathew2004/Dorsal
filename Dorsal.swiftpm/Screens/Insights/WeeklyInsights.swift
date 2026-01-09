@@ -210,7 +210,7 @@ struct WeeklyInsightsView: View {
                 .padding(.horizontal)
             
             NavigationLink(value: DreamMetric.anxiety) {
-                ChartCard(content: {
+                PreviewChartCard(content: {
                     Chart {
                         ForEach(data) { point in
                             // 1. ANXIETY AREA (Background)
@@ -252,7 +252,11 @@ struct WeeklyInsightsView: View {
                                 series: .value("Metric", "Anxiety")
                             )
                             .interpolationMethod(.linear)
-                            .symbol(.circle)
+                            .symbol{
+                                Circle()
+                                    .fill(.pink.gradient)
+                                    .frame(width: 8, height: 8)
+                            }
                             .foregroundStyle(Color.pink.gradient)
 
                             // 4. SENTIMENT LINE (Foreground)
@@ -262,7 +266,11 @@ struct WeeklyInsightsView: View {
                                 series: .value("Metric", "Sentiment")
                             )
                             .interpolationMethod(.linear)
-                            .symbol(.circle)
+                            .symbol{
+                                Circle()
+                                    .fill(.green.gradient)
+                                    .frame(width: 8, height: 8)
+                            }
                             .foregroundStyle(Color.green.gradient)
                         }
                     }
@@ -326,7 +334,7 @@ struct WeeklyInsightsView: View {
                 .padding(.horizontal)
             
             NavigationLink(value: DreamMetric.fatigue) {
-                ChartCard(content: {
+                PreviewChartCard(content: {
                     Chart {
                         ForEach(data) { point in
                             
@@ -351,7 +359,11 @@ struct WeeklyInsightsView: View {
                             )
                             .foregroundStyle(.red.gradient)
                             .interpolationMethod(.linear)
-                            .symbol(.circle)
+                            .symbol{
+                                Circle()
+                                    .fill(.red.gradient)
+                                    .frame(width: 8, height: 8)
+                            }
                         }
                     }
                     .chartXScale(domain: xAxisDomain) // Force X-Axis to show full fixed week

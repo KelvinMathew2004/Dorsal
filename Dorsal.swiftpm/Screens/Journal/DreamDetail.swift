@@ -148,10 +148,7 @@ struct DreamDetailView: View {
                                         
                                         Text("\(fatigue)%").font(.title3.bold()).foregroundStyle(.white)
                                         
-                                        ProgressView(value: Double(fatigue), total: 100)
-                                            .progressViewStyle(LinearProgressViewStyle(tint: .red))
-                                            .frame(height: 8)
-                                            .scaleEffect(x: 1, y: 2, anchor: .center)
+                                        ProgressBarView(value: Double(fatigue), total: 100, color: .red)
                                     }
                                     .padding(20)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
