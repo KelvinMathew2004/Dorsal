@@ -16,7 +16,7 @@ class DreamAnalyzer {
             """)
     }
     
-    func prewarm() async {
+    func prewarmModel() {
         session.prewarm()
     }
     
@@ -233,5 +233,41 @@ class DreamAnalyzer {
         response = await ensureWeeklyInsights(current: response, context: dreamSummaries)
         
         return response
+    }
+        
+    func DreamQuestion(transcript: String, analysis: String, question: String) async throws -> String {
+        let prompt = """
+        Use the provided transcript and analysis context to answer the user's question in short paragraphs and concise pointers.
+        
+        Transcript:
+        "\(transcript)"
+        
+        Analysis Context:
+        "\(analysis)"
+        
+        User Question:
+        "\(question)"
+        """
+        
+        let response = try await session.respond(to: prompt)
+        return response.content
+    }
+    
+    func DreamsQuestion(summaries: String, analysis: String, question: String) async throws -> String {
+        let prompt = """
+        Use the provided summaries and context (previous analysis) to answer the question.
+        
+        Summaries:
+        "\(summaries)"
+        
+        Analysis:
+        "\(analysis)"
+        
+        Question:
+        "\(question)"
+        """
+        
+        let response = try await session.respond(to: prompt)
+        return response.content
     }
 }

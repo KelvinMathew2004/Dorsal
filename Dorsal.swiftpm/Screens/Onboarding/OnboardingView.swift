@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import Speech
 import PhotosUI
+import UserNotifications
 
 // MARK: - Main Onboarding Container
 
@@ -69,7 +70,7 @@ struct OnboardingView: View {
                             .transition(.warpContent)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: 600, maxHeight: .infinity) // Limits width on iPad, fills width on iPhone
                 // Use .id to force transition when step changes
                 .id(currentStep)
             }
@@ -165,14 +166,7 @@ struct WelcomeIntroView: View {
             
             Spacer()
             
-            Button(action: onNext) {
-                Text("Get Started")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.glass)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
+            OnboardingActionButton(title: "Get Started", action: onNext)
         }
     }
 }
@@ -241,15 +235,11 @@ struct ProfileSetupView: View {
             Spacer()
             
             // Continue Button
-            Button(action: onNext) {
-                Text("Continue")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.glass)
-            .disabled(store.firstName.isEmpty || store.lastName.isEmpty)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 20)
+            OnboardingActionButton(
+                title: "Continue",
+                isDisabled: store.firstName.isEmpty || store.lastName.isEmpty,
+                action: onNext
+            )
         }
     }
 }
@@ -289,69 +279,64 @@ struct PermissionsView: View {
             
             Spacer()
             
-            // Permission Buttons
-            VStack(spacing: 16) {
-                PermissionRow(
-                    title: "Microphone Access",
-                    icon: "mic.fill",
-                    isGranted: store.hasMicAccess,
-                    action: {
-                        Task {
-                            if await AVAudioApplication.requestRecordPermission() {
-                                await MainActor.run {
-                                    store.requestMicrophoneAccess()
-                                }
-                            } else {
-                                if let url = URL(string: UIApplication.openSettingsURLString) {
-                                    await UIApplication.shared.open(url)
-                                }
-                            }
-                        }
-                    }
-                )
-                
-                PermissionRow(
-                    title: "Speech Recognition",
-                    icon: "text.bubble.fill",
-                    isGranted: store.hasSpeechAccess,
-                    action: {
-                        SFSpeechRecognizer.requestAuthorization { authStatus in
+            VStack(spacing: 24) {
+                // Permission Buttons
+                VStack(spacing: 16) {
+                    PermissionRow(
+                        title: "Microphone Access",
+                        icon: "mic.fill",
+                        isGranted: store.hasMicAccess,
+                        action: {
                             Task {
-                                await MainActor.run {
-                                    switch authStatus {
-                                    case .authorized:
-                                        store.requestSpeechAccess()
-                                    case .denied, .restricted, .notDetermined:
-                                        if let url = URL(string: UIApplication.openSettingsURLString) {
-                                            UIApplication.shared.open(url)
-                                        }
-                                    @unknown default:
-                                        break
+                                if await AVAudioApplication.requestRecordPermission() {
+                                    await MainActor.run {
+                                        store.requestMicrophoneAccess()
+                                    }
+                                } else {
+                                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                                        await UIApplication.shared.open(url)
                                     }
                                 }
                             }
                         }
-                    }
-                )
-            }
-            .padding(.horizontal, 24)
-            
-            // Continue Button
-            if store.hasMicAccess && store.hasSpeechAccess {
-                Button(action: onNext) {
-                    Text("Continue")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 44)
+                    )
+                    
+                    PermissionRow(
+                        title: "Speech Recognition",
+                        icon: "text.bubble.fill",
+                        isGranted: store.hasSpeechAccess,
+                        action: {
+                            SFSpeechRecognizer.requestAuthorization { authStatus in
+                                Task {
+                                    await MainActor.run {
+                                        switch authStatus {
+                                        case .authorized:
+                                            store.requestSpeechAccess()
+                                        case .denied, .restricted, .notDetermined:
+                                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                                UIApplication.shared.open(url)
+                                            }
+                                        @unknown default:
+                                            break
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    )
                 }
-                .buttonStyle(.glass)
                 .padding(.horizontal, 24)
-                .padding(.bottom, 20)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
-                 Text("Please enable permissions to continue")
-                    .font(.caption)
-                    .foregroundStyle(.gray)
-                    .padding(.bottom, 40)
+                
+                // Continue Button
+                if store.hasMicAccess && store.hasSpeechAccess {
+                    OnboardingActionButton(title: "Continue", action: onNext)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else {
+                     Text("Please enable permissions to continue")
+                        .font(.caption)
+                        .foregroundStyle(.gray)
+                        .padding(.bottom, 40) // Standardized bottom padding
+                }
             }
         }
         .padding(.vertical)
@@ -374,7 +359,7 @@ struct NotificationOnboardingView: View {
         return calendar.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
     }()
     @State private var animate = false
-    @State private var showTimePicker = false
+    @Namespace private var namespace
     
     var body: some View {
         VStack(spacing: 32) {
@@ -403,108 +388,96 @@ struct NotificationOnboardingView: View {
                     .padding(.horizontal, 32)
             }
             
-            // Time Picker Display (Tap to open)
-            // Disabled if notifications are not yet enabled
-            Button(action: {
-                if store.hasNotificationAccess {
-                    showTimePicker.toggle()
-                }
-            }) {
-                HStack {
-                    Text("Reminder Time")
-                        .foregroundStyle(.white.opacity(0.8))
-                    Spacer()
-                    Text(selectedTime.formatted(date: .omitted, time: .shortened))
-                        .fontWeight(.semibold)
-                        .foregroundStyle(store.hasNotificationAccess ? .white : .gray)
-                }
-                .padding()
-                .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
-            }
-            .disabled(!store.hasNotificationAccess)
-            .padding(.horizontal, 24)
-            .sheet(isPresented: $showTimePicker) {
-                VStack {
-                    DatePicker("Select Time", selection: $selectedTime, displayedComponents: .hourAndMinute)
-                        .datePickerStyle(.wheel)
-                        .labelsHidden()
-                        .padding()
-                    
-                    Button("Done") {
-                        showTimePicker = false
-                    }
-                    .buttonStyle(.glass)
-                    .padding()
-                }
-                .presentationDetents([.height(300)])
-            }
-            
             Spacer()
             
-            // Action Buttons
-            VStack(spacing: 16) {
-                PermissionRow(
-                    title: "Notifications",
-                    icon: "bell.fill",
-                    isGranted: store.hasNotificationAccess,
-                    action: {
-                        store.reminderTime = selectedTime.timeIntervalSince1970
-                        let center = UNUserNotificationCenter.current()
-                        
-                        Task {
-                            // Check existing settings
-                            let settings = await center.notificationSettings()
-                            let status = settings.authorizationStatus
+            // Bottom Controls Group
+            VStack(spacing: 24) {
+                GlassEffectContainer {
+                    if store.hasNotificationAccess {
+                        // Time Picker
+                        VStack(spacing: 8) {
+                            Text("Reminder Time")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .fontWeight(.medium)
+                                .frame(maxWidth: .infinity)
                             
-                            if status == .denied {
-                                await MainActor.run {
-                                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
-                                        UIApplication.shared.open(url)
-                                    }
-                                }
-                            } else if status == .notDetermined {
-                                do {
-                                    let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-                                    await MainActor.run {
-                                        if granted {
+                            DatePicker("Select Time", selection: $selectedTime, displayedComponents: .hourAndMinute)
+                                .datePickerStyle(.wheel)
+                                .labelsHidden()
+                                .colorScheme(.dark)
+                                .frame(maxHeight: 100)
+                                .clipped()
+                                .frame(maxWidth: .infinity)
+                        }
+                        .padding(.vertical, 16)
+                        .glassEffect(.clear.tint(Color.orange.opacity(0.1)), in: RoundedRectangle(cornerRadius: 24))
+                        .glassEffectID("picker", in: namespace)
+                    } else {
+                        // Permission Row (wrapped as requested)
+                        PermissionRow(
+                            title: "Notifications",
+                            icon: "bell.fill",
+                            isGranted: store.hasNotificationAccess,
+                            action: {
+                                store.reminderTime = selectedTime.timeIntervalSince1970
+                                let center = UNUserNotificationCenter.current()
+                                
+                                Task {
+                                    // Check existing settings
+                                    let settings = await center.notificationSettings()
+                                    let status = settings.authorizationStatus
+                                    
+                                    if status == .denied {
+                                        await MainActor.run {
+                                            if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                                                UIApplication.shared.open(url)
+                                            }
+                                        }
+                                    } else if status == .notDetermined {
+                                        do {
+                                            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                                            await MainActor.run {
+                                                if granted {
+                                                    store.requestNotificationAccess()
+                                                }
+                                            }
+                                        } catch {
+                                            print("Error requesting notification authorization: \(error)")
+                                        }
+                                    } else {
+                                        // Already authorized or provisional
+                                        await MainActor.run {
                                             store.requestNotificationAccess()
                                         }
                                     }
-                                } catch {
-                                    print("Error requesting notification authorization: \(error)")
-                                }
-                            } else {
-                                // Already authorized or provisional
-                                await MainActor.run {
-                                    store.requestNotificationAccess()
                                 }
                             }
+                        )
+                        .glassEffectID("permission", in: namespace)
+                    }
+                }
+                .padding(.horizontal, 24)
+    
+                OnboardingActionButton(
+                    title: store.hasNotificationAccess ? "Continue" : "Skip for Now",
+                    action: {
+                        store.reminderTime = selectedTime.timeIntervalSince1970
+                        if store.hasNotificationAccess {
+                            store.scheduleDailyReminder()
                         }
+                        onNext()
                     }
                 )
-    
-                // Continue Button (Moves to All Set)
-                Button(action: {
-                    store.reminderTime = selectedTime.timeIntervalSince1970
-                    if store.hasNotificationAccess {
-                        store.scheduleDailyReminder()
-                    }
-                    onNext()
-                }) {
-                    Text(store.hasNotificationAccess ? "Continue" : "Skip for Now")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                }
-                .buttonStyle(.glass)
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 20)
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 animate = true
             }
         }
+        // Ensure smooth transition when swapping layouts
+        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: store.hasNotificationAccess)
     }
 }
 
@@ -542,16 +515,9 @@ struct AllSetView: View {
             
             Spacer()
             
-            Button(action: {
+            OnboardingActionButton(title: "Start Dreaming", action: {
                 store.completeOnboarding()
-            }) {
-                Text("Start Dreaming")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.glass)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
+            })
         }
         .onAppear {
             appear = true
@@ -563,6 +529,25 @@ struct AllSetView: View {
 }
 
 // MARK: - Reusable Components
+
+struct OnboardingActionButton: View {
+    let title: String
+    var isDisabled: Bool = false
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.glass)
+        .colorScheme(.dark)
+        .disabled(isDisabled)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 40)
+    }
+}
 
 struct CustomTextField: View {
     let placeholder: String

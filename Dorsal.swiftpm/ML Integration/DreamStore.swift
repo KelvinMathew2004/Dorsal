@@ -785,6 +785,12 @@ class DreamStore: NSObject, ObservableObject {
                 
             } catch {
                 print("Streaming failed: \(error)")
+                
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                    dreams[index].analysisError = error.localizedDescription
+                    persistDream(dreams[index])
+                }
+                
                 isProcessing = false
             }
         }

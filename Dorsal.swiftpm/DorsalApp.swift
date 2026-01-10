@@ -32,7 +32,7 @@ struct ContentView: View {
             Tab(value: 0) {
                 RecordView(store: store)
             } label: {
-                Label("Record", systemImage: "sparkles")
+                Label("Record", systemImage: "zzz")
                     .labelStyle(iPhoneIconOnlyLabelStyle())
             }
             
@@ -61,7 +61,7 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             store.setContext(modelContext)
-            Task { await DreamAnalyzer.shared.prewarm() }
+            Task { await DreamAnalyzer.shared.prewarmModel() }
         }
     }
 }

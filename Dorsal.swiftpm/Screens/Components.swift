@@ -441,13 +441,25 @@ struct ShimmerEffect: ViewModifier {
             .overlay(
                 GeometryReader { geo in
                     Rectangle()
-                        .fill(LinearGradient(colors: [.clear, .white.opacity(0.1), .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .fill(
+                            LinearGradient(
+                                colors: [.clear, .white, .clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
                         .rotationEffect(.degrees(30))
+                        .scaleEffect(1.4) // Scale up so rotation doesn't un-cover the content
                         .offset(x: -geo.size.width + (geo.size.width * 2 * phase))
                 }
             )
             .mask(content)
-            .onAppear { withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) { phase = 1 } }
+            .onAppear {
+                phase = 0
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    phase = 1
+                }
+            }
     }
 }
 

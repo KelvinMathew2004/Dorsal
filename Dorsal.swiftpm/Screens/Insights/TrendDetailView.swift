@@ -535,9 +535,11 @@ struct TrendDetailView: View {
             HStack {
                 Button { moveWeek(by: -1) } label: {
                     Image(systemName: "chevron.left")
+                        .foregroundStyle(.white.opacity(0.65))
+                        .fontWeight(.bold)
                 }
                 .buttonStyle(.glassProminent)
-                .tint(Theme.secondary)
+                .tint(metric.color.opacity(0.7))
                 Spacer()
                 Text("\(toneWeekStart.formatted(.dateTime.month().day())) - \(toneWeekEnd.formatted(.dateTime.month().day()))")
                     .font(.headline)
@@ -545,9 +547,11 @@ struct TrendDetailView: View {
                 Spacer()
                 Button { moveWeek(by: 1) } label: {
                     Image(systemName: "chevron.right")
+                        .foregroundStyle(.white.opacity(0.65))
+                        .fontWeight(.bold)
                 }
                 .buttonStyle(.glassProminent)
-                .tint(Theme.secondary)
+                .tint(metric.color.opacity(0.7))
                 Spacer()
                 Menu {
                     ForEach(availableYears, id: \.self) { year in
