@@ -34,7 +34,8 @@ struct StarryBackground: View {
                 
                 ZStack {
                     // Static & Pulsing Stars
-                    ForEach(0..<80, id: \.self) { _ in
+                    // Increased star count from 80 to 200
+                    ForEach(0..<200, id: \.self) { _ in
                         PulsingStar(containerSize: proxy.size)
                     }
                     

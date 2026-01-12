@@ -29,35 +29,23 @@ struct RecordView: View {
     var body: some View {
         NavigationStack(path: $store.navigationPath) {
             ZStack {
-                // LAYER 1: Background
+                // LAYER 1: Background - SwiftUI Star System (Always Visible)
                 StarryBackground()
                 
-                // LAYER 2: Visualizer (Background Layer - TOP ALIGNED)
-                if store.isRecording {
-                    AuroraVisualizer(
-                        power: store.audioPower,
-                        isPaused: store.isPaused,
-                        // Use Purple/Pink as requested
-                        color: Color(red: 0.8, green: 0.2, blue: 0.9)
-                    )
-                    .mask(
-                        LinearGradient(
-                            stops: [
-                                .init(color: .black, location: 0.0), // Solid at top
-                                .init(color: .black, location: 0.4),
-                                .init(color: .clear, location: 1.0)  // Fade out at bottom
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    // FORCE TOP ALIGNMENT
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-                    .zIndex(0)
-                }
+                // LAYER 2: Visualizer (Always Visible, Transparent Sky, Opaque Water)
+                AuroraVisualizer(
+                    power: store.isRecording ? store.audioPower : 0,
+                    isPaused: store.isPaused,
+                    isRecording: store.isRecording, // Pass recording state for enter/exit animation
+                    // Use Default/Original Shader color (Pale Blue/White) to allow rainbow hues
+                    color: Color(red: 0.84, green: 0.84, blue: 0.9)
+                )
+                // FORCE TOP ALIGNMENT and Full Screen
+                .frame(maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .transition(.opacity)
+                .zIndex(0)
                 
                 // LAYER 3: Main UI (Foreground)
                 VStack {
@@ -184,7 +172,7 @@ struct RecordView: View {
                             }
                         }
                     }
-                    .padding(.bottom, (store.isRecording && !store.isPaused) ? 120 : 80)
+                    .padding(.bottom, (store.isRecording && !store.isPaused) ? 80 : 40)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isRecording)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isPaused)
                 }
