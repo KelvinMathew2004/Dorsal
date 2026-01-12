@@ -9,17 +9,27 @@
       "hidden" : false,
       "layers" : [
         {
-          "fill" : {
-            "automatic-gradient" : "srgb:1.00000,0.79216,0.27059,1.00000"
-          },
-          "glass" : true,
-          "image-name" : "image.png",
-          "name" : "image",
+          "fill-specializations" : [
+            {
+              "value" : {
+                "automatic-gradient" : "srgb:1.00000,0.79216,0.00000,1.00000"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "automatic-gradient" : "srgb:1.00000,0.79216,0.00000,1.00000"
+              }
+            }
+          ],
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_49c3ok49c3ok49c3-Photoroom.png",
+          "name" : "Gemini_Generated_Image_49c3ok49c3ok49c3-Photoroom",
           "position" : {
-            "scale" : 0.6,
+            "scale" : 1.2,
             "translation-in-points" : [
-              3.900000000000091,
-              1.2000000000000455
+              0,
+              0
             ]
           }
         }

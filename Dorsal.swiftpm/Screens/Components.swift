@@ -158,7 +158,7 @@ struct ShootingStar: View {
             )
             .onAppear {
                 // Linear animation ensures constant speed, no pause at end
-                withAnimation(.linear(duration: 4.0)) {
+                withAnimation(.linear(duration: 2.0)) {
                     progress = 1.0
                 }
             }

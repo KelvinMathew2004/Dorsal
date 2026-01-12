@@ -14,8 +14,6 @@ struct RecordView: View {
     // Greeting logic based on time of day
     private var greetingData: (text: String, icon: String) {
         let hour = Calendar.current.component(.hour, from: Date())
-        
-        // Use the computed first name from the store
         let name = store.firstName
         
         switch hour {
@@ -31,9 +29,43 @@ struct RecordView: View {
     var body: some View {
         NavigationStack(path: $store.navigationPath) {
             ZStack {
-                // Background
+                // LAYER 1: Background
                 StarryBackground()
                 
+                // LAYER 2: Visualizer (Background Layer - TOP ALIGNED)
+                // Positioned to fill the screen so waves can rise freely behind the UI
+                if store.isRecording {
+                    VStack {
+                        AuroraVisualizer(
+                            power: store.audioPower,
+                            isPaused: store.isPaused,
+                            color: Theme.accent
+                        )
+                        // INCREASED HEIGHT: Covers top 750 points (almost full screen on many phones)
+                        // This ensures it's "much bigger"
+                        .frame(height: 750)
+                        .mask(
+                            // Less aggressive fade out
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .black, location: 0.0),
+                                    .init(color: .black, location: 0.7), // Stay solid longer
+                                    .init(color: .clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                        
+                        Spacer()
+                    }
+                    .zIndex(0)
+                }
+                
+                // LAYER 3: Main UI (Foreground)
                 VStack {
                     Spacer()
                     
@@ -88,15 +120,6 @@ struct RecordView: View {
                     }
                     
                     Spacer()
-                    
-                    // MARK: - Visualization
-                    if store.isRecording {
-                        AudioVisualizer(power: store.audioPower, isPaused: store.isPaused)
-                            .frame(height: 120) // Slightly taller frame to accommodate jumps
-                            .padding(.bottom, 40)
-                            .opacity(store.isPaused ? 0.5 : 1.0)
-                            .animation(.linear(duration: 0.1), value: store.audioPower)
-                    }
                     
                     // MARK: - Controls
                     GlassEffectContainer(spacing: 0) {
@@ -168,6 +191,7 @@ struct RecordView: View {
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isRecording)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isPaused)
                 }
+                .zIndex(1) // Ensure UI is ON TOP
             }
             .navigationTitle("Record")
             .navigationDestination(for: Dream.self) { dream in
@@ -304,34 +328,5 @@ struct RecommendationPill: View {
             .padding(.vertical, 8)
             .glassEffect(.clear.tint(Theme.secondary.opacity(0.2)))
             .fixedSize(horizontal: true, vertical: false)
-    }
-}
-
-struct AudioVisualizer: View {
-    var power: Float
-    var isPaused: Bool
-    let bars = 25
-    
-    var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<bars, id: \.self) { index in
-                let gateThreshold: Float = 0.05
-                // Force gatedPower to 0 if paused
-                let rawGatedPower = power < gateThreshold ? 0 : power
-                let gatedPower = isPaused ? 0 : rawGatedPower
-                
-                let normalizedPower = CGFloat(gatedPower)
-                let sensitivePower = gatedPower > 0 ? pow(normalizedPower, 0.6) : 0
-                let variation = gatedPower > 0 ? CGFloat.random(in: 0.5...1.2) : 1.0
-                let dynamicHeight = (sensitivePower * 100 * variation)
-                let height = 12 + dynamicHeight
-                
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Theme.accent.gradient)
-                    .frame(width: 6, height: height)
-                    .shadow(color: Theme.accent.opacity(0.5), radius: 5, x: 0, y: 0)
-                    .animation(.easeOut(duration: 0.15), value: power)
-            }
-        }
     }
 }

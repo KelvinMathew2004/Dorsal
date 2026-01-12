@@ -33,6 +33,7 @@ struct ContentView: View {
                 RecordView(store: store)
             } label: {
                 Label("Record", systemImage: "zzz")
+                    .symbolColorRenderingMode(.gradient)
                     .labelStyle(iPhoneIconOnlyLabelStyle())
             }
             
@@ -40,13 +41,15 @@ struct ContentView: View {
                 HistoryView(store: store)
             } label: {
                 Label("Journal", systemImage: "book.pages.fill")
+                    .symbolColorRenderingMode(.gradient)
                     .labelStyle(iPhoneIconOnlyLabelStyle())
             }
             
             Tab(value: 2) {
                 WeeklyInsightsView(store: store)
             } label: {
-                Label("Insights", systemImage: "chart.xyaxis.line")
+                Label("Insights", systemImage: "chart.bar.xaxis.ascending.badge.clock")
+                    .symbolColorRenderingMode(.gradient)
                     .labelStyle(iPhoneIconOnlyLabelStyle())
             }
             
@@ -54,6 +57,7 @@ struct ContentView: View {
                 ProfileView(store: store)
             } label: {
                 Label("Profile", systemImage: "person.crop.circle")
+                    .symbolColorRenderingMode(.gradient)
                     .labelStyle(iPhoneIconOnlyLabelStyle())
             }
         }
