@@ -33,35 +33,29 @@ struct RecordView: View {
                 StarryBackground()
                 
                 // LAYER 2: Visualizer (Background Layer - TOP ALIGNED)
-                // Positioned to fill the screen so waves can rise freely behind the UI
                 if store.isRecording {
-                    VStack {
-                        AuroraVisualizer(
-                            power: store.audioPower,
-                            isPaused: store.isPaused,
-                            color: Theme.accent
+                    AuroraVisualizer(
+                        power: store.audioPower,
+                        isPaused: store.isPaused,
+                        // Use Purple/Pink as requested
+                        color: Color(red: 0.8, green: 0.2, blue: 0.9)
+                    )
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0.0), // Solid at top
+                                .init(color: .black, location: 0.4),
+                                .init(color: .clear, location: 1.0)  // Fade out at bottom
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
-                        // INCREASED HEIGHT: Covers top 750 points (almost full screen on many phones)
-                        // This ensures it's "much bigger"
-                        .frame(height: 750)
-                        .mask(
-                            // Less aggressive fade out
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .black, location: 0.0),
-                                    .init(color: .black, location: 0.7), // Stay solid longer
-                                    .init(color: .clear, location: 1.0)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .ignoresSafeArea()
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
-                        
-                        Spacer()
-                    }
+                    )
+                    // FORCE TOP ALIGNMENT
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
                     .zIndex(0)
                 }
                 
@@ -90,7 +84,7 @@ struct RecordView: View {
                             }
                             .padding(24)
                             .frame(maxWidth: .infinity)
-                            .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 24))
+                            .glassEffect(.clear.tint(Color.black.opacity(0.5)), in: RoundedRectangle(cornerRadius: 24))
                             .padding(.horizontal, 30)
                             .transition(.scale.combined(with: .opacity))
                         } else {
@@ -142,34 +136,37 @@ struct RecordView: View {
                             }
                             
                             // 2. Record/Stop
-                            Button {
-                                handleRecordButtonTap()
-                            } label: {
-                                Image(systemName: store.isRecording ? "stop.fill" : "mic.fill")
-                                    .contentTransition(.symbolEffect(.replace))
-                                    .padding(15)
-                            }
-                            .font(.title)
-                            .foregroundStyle(.white)
-                            .frame(width: 80, height: 80)
-                            .background {
+                            ZStack {
+                                // Ripple Layer (Behind Button)
                                 if store.isRecording && !store.isPaused {
                                     Circle()
                                         .stroke(.red.opacity(0.5), lineWidth: 2)
-                                        .frame(width: 120, height: 120)
-                                        .scaleEffect(showRipple ? 1.5 : 1.0)
+                                        .frame(width: 80, height: 80)
+                                        .scaleEffect(showRipple ? 2.5 : 1.0)
                                         .opacity(showRipple ? 0 : 1)
                                         .onAppear {
+                                            showRipple = false
                                             withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
                                                 showRipple = true
                                             }
                                         }
                                 }
+                                
+                                Button {
+                                    handleRecordButtonTap()
+                                } label: {
+                                    Image(systemName: store.isRecording ? "stop.fill" : "mic.fill")
+                                        .contentTransition(.symbolEffect(.replace))
+                                        .padding(15)
+                                }
+                                .font(.title)
+                                .foregroundStyle(.white)
+                                .frame(width: 80, height: 80)
+                                .contentShape(Circle())
+                                .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : Theme.accent.opacity(0.8)), in: Circle())
+                                .disabled(store.isProcessing)
+                                .glassEffectID("recordButton", in: namespace)
                             }
-                            .contentShape(Circle())
-                            .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : Theme.accent.opacity(0.8)), in: Circle())
-                            .disabled(store.isProcessing)
-                            .glassEffectID("recordButton", in: namespace)
                             
                             // 3. Cancel
                             if store.isRecording {
@@ -187,7 +184,7 @@ struct RecordView: View {
                             }
                         }
                     }
-                    .padding(.bottom, (store.isRecording && !store.isPaused) ? 80 : 40)
+                    .padding(.bottom, (store.isRecording && !store.isPaused) ? 120 : 80)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isRecording)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isPaused)
                 }
@@ -297,7 +294,7 @@ private struct QuestionCard: View {
         .padding(24)
         .frame(maxWidth: .infinity)
         .glassEffect(
-            .clear.tint(isSatisfied ? Color.green.opacity(0.15) : .clear),
+            .clear.tint(isSatisfied ? Color.green.opacity(0.15) : Color.black.opacity(0.5)),
             in: RoundedRectangle(cornerRadius: 24)
         )
         .padding(.horizontal, 30)
