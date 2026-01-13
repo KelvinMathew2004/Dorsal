@@ -78,7 +78,7 @@ struct DreamDetailView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .disabled(store.isProcessing)
+                .disabled(store.isProcessing || selectedInsight != nil)
             }
         }
         .alert("Delete Details?", isPresented: $showDeleteAlert) {
@@ -157,7 +157,6 @@ struct DreamDetailView: View {
                         store: store,
                         namespace: namespace
                     )
-                    .transition(.opacity)
                     .padding()
                 }
                 
@@ -346,7 +345,6 @@ struct DreamDetailView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 }
@@ -386,8 +384,8 @@ struct InsightDetailView: View {
                             animates: false,
                             isExpanded: true
                         )
-                        .matchedGeometryEffect(id: "bg_\(insight.id)", in: namespace)
                         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                        .matchedGeometryEffect(id: "bg_\(insight.id)", in: namespace)
                         .glassEffectID("card", in: namespace)
                         .onTapGesture { /* Prevent closing */ }
                         
@@ -472,7 +470,6 @@ struct InsightDetailView: View {
                     .contentShape(Circle())
                     .glassEffect(.regular.interactive(), in: Circle())
                     .padding(.bottom, 24)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showContent)
@@ -555,11 +552,21 @@ struct InsightCardView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label(type.title, systemImage: type.icon)
-                .font(.headline)
-                .foregroundStyle(type.color)
-                .symbolRenderingMode(.palette)
-                .symbolColorRenderingMode(.gradient)
+            HStack {
+                Label(type.title, systemImage: type.icon)
+                    .font(.headline)
+                    .foregroundStyle(type.color)
+                    .symbolRenderingMode(.palette)
+                    .symbolColorRenderingMode(.gradient)
+                
+                Spacer()
+                
+                if !isExpanded {
+                    Image(systemName: "questionmark.bubble")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+            }
             
             if animates {
                 TypewriterText(text: text, animates: true)

@@ -255,15 +255,17 @@ class DreamAnalyzer {
     
     func DreamsQuestion(summaries: String, analysis: String, question: String) async throws -> String {
         let prompt = """
-        Use the provided summaries and context (previous analysis) to answer the question.
+        Answer the User Question by synthesizing this information. Connect the specific dream events (from the summaries) to the broader trends (from the analysis) where relevant. Keep the response concise (under 150 words) unless the question requires deep detail.
         
-        Summaries:
-        "\(summaries)"
+        ---
+        Weekly Dream Summaries:
+        \(summaries)
         
-        Analysis:
-        "\(analysis)"
+        Weekly Analysis (Context):
+        \(analysis)
+        ---
         
-        Question:
+        User Question:
         "\(question)"
         """
         

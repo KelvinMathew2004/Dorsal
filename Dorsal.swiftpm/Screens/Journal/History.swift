@@ -28,7 +28,6 @@ struct HistoryView: View {
                         ActiveFiltersView(store: store)
                             .padding(.horizontal)
                             .padding(.bottom, 8)
-                            .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     
                     // List

@@ -35,7 +35,6 @@ struct OnboardingView: View {
                 if currentStep != .welcome && currentStep != .allSet {
                     OnboardingProgressView(currentStep: currentStep)
                         .zIndex(10)
-                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 
                 // Content Switcher with Custom Transition
@@ -330,7 +329,6 @@ struct PermissionsView: View {
                 // Continue Button
                 if store.hasMicAccess && store.hasSpeechAccess {
                     OnboardingActionButton(title: "Continue", action: onNext)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
                      Text("Please enable permissions to continue")
                         .font(.caption)

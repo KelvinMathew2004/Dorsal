@@ -4,6 +4,16 @@ import Charts
 struct WeeklyInsightsView: View {
     @ObservedObject var store: DreamStore
     
+    // MARK: - Animation & Interaction State
+    @Namespace private var namespace
+    @State private var selectedInsight: WeeklyInsightType?
+    
+    enum WeeklyInsightType: String, Identifiable {
+        case overview = "Overview"
+        case advice = "General Advice"
+        var id: String { rawValue }
+    }
+    
     // MARK: - Date Logic
     
     private var currentWeekInterval: DateInterval {
@@ -60,7 +70,7 @@ struct WeeklyInsightsView: View {
                 // Filter dreams for this specific day
                 let dreamsForDay = store.dreams.filter { $0.date >= startOfDay && $0.date < endOfDay }
                 
-                // Only create a data point if dreams exist (aligns with "no zero dots" logic)
+                // Only create a data point if dreams exist
                 if !dreamsForDay.isEmpty {
                     let totalAnxiety = dreamsForDay.reduce(0.0) { $0 + Double($1.extras?.anxietyLevel ?? 0) }
                     let totalSentiment = dreamsForDay.reduce(0.0) { $0 + Double($1.extras?.sentimentScore ?? 50) }
@@ -79,7 +89,6 @@ struct WeeklyInsightsView: View {
         return aggregates
     }
     
-    // X-Axis domain for the charts to ensure the full week is visible
     var xAxisDomain: ClosedRange<Date> {
         let start = currentWeekInterval.start
         let end = currentWeekInterval.end
@@ -91,9 +100,10 @@ struct WeeklyInsightsView: View {
             ZStack {
                 Theme.gradientBackground.ignoresSafeArea()
                 
+                // MARK: - Main Scroll Content
                 ScrollView {
                     VStack(spacing: 24) {
-                        if store.dreams.isEmpty {
+                        if weeklyDreams.isEmpty {
                             emptyStateView
                         } else {
                             if let insights = store.weeklyInsight {
@@ -109,11 +119,24 @@ struct WeeklyInsightsView: View {
                     .padding()
                 }
                 .scrollIndicators(.hidden)
-                .scrollDisabled(store.isGeneratingInsights)
+                .scrollDisabled(store.isGeneratingInsights || selectedInsight != nil)
+                .blur(radius: selectedInsight != nil ? 10 : 0) // Darken background when expanded
                 .overlay {
                     if store.isGeneratingInsights {
                         loadingOverlay
                     }
+                }
+                
+                // MARK: - Detail View Overlay
+                if let type = selectedInsight, let insights = store.weeklyInsight {
+                    WeeklyInsightDetailView(
+                        insights: insights,
+                        weeklyDreams: weeklyDreams, // Pass filtered dreams for context
+                        type: type,
+                        namespace: namespace,
+                        selectedInsight: $selectedInsight
+                    )
+                    .zIndex(100)
                 }
             }
             .navigationTitle("Weekly Insights")
@@ -127,6 +150,7 @@ struct WeeklyInsightsView: View {
                             .font(.system(size: 16, weight: .semibold))
                     }
                     .disabled(store.isGeneratingInsights)
+                    .opacity(selectedInsight == nil ? 1 : 0) // Hide when expanded
                 }
             }
             .navigationDestination(for: DreamMetric.self) { metric in
@@ -146,7 +170,7 @@ struct WeeklyInsightsView: View {
         ContentUnavailableView(
             "No Data Available",
             systemImage: "chart.bar.xaxis",
-            description: Text("Record some dreams to see your insights.")
+            description: Text("Record some dreams this week to see your insights.")
         )
         .frame(height: 400)
     }
@@ -170,35 +194,37 @@ struct WeeklyInsightsView: View {
     }
     
     private func weeklyOverviewSection(insights: WeeklyInsightResult) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            MagicCard(title: "Overview", icon: "sparkles.rectangle.stack", color: .indigo) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(insights.periodOverview ?? "Generating...")
-                        .fixedSize(horizontal: false, vertical: true)
-                    Divider().background(.white.opacity(0.2))
-                    HStack {
-                        Label((insights.dominantTheme ?? "Theme").capitalized, systemImage: "crown.fill")
-                            .font(.caption.bold())
-                            .foregroundStyle(.yellow)
-                        
-                        Spacer()
-                        
-                        let trend = insights.mentalHealthTrend ?? "Trend"
-                        Text(trend.prefix(1).uppercased() + trend.dropFirst())
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                }
-            }
+        VStack(spacing: 16) {
+            insightCardRow(type: .overview, insights: insights)
+            insightCardRow(type: .advice, insights: insights)
+        }
+    }
+    
+    @ViewBuilder
+    func insightCardRow(type: WeeklyInsightType, insights: WeeklyInsightResult) -> some View {
+        ZStack {
+            // 1. Ghost Container (Invisible placeholder for layout)
+            WeeklyInsightCard(type: type, insights: insights, isExpanded: false)
+                .opacity(0)
             
-            MagicCard(title: "General Advice", icon: "lightbulb.fill", color: .green) {
-                Text(insights.strategicAdvice ?? "").italic()
+            // 2. Interactive Card (Matched Geometry Source)
+            if selectedInsight != type {
+                Button {
+                    withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                        selectedInsight = type
+                    }
+                } label: {
+                    WeeklyInsightCard(type: type, insights: insights, isExpanded: false)
+                        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+                        .matchedGeometryEffect(id: "weekly_bg_\(type.id)", in: namespace)
+                }
+                .buttonStyle(.plain)
+                .transition(.identity)
             }
         }
     }
     
     private var mentalHealthSection: some View {
-        // Use weekAggregates which is now based on fixed week logic
         let data = weekAggregates
 
         return VStack(alignment: .leading, spacing: 12) {
@@ -275,7 +301,7 @@ struct WeeklyInsightsView: View {
                         }
                     }
                     .chartYScale(domain: 0...100)
-                    .chartXScale(domain: xAxisDomain) // Force X-Axis to show full fixed week
+                    .chartXScale(domain: xAxisDomain)
                     .chartXAxis {
                         AxisMarks(values: .stride(by: .day)) { _ in
                             AxisGridLine()
@@ -337,36 +363,15 @@ struct WeeklyInsightsView: View {
                 PreviewChartCard(content: {
                     Chart {
                         ForEach(data) { point in
+                            AreaMark(x: .value("Date", point.date, unit: .day), yStart: .value("Baseline", 0), yEnd: .value("Fatigue", point.fatigue))
+                                .foregroundStyle(LinearGradient(colors: [.red.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom))
                             
-                            // Area first so Line sits on top
-                            AreaMark(
-                                x: .value("Date", point.date, unit: .day),
-                                yStart: .value("Baseline", 0),
-                                yEnd: .value("Fatigue", point.fatigue)
-                            )
-                            .interpolationMethod(.linear)
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.red.opacity(0.4), .clear],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            
-                            LineMark(
-                                x: .value("Date", point.date, unit: .day),
-                                y: .value("Fatigue", point.fatigue)
-                            )
-                            .foregroundStyle(.red.gradient)
-                            .interpolationMethod(.linear)
-                            .symbol{
-                                Circle()
-                                    .fill(.red.gradient)
-                                    .frame(width: 8, height: 8)
-                            }
+                            LineMark(x: .value("Date", point.date, unit: .day), y: .value("Fatigue", point.fatigue))
+                                .foregroundStyle(.red.gradient)
+                                .symbol{ Circle().fill(.red.gradient).frame(width: 8, height: 8) }
                         }
                     }
-                    .chartXScale(domain: xAxisDomain) // Force X-Axis to show full fixed week
+                    .chartXScale(domain: xAxisDomain)
                     .chartXAxis {
                         AxisMarks(values: .stride(by: .day)) { _ in
                             AxisGridLine()
@@ -420,4 +425,297 @@ struct WeeklyInsightsView: View {
         let total = weeklyDreams.reduce(0) { $0 + keyPath($1) }
         return total / weeklyDreams.count
     }
+}
+
+// MARK: - SHARED COMPONENT: Weekly Insight Card
+struct WeeklyInsightCard: View {
+    let type: WeeklyInsightsView.WeeklyInsightType
+    let insights: WeeklyInsightResult
+    let isExpanded: Bool
+    
+    var title: String {
+        type == .overview ? "Overview" : "General Advice"
+    }
+    
+    var icon: String {
+        type == .overview ? "sparkles.rectangle.stack" : "lightbulb.fill"
+    }
+    
+    var color: Color {
+        type == .overview ? .indigo : .green
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label(title, systemImage: icon)
+                    .font(.headline)
+                    .foregroundStyle(color)
+                    .symbolRenderingMode(.palette)
+                    .symbolColorRenderingMode(.gradient)
+                
+                Spacer()
+                
+                if !isExpanded {
+                    Image(systemName: "questionmark.bubble")
+                        .font(.body)
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+            }
+            
+            if type == .overview {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(LocalizedStringKey(formatText(insights.periodOverview ?? "Generating...")))
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    Divider()
+                        .background(.white.opacity(0.2))
+                    
+                    HStack {
+                        Label((insights.dominantTheme ?? "Theme").capitalized, systemImage: "crown.fill")
+                            .font(.caption.bold())
+                            .foregroundStyle(.yellow)
+                        
+                        Spacer()
+                        
+                        let trend = insights.mentalHealthTrend ?? "Trend"
+                        Text(trend.prefix(1).uppercased() + trend.dropFirst())
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+            } else {
+                Text(LocalizedStringKey(formatText(insights.strategicAdvice ?? "")))
+                    .italic()
+                    .font(.body)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(24)
+        .contentShape(RoundedRectangle(cornerRadius: 24))
+    }
+}
+
+// MARK: - DETAIL VIEW WITH Q&A
+struct WeeklyInsightDetailView: View {
+    let insights: WeeklyInsightResult
+    let weeklyDreams: [Dream]
+    let type: WeeklyInsightsView.WeeklyInsightType
+    var namespace: Namespace.ID
+    @Binding var selectedInsight: WeeklyInsightsView.WeeklyInsightType?
+    
+    // Internal State
+    @State private var questionText: String = ""
+    @State private var answerText: String = ""
+    @State private var isAsking: Bool = false
+    @State private var showContent = false
+    
+    // Data Preparation for AI
+    var analysisContent: String {
+        switch type {
+        case .overview:
+            return """
+            Period Overview: \(insights.periodOverview ?? "N/A")
+            Dominant Theme: \(insights.dominantTheme ?? "N/A")
+            Trend: \(insights.mentalHealthTrend ?? "N/A")
+            """
+        case .advice:
+            return insights.strategicAdvice ?? ""
+        }
+    }
+    
+    var summariesContext: String {
+        weeklyDreams.prefix(20).map { dream in
+            let summary = dream.core?.summary ?? "No summary"
+            let date = dream.date.formatted(date: .abbreviated, time: .omitted)
+            return "- \(date): \(summary)"
+        }.joined(separator: "\n")
+    }
+    
+    var body: some View {
+        ZStack {
+            // Background Dimmer
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+                .onTapGesture { close() }
+                .transition(.opacity)
+            
+            ScrollView {
+                GlassEffectContainer(spacing: 24) {
+                    VStack(spacing: 24) {
+                        
+                        // 1. The Expanded Card
+                        WeeklyInsightCard(
+                            type: type,
+                            insights: insights,
+                            isExpanded: true
+                        )
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                        .matchedGeometryEffect(id: "weekly_bg_\(type.id)", in: namespace)
+                        .onTapGesture { /* Prevent closing when tapping card */ }
+                        
+                        // 2. Q&A Section
+                        if showContent {
+                            qnaSection
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.top, 60)
+            }
+            .scrollIndicators(.hidden)
+            
+            // Close Button
+            .safeAreaInset(edge: .bottom) {
+                if showContent {
+                    Button {
+                        close()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                            .frame(width: 60, height: 60)
+                    }
+                    .contentShape(Circle())
+                    .glassEffect(.regular.interactive(), in: Circle())
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .onAppear {
+            // Delay content fade-in slightly to let card expansion finish
+            withAnimation(.easeIn(duration: 0.3).delay(0.2)) {
+                showContent = true
+            }
+        }
+    }
+    
+    var qnaSection: some View {
+        VStack(spacing: 24) {
+            HStack(spacing: 12) {
+                // Input Bubble
+                TextField("Ask about your week...", text: $questionText)
+                    .font(.body)
+                    .textFieldStyle(.plain)
+                    .padding(16)
+                    .glassEffect(.regular.interactive())
+                    .disabled(isAsking || !answerText.isEmpty)
+                
+                Button {
+                    if !answerText.isEmpty {
+                        resetQnA()
+                    } else {
+                        askQuestion()
+                    }
+                } label: {
+                    Image(systemName: answerText.isEmpty ? "arrow.up" : "arrow.counterclockwise")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(questionText.isEmpty || isAsking ? .white.opacity(0.35) : .white.opacity(0.7))
+                        .frame(width: 44, height: 44)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .contentShape(Circle())
+                .glassEffect(
+                    questionText.isEmpty || isAsking
+                    ? .clear.tint(.gray.opacity(0.8))
+                    : .clear.interactive().tint(Theme.accent.opacity(0.8)),
+                    in: Circle()
+                )
+                .disabled(questionText.isEmpty || isAsking)
+            }
+            
+            // Answer Bubble
+            if !answerText.isEmpty || isAsking {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Insight", systemImage: "sparkles")
+                        .font(.headline)
+                        .foregroundStyle(Theme.accent)
+                    
+                    if isAsking && answerText.isEmpty {
+                        Text("Analyzing your week...")
+                            .font(.body)
+                            .foregroundStyle(Theme.secondary)
+                            .shimmering()
+                    } else {
+                        Text(LocalizedStringKey(formatText(answerText)))
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+            }
+        }
+    }
+    
+    // Logic
+    func close() {
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+            showContent = false
+            selectedInsight = nil
+        }
+    }
+    
+    func resetQnA() {
+        questionText = ""
+        answerText = ""
+        isAsking = false
+    }
+    
+    func askQuestion() {
+        guard !questionText.isEmpty else { return }
+        isAsking = true
+        
+        Task {
+            do {
+                // Uses the dedicated DreamsQuestion function in DreamAnalyzer
+                let answer = try await DreamAnalyzer.shared.DreamsQuestion(
+                    summaries: summariesContext,
+                    analysis: analysisContent,
+                    question: questionText
+                )
+                withAnimation {
+                    self.answerText = answer
+                    self.isAsking = false
+                }
+            } catch {
+                withAnimation {
+                    self.answerText = "Unable to analyze the week at this moment."
+                    self.isAsking = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - SHARED FORMATTING HELPER
+// specific formatter that handles bullets and bolding for the AI text
+private func formatText(_ text: String) -> String {
+    var formatted = text
+    
+    // Bold Headers (Lines starting with #)
+    formatted = formatted.replacingOccurrences(
+        of: "(?m)^#{1,4}\\s+(.+)$",
+        with: "**$1**",
+        options: .regularExpression
+    )
+    
+    // Bold Numbered Lists (e.g. "1. Title:")
+    formatted = formatted.replacingOccurrences(
+        of: "(?m)^\\d+\\.\\s+(.+:)$",
+        with: "**$0**",
+        options: .regularExpression
+    )
+    
+    // Convert Bullets (Lines starting with - or *)
+    formatted = formatted.replacingOccurrences(
+        of: "(?m)^[\\-\\*]\\s+",
+        with: "   • ",
+        options: .regularExpression
+    )
+    
+    return formatted
 }
