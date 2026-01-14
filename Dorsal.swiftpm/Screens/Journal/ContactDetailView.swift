@@ -31,13 +31,13 @@ struct ContactDetailView: View {
                             if !contact.jobTitle.isEmpty {
                                 Text(contact.jobTitle)
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                             }
                             
                             if !contact.organizationName.isEmpty {
                                 Text(contact.organizationName)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                             }
                         }
                     }
@@ -88,7 +88,7 @@ struct ContactDetailView: View {
                             VStack(alignment: .leading) {
                                 Text(convertLabel(address.label ?? "home"))
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                                 Text(formatAddress(address.value))
                             }
                         }

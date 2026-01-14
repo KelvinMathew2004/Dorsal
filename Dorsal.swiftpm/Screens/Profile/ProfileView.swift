@@ -12,6 +12,8 @@ struct ProfileView: View {
     
     @State private var showImagePlayground = false
     @State private var showPhotoPicker = false
+    @State private var showSettings = false // Added settings sheet
+    @State private var showOnboarding = false // For re-onboarding
     
     // Navigation for Entity Details
     @State private var selectedEntity: EntityIdentifier?
@@ -26,6 +28,11 @@ struct ProfileView: View {
     // Gradient State - Cached in View to persist across tab changes
     @State private var gradientColors: [Color] = ProfileView.cachedGradientColors
     static var cachedGradientColors: [Color] = []
+    
+    var textColor: Color {
+        let baseColor = gradientColors.first ?? .white
+        return baseColor.mix(with: .white, by: 0.5)
+    }
     
     struct EntityIdentifier: Hashable, Identifiable, Codable {
         let name: String
@@ -74,6 +81,14 @@ struct ProfileView: View {
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
+                
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         editFirstName = store.firstName
@@ -83,6 +98,13 @@ struct ProfileView: View {
                         Label("Edit", systemImage: "pencil")
                     }
                 }
+            }
+            .fullScreenCover(isPresented: $showOnboarding) {
+                OnboardingView(store: store)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView(store: store, showOnboarding: $showOnboarding)
+                    .presentationDetents([.large])
             }
             .sheet(isPresented: $showEditSheet) {
                 NavigationStack {
@@ -104,8 +126,8 @@ struct ProfileView: View {
                                             Circle()
                                                 .fill(Color.white.opacity(0.1))
                                                 .frame(width: 120, height: 120)
-                                                .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
-                                            Image(systemName: "person.fill").font(.system(size: 50)).foregroundStyle(.white.opacity(0.5))
+                                                .overlay(Circle().stroke(textColor.opacity(0.3), lineWidth: 1))
+                                            Image(systemName: "person.fill").font(.system(size: 50)).foregroundStyle(textColor.opacity(0.7))
                                         }
                                     }
                                     
@@ -116,7 +138,9 @@ struct ProfileView: View {
                                             Button { showImagePlayground = true } label: { Label("Generate with AI", systemImage: "wand.and.stars") }
                                         }
                                         if store.profileImageData != nil {
-                                            Button(role: .destructive) { store.profileImageData = nil } label: { Label("Remove Photo", systemImage: "trash") }
+                                            Divider()
+                                            
+                                            Button(role: .destructive) { store.profileImageData = nil } label: { Label("Remove Photo", systemImage: "trash").tint(.red) }
                                         }
                                     } label: {
                                         HStack(spacing: 4) {
@@ -231,37 +255,38 @@ struct ProfileView: View {
     // MARK: - Subviews
     
     private var headerView: some View {
-        HStack {
-            Spacer(minLength: 0)
-            HStack(spacing: 24) {
-                // Just Display Image, No Action
-                if let data = store.profileImageData, let uiImage = UIImage(data: data) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
+        HStack(spacing: 24) {
+            // Just Display Image, No Action
+            if let data = store.profileImageData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 90, height: 90)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 2))
+                    .shadow(color: .black.opacity(0.3), radius: 10)
+            } else {
+                ZStack {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 35))
                         .frame(width: 90, height: 90)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 2))
-                        .shadow(color: .black.opacity(0.3), radius: 10)
-                } else {
-                    ZStack {
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 35))
-                            .frame(width: 90, height: 90)
-                            .foregroundStyle(.white.opacity(0.5))
-                            .glassEffect(.clear, in: Circle())
-                    }
+                        .foregroundStyle(.white.opacity(0.5))
+                        .glassEffect(.clear, in: Circle())
                 }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(store.firstName).font(.system(size: 28, weight: .bold)).foregroundStyle(.white)
-                    Text(store.lastName).font(.system(size: 20, weight: .medium)).foregroundStyle(Theme.secondary)
-                }
-                .frame(width: 120, alignment: .leading)
             }
-            Spacer(minLength: 0)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(store.firstName)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(.white)
+                Text(store.lastName)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(textColor.opacity(0.7))
+            }
         }
         .padding(.top, 40)
+        .padding(.horizontal)
+        .frame(maxWidth: .infinity) // Center the entire HStack horizontally
     }
     
     private var statsRow: some View {
@@ -298,7 +323,7 @@ struct ProfileView: View {
                                 selectedEntity = itemIdentifier
                             } label: {
                                 HStack(spacing: 16) {
-                                    EntityListImage(store: store, name: itemIdentifier.name, type: itemIdentifier.type, icon: iconForCategory)
+                                    EntityListImage(store: store, name: itemIdentifier.name, type: itemIdentifier.type, icon: iconForCategory, textColor: textColor)
                                     
                                     Text(itemIdentifier.name.capitalized)
                                         .font(.body.weight(.medium))
@@ -315,24 +340,29 @@ struct ProfileView: View {
                                 Button {
                                     selectedEntity = itemIdentifier
                                 } label: {
-                                    Label("View Details", systemImage: "info")
+                                    Label("View Details", systemImage: "richtext.page")
+                                        .tint(textColor)
                                 }
                                 
                                 Button {
                                     store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
                                 } label: {
                                     Label("Filter Dreams", systemImage: "line.3.horizontal.decrease")
+                                        .tint(textColor)
                                 }
+                                
+                                Divider()
                                 
                                 Button(role: .destructive) {
                                     itemToDelete = itemIdentifier
                                     showDeleteAlert = true
                                 } label: {
                                     Label("Delete Details", systemImage: "trash")
+                                        .tint(.red)
                                 }
                             } label: {
                                 Image(systemName: "ellipsis")
-                                    .foregroundStyle(Theme.secondary)
+                                    .foregroundStyle(textColor)
                                     .font(.title2)
                                     .padding()
                             }
@@ -340,6 +370,7 @@ struct ProfileView: View {
                         .padding()
                         .glassEffect(.clear.interactive(), in: Capsule())
                         .overlay(
+                            // UPDATED: Using dynamic Theme
                             Capsule()
                                 .stroke(dropTargetItem?.name == item ? Theme.accent.opacity(0.8) : Color.clear, lineWidth: 3)
                         )
@@ -370,7 +401,7 @@ struct ProfileView: View {
                                     HStack(spacing: 16) {
                                         Image(systemName: "arrow.turn.down.right")
                                             .font(.system(size: 20, weight: .regular))
-                                            .foregroundStyle(.white.opacity(0.3))
+                                            .foregroundStyle(textColor.opacity(0.7))
                                             .frame(width: 40, height: 40)
                                         
                                         Text(child.name.capitalized)
@@ -389,7 +420,8 @@ struct ProfileView: View {
                                     Button {
                                         selectedEntity = itemIdentifier
                                     } label: {
-                                        Label("View Details", systemImage: "info")
+                                        Label("View Details", systemImage: "richtext.page")
+                                            .tint(textColor)
                                     }
                                     
                                     // Option to filter by PARENT
@@ -397,7 +429,10 @@ struct ProfileView: View {
                                         store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
                                     } label: {
                                         Label("Filter Dreams", systemImage: "line.3.horizontal.decrease")
+                                            .tint(textColor)
                                     }
+                                    
+                                    Divider()
                                     
                                     Button(role: .destructive) {
                                         withAnimation {
@@ -405,10 +440,11 @@ struct ProfileView: View {
                                         }
                                     } label: {
                                         Label("Unlink", systemImage: "personalhotspot.slash")
+                                            .tint(.red)
                                     }
                                 } label: {
                                     Image(systemName: "ellipsis")
-                                        .foregroundStyle(Theme.secondary)
+                                        .foregroundStyle(textColor)
                                         .font(.title2)
                                         .padding()
                                 }
@@ -478,6 +514,7 @@ struct EntityListImage: View {
     let name: String
     let type: String
     let icon: String
+    let textColor: Color
     
     var forceUpdate: Int { store.entityUpdateTrigger }
     var imageData: Data? { _ = forceUpdate; return store.getEntity(name: name, type: type)?.imageData }
@@ -488,7 +525,10 @@ struct EntityListImage: View {
                 .resizable().aspectRatio(contentMode: .fill).frame(width: 40, height: 40)
                 .clipShape(Circle()).overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
         } else {
-            Image(systemName: icon).foregroundStyle(.white.opacity(0.7)).frame(width: 40, height: 40)
+            // UPDATED: Use dynamic theme color
+            Image(systemName: icon)
+                .foregroundStyle(textColor)
+                .frame(width: 40, height: 40)
                 .background(Circle().fill(.white.opacity(0.1)))
                 .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 1))
         }

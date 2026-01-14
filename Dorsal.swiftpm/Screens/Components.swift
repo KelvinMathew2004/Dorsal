@@ -1,6 +1,13 @@
 import SwiftUI
 
 // MARK: - THEME
+struct ThemeOption: Identifiable, Hashable {
+    let id: String // Unique ID for persistence
+    let name: String
+    let accent: Color
+    let secondary: Color
+}
+
 enum Theme {
 
     // MARK: Background gradient
@@ -13,11 +20,92 @@ enum Theme {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+    
+    // MARK: - PREDEFINED THEMES (Rainbow Order)
+    static let availableThemes: [ThemeOption] = [
+        // 1. Crimson (Red)
+        ThemeOption(
+            id: "crimson",
+            name: "Crimson",
+            accent: Color(red: 1.0, green: 0.25, blue: 0.35),
+            secondary: Color(red: 0.75, green: 0.65, blue: 0.67) // Brighter gray-red
+        ),
+        // 2. Sunset (Orange)
+        ThemeOption(
+            id: "sunset",
+            name: "Sunset",
+            accent: Color.orange,
+            secondary: Color(red: 0.75, green: 0.70, blue: 0.65) // Brighter gray-orange
+        ),
+        // 3. Gold (Yellow)
+        ThemeOption(
+            id: "gold",
+            name: "Gold",
+            accent: Color(red: 212/255, green: 175/255, blue: 55/255),
+            secondary: Color(red: 0.75, green: 0.73, blue: 0.65) // Brighter gray-gold
+        ),
+        // 4. Emerald (Green)
+        ThemeOption(
+            id: "emerald",
+            name: "Emerald",
+            accent: Color(red: 0.0, green: 0.75, blue: 0.45),
+            secondary: Color(red: 0.65, green: 0.75, blue: 0.70) // Brighter gray-green
+        ),
+        // 5. Mint (Light Green)
+        ThemeOption(
+            id: "mint",
+            name: "Mint",
+            accent: Color(red: 0.4, green: 0.85, blue: 0.6),
+            secondary: Color(red: 0.65, green: 0.75, blue: 0.72) // Brighter gray-mint
+        ),
+        // 6. Neon (Cyan)
+        ThemeOption(
+            id: "neon",
+            name: "Neon",
+            accent: Color.cyan,
+            secondary: Color(red: 0.65, green: 0.75, blue: 0.80) // Brighter gray-cyan
+        ),
+        // 7. Ocean (Blue)
+        ThemeOption(
+            id: "ocean",
+            name: "Ocean",
+            accent: Color(red: 0.0, green: 0.55, blue: 1.0),
+            secondary: Color(red: 0.65, green: 0.70, blue: 0.80) // Brighter gray-blue
+        ),
+        // 8. Royal (Purple)
+        ThemeOption(
+            id: "royal",
+            name: "Royal",
+            accent: Color(red: 0.65, green: 0.4, blue: 1.0),
+            secondary: Color(red: 0.70, green: 0.65, blue: 0.80) // Brighter gray-purple
+        ),
+        // 9. Berry (Pink)
+        ThemeOption(
+            id: "berry",
+            name: "Berry",
+            accent: Color(red: 0.9, green: 0.25, blue: 0.6),
+            secondary: Color(red: 0.75, green: 0.65, blue: 0.72) // Brighter gray-pink
+        ),
+        // 10. Slate (Gray)
+        ThemeOption(
+            id: "slate",
+            name: "Slate",
+            accent: Color(white: 0.85),
+            secondary: Color(white: 0.70) // Brighter gray
+        )
+    ]
 
-    // MARK: Colors
-    static let accent = Color(red: 212/255, green: 175/255, blue: 55/255)   // Gold
-    static let secondary = Color.secondary // Purple
-//    static let secondary = Color(red: 175/255, green: 143/255, blue: 233/255) // Purple
+    // MARK: Colors - Dynamic based on UserDefaults
+    
+    static var accent: Color {
+        let id = UserDefaults.standard.string(forKey: "themeID") ?? "gold"
+        return availableThemes.first(where: { $0.id == id })?.accent ?? availableThemes[0].accent
+    }
+    
+    static var secondary: Color {
+        let id = UserDefaults.standard.string(forKey: "themeID") ?? "gold"
+        return availableThemes.first(where: { $0.id == id })?.secondary ?? availableThemes[0].secondary
+    }
 }
 
 // MARK: - VISUAL EFFECTS
@@ -227,6 +315,26 @@ extension Color {
         default: (a, r, g, b) = (1, 1, 1, 0)
         }
         self.init(.sRGB, red: Double(r)/255, green: Double(g)/255, blue: Double(b)/255, opacity: Double(a)/255)
+    }
+    
+    // Helper to mix colors
+    // Fully implemented using UIColor for component extraction
+    func mix(with other: Color, by percentage: Double) -> Color {
+        let uiColor1 = UIColor(self)
+        let uiColor2 = UIColor(other)
+        
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        
+        uiColor1.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        uiColor2.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        
+        let r = r1 + (r2 - r1) * CGFloat(percentage)
+        let g = g1 + (g2 - g1) * CGFloat(percentage)
+        let b = b1 + (b2 - b1) * CGFloat(percentage)
+        let a = a1 + (a2 - a1) * CGFloat(percentage)
+        
+        return Color(red: r, green: g, blue: b, opacity: a)
     }
 }
 

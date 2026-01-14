@@ -147,7 +147,10 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
         if isPaused {
             pausedTimeAccumulator += Double(deltaTime)
         }
-        let time = Float(now.timeIntervalSince(startTime) - pausedTimeAccumulator)
+        
+        let speedFactor: Float = 0.5
+        let time = Float(now.timeIntervalSince(startTime) - pausedTimeAccumulator) * speedFactor
+        
         lastDrawTime = now
         
         // Handle Entrance/Exit Animation

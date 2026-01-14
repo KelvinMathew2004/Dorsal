@@ -67,7 +67,7 @@ struct RecordView: View {
                                 
                                 Text("You're doing great, \(store.firstName). Describe any other details you remember.")
                                     .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.8))
+                                    .foregroundStyle(Theme.secondary)
                                     .multilineTextAlignment(.center)
                             }
                             .padding(24)
@@ -88,16 +88,20 @@ struct RecordView: View {
                         VStack(spacing: 16) {
                             Image(systemName: greetingData.icon)
                                 .font(.system(size: 60))
-                                .foregroundStyle(Theme.accent)
+                                .foregroundStyle(store.themeAccentColor)
+                                .symbolRenderingMode(.hierarchical)
+                                .symbolColorRenderingMode(.gradient)
                                 .symbolEffect(.bounce, value: true)
                             
                             Text(greetingData.text)
                                 .font(.largeTitle.weight(.bold))
+                                .multilineTextAlignment(.center)
                             
                             Text("Ready to capture your dreams?")
                                 .font(.body)
                                 .foregroundStyle(Theme.secondary)
                         }
+                        .padding(.horizontal)
                         .padding(.bottom, 50)
                     }
                     
@@ -151,7 +155,7 @@ struct RecordView: View {
                                 .foregroundStyle(.white)
                                 .frame(width: 80, height: 80)
                                 .contentShape(Circle())
-                                .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : Theme.accent.opacity(0.8)), in: Circle())
+                                .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : store.themeAccentColor.opacity(0.8)), in: Circle())
                                 .disabled(store.isProcessing)
                                 .glassEffectID("recordButton", in: namespace)
                             }

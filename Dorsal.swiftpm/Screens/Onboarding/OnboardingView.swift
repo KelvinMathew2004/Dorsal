@@ -199,7 +199,7 @@ struct ProfileSetupView: View {
                     Image(systemName: "person.fill")
                         .font(.system(size: 40))
                         .frame(width: 120, height: 120)
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(Theme.secondary)
                         .glassEffect(.clear, in: Circle())
                 }
                 
@@ -209,7 +209,7 @@ struct ProfileSetupView: View {
                         Text("Set Photo")
                     }
                     .font(.subheadline.bold())
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(Theme.secondary)
                     .padding(.vertical, 6)
                     .padding(.horizontal, 12)
                     .glassEffect(.clear.interactive())
@@ -462,6 +462,7 @@ struct NotificationOnboardingView: View {
                     action: {
                         store.reminderTime = selectedTime.timeIntervalSince1970
                         if store.hasNotificationAccess {
+                            store.isReminderEnabled = true
                             store.scheduleDailyReminder()
                         }
                         onNext()

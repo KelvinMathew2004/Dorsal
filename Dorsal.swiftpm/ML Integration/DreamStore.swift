@@ -38,6 +38,20 @@ class DreamStore: NSObject, ObservableObject {
         didSet { saveProfileImageToDisk(data: profileImageData) }
     }
     
+    // MARK: - THEME ENGINE
+    // Switched to String ID for fixed themes
+    @AppStorage("themeID") var currentThemeID: String = "gold" {
+        didSet { objectWillChange.send() }
+    }
+    
+    var themeAccentColor: Color {
+        return Theme.availableThemes.first(where: { $0.id == currentThemeID })?.accent ?? Theme.availableThemes[0].accent
+    }
+    
+    var themeSecondaryColor: Color {
+        return Theme.availableThemes.first(where: { $0.id == currentThemeID })?.secondary ?? Theme.availableThemes[0].secondary
+    }
+    
     var userName: String {
         return "\(firstName) \(lastName)"
     }
@@ -62,6 +76,7 @@ class DreamStore: NSObject, ObservableObject {
     // NEW: Notification Permission & Settings
     @Published var hasNotificationAccess: Bool = false
     @AppStorage("reminderTime") var reminderTime: Double = 0
+    @AppStorage("isReminderEnabled") var isReminderEnabled: Bool = false
     
     var isOnboardingComplete: Bool {
         hasMicAccess && hasSpeechAccess && UserDefaults.standard.bool(forKey: "isOnboardingFullyComplete")
@@ -69,6 +84,11 @@ class DreamStore: NSObject, ObservableObject {
     
     func completeOnboarding() {
         UserDefaults.standard.set(true, forKey: "isOnboardingFullyComplete")
+        objectWillChange.send()
+    }
+    
+    func resetOnboarding() {
+        UserDefaults.standard.set(false, forKey: "isOnboardingFullyComplete")
         objectWillChange.send()
     }
     
@@ -205,15 +225,32 @@ class DreamStore: NSObject, ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
             Task { @MainActor in
                 self.hasNotificationAccess = granted
-                if granted {
+                if granted && self.isReminderEnabled {
                     self.scheduleDailyReminder()
                 }
             }
         }
     }
     
+    func toggleReminder(enabled: Bool) {
+        isReminderEnabled = enabled
+        if enabled {
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                if settings.authorizationStatus == .authorized {
+                    Task { @MainActor in self.scheduleDailyReminder() }
+                } else if settings.authorizationStatus == .notDetermined {
+                    Task { @MainActor in self.requestNotificationAccess() }
+                } else {
+                    // User denied, just keep the toggle visual but we can't schedule
+                }
+            }
+        } else {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["dailyDreamReminder"])
+        }
+    }
+    
     func scheduleDailyReminder() {
-        guard hasNotificationAccess else { return }
+        guard hasNotificationAccess && isReminderEnabled else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "Record your dream"
@@ -235,6 +272,32 @@ class DreamStore: NSObject, ObservableObject {
     
     private func getDocumentsDirectory() -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+    
+    // Calculate storage used by the app's documents
+    var storageUsageString: String {
+        let fileManager = FileManager.default
+        guard let docDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else { return "Unknown" }
+        
+        do {
+            let resourceKeys: [URLResourceKey] = [.fileSizeKey]
+            let enumerator = fileManager.enumerator(at: docDir, includingPropertiesForKeys: resourceKeys)!
+            var totalSize: Int64 = 0
+            
+            for case let fileURL as URL in enumerator {
+                let resourceValues = try fileURL.resourceValues(forKeys: Set(resourceKeys))
+                if let fileSize = resourceValues.fileSize {
+                    totalSize += Int64(fileSize)
+                }
+            }
+            
+            // Use instance method for compatibility
+            let formatter = ByteCountFormatter()
+            formatter.countStyle = .file
+            return formatter.string(fromByteCount: totalSize)
+        } catch {
+            return "Unknown"
+        }
     }
     
     private func saveProfileImageToDisk(data: Data?) {

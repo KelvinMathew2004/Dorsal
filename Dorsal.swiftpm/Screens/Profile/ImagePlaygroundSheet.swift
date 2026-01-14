@@ -38,7 +38,7 @@ struct ImagePlaygroundSheet: View {
                                     .tint(.white)
                                 Text("Dreaming...")
                                     .font(.headline)
-                                    .foregroundStyle(.white.opacity(0.8))
+                                    .foregroundStyle(Theme.secondary)
                                     .padding(.top)
                             }
                         } else if let image = generatedImage {
@@ -53,7 +53,7 @@ struct ImagePlaygroundSheet: View {
                                     .font(.system(size: 40))
                                     .foregroundStyle(.white.opacity(0.3))
                                 Text("Your creation will appear here")
-                                    .foregroundStyle(.white.opacity(0.3))
+                                    .foregroundStyle(Theme.secondary)
                             }
                         }
                     }
@@ -66,7 +66,7 @@ struct ImagePlaygroundSheet: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Prompt")
                                     .font(.caption.bold())
-                                    .foregroundStyle(.white.opacity(0.6))
+                                    .foregroundStyle(Theme.secondary)
                                 
                                 TextEditor(text: $prompt)
                                     .scrollContentBackground(.hidden)
@@ -85,7 +85,7 @@ struct ImagePlaygroundSheet: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Style")
                                     .font(.caption.bold())
-                                    .foregroundStyle(.white.opacity(0.6))
+                                    .foregroundStyle(Theme.secondary)
                                 
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 10) {
@@ -97,7 +97,7 @@ struct ImagePlaygroundSheet: View {
                                                     .font(.subheadline.bold())
                                                     .padding(.horizontal, 16)
                                                     .padding(.vertical, 8)
-                                                    .background(selectedStyle == style ? Theme.accent : .white.opacity(0.1))
+                                                    .background(selectedStyle == style ? store.themeAccentColor : .white.opacity(0.1))
                                                     .foregroundStyle(.white)
                                                     .clipShape(Capsule())
                                             }
@@ -134,7 +134,7 @@ struct ImagePlaygroundSheet: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(prompt.isEmpty ? Color.gray.opacity(0.3) : Theme.accent)
+                        .background(prompt.isEmpty ? Color.gray.opacity(0.3) : store.themeAccentColor)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
                     .disabled(prompt.isEmpty || isGenerating || !store.isImageGenerationAvailable)

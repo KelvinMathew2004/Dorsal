@@ -61,6 +61,7 @@ struct DreamDetailView: View {
             // SEPARATE MODAL VIEW
             if let insight = selectedInsight {
                 InsightDetailView(
+                    store: store, // Pass store here
                     dream: liveDream,
                     insight: insight,
                     namespace: namespace,
@@ -306,7 +307,7 @@ struct DreamDetailView: View {
                     .overlay(alignment: .trailing) {
                         Image(systemName: "chevron.right")
                             .font(.body.bold())
-                            .foregroundStyle(.white.opacity(0.3))
+                            .foregroundStyle(Theme.secondary)
                             .padding(.trailing, 20)
                     }
                     .contentShape(RoundedRectangle(cornerRadius: 24))
@@ -336,7 +337,7 @@ struct DreamDetailView: View {
                         .overlay(alignment: .trailing) {
                             Image(systemName: "chevron.right")
                                 .font(.body.bold())
-                                .foregroundStyle(.white.opacity(0.3))
+                                .foregroundStyle(Theme.secondary)
                                 .padding(.trailing, 20)
                         }
                         .contentShape(RoundedRectangle(cornerRadius: 24))
@@ -351,6 +352,7 @@ struct DreamDetailView: View {
 
 // MARK: - SEPARATE INSIGHT DETAIL VIEW
 struct InsightDetailView: View {
+    @ObservedObject var store: DreamStore // Added Store
     let dream: Dream
     let insight: DreamDetailView.InsightType
     var namespace: Namespace.ID
@@ -391,65 +393,7 @@ struct InsightDetailView: View {
                         
                         // 2. Q&A Section
                         if showContent {
-                            HStack(spacing: 12) {
-                                // Input Bubble
-                                TextField("Ask a question about this...", text: $questionText)
-                                    .font(.body)
-                                    .textFieldStyle(.plain)
-                                    .padding(16)
-                                    .glassEffect(.regular.interactive())
-                                    .glassEffectID("input", in: namespace)
-                                    .disabled(isAsking || !answerText.isEmpty)
-                                
-                                Button {
-                                    if !answerText.isEmpty {
-                                        resetQnA()
-                                    } else {
-                                        askQuestion()
-                                    }
-                                } label: {
-                                    Image(systemName: answerText.isEmpty ? "arrow.up" : "arrow.counterclockwise")
-                                        .font(.title2.weight(.bold))
-                                        .foregroundStyle(questionText.isEmpty || isAsking ? .white.opacity(0.35) : .white.opacity(0.7))
-                                        .frame(width: 44, height: 44)
-                                        .contentTransition(.symbolEffect(.replace))
-                                }
-                                .contentShape(Circle())
-                                .glassEffect(
-                                    questionText.isEmpty || isAsking
-                                    ? .clear.tint(.gray.opacity(0.8))
-                                    : .clear.interactive().tint(Theme.accent.opacity(0.8)),
-                                    in: Circle()
-                                )
-                                .glassEffectID("action", in: namespace)
-                                .disabled(questionText.isEmpty || isAsking)
-                            }
-                            
-                            // Answer Bubble
-                            if !answerText.isEmpty || isAsking {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Label("Answer", systemImage: "sparkles")
-                                        .font(.headline)
-                                        .foregroundStyle(Theme.accent)
-                                    
-                                    if isAsking && answerText.isEmpty {
-                                        Text("Thinking...")
-                                            .font(.body)
-                                            .foregroundStyle(Theme.secondary)
-                                            .shimmering()
-                                    } else {
-                                        Text(LocalizedStringKey(formatText(answerText)))
-                                            .font(.body)
-                                            .foregroundStyle(.primary)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }
-                                }
-                                .padding(24)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
-                                .glassEffectID("answer", in: namespace)
-                                .padding(.bottom, 24)
-                            }
+                            qnaSection
                         }
                     }
                 }
@@ -477,6 +421,71 @@ struct InsightDetailView: View {
         .onAppear {
             withAnimation(.easeIn(duration: 0.3).delay(0.2)) {
                 showContent = true
+            }
+        }
+    }
+    
+    // Extracted Q&A Section
+    var qnaSection: some View {
+        VStack(spacing: 24) {
+            HStack(spacing: 12) {
+                // Input Bubble
+                TextField("Ask a question about this...", text: $questionText)
+                    .font(.body)
+                    .textFieldStyle(.plain)
+                    .padding(16)
+                    .glassEffect(.regular.interactive())
+                    .glassEffectID("input", in: namespace)
+                    .disabled(isAsking || !answerText.isEmpty)
+                
+                Button {
+                    if !answerText.isEmpty {
+                        resetQnA()
+                    } else {
+                        askQuestion()
+                    }
+                } label: {
+                    Image(systemName: answerText.isEmpty ? "arrow.up" : "arrow.counterclockwise")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(questionText.isEmpty || isAsking ? .white.opacity(0.35) : .white.opacity(0.7))
+                        .frame(width: 44, height: 44)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .contentShape(Circle())
+                .glassEffect(
+                    questionText.isEmpty || isAsking
+                    ? .clear.tint(.gray.opacity(0.8))
+                    : .clear.interactive().tint(store.themeAccentColor.opacity(0.8)),
+                    in: Circle()
+                )
+                .glassEffectID("action", in: namespace)
+                .disabled(questionText.isEmpty || isAsking)
+            }
+            
+            // Answer Bubble
+            if !answerText.isEmpty || isAsking {
+                VStack(alignment: .leading, spacing: 24) {
+                    Label("Answer", systemImage: "sparkles")
+                        .font(.headline)
+                        .foregroundStyle(store.themeAccentColor)
+                    
+                    if isAsking && answerText.isEmpty {
+                        Text("Thinking...")
+                            .font(.body)
+                            .foregroundStyle(Theme.secondary)
+                            .shimmering()
+                    } else {
+                        Text(LocalizedStringKey(formatText(answerText)))
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+                .glassEffectID("answer", in: namespace)
+                .padding(.bottom, 24)
             }
         }
     }
@@ -564,7 +573,7 @@ struct InsightCardView: View {
                 if !isExpanded {
                     Image(systemName: "questionmark.bubble")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                 }
             }
             

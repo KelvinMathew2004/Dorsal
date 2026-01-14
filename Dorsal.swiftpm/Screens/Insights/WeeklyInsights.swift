@@ -130,6 +130,7 @@ struct WeeklyInsightsView: View {
                 // MARK: - Detail View Overlay
                 if let type = selectedInsight, let insights = store.weeklyInsight {
                     WeeklyInsightDetailView(
+                        store: store, // Added store
                         insights: insights,
                         weeklyDreams: weeklyDreams, // Pass filtered dreams for context
                         type: type,
@@ -149,8 +150,7 @@ struct WeeklyInsightsView: View {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 16, weight: .semibold))
                     }
-                    .disabled(store.isGeneratingInsights)
-                    .opacity(selectedInsight == nil ? 1 : 0) // Hide when expanded
+                    .disabled(store.isGeneratingInsights || selectedInsight != nil)
                 }
             }
             .navigationDestination(for: DreamMetric.self) { metric in
@@ -230,7 +230,7 @@ struct WeeklyInsightsView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Label("Mental Health", systemImage: "stethoscope")
                 .font(.headline)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(Theme.secondary)
                 .symbolRenderingMode(.palette)
                 .symbolColorRenderingMode(.gradient)
                 .padding(.horizontal)
@@ -354,7 +354,7 @@ struct WeeklyInsightsView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Label("Vocal Fatigue", systemImage: "battery.50")
                 .font(.headline)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(Theme.secondary)
                 .symbolRenderingMode(.palette)
                 .symbolColorRenderingMode(.gradient)
                 .padding(.horizontal)
@@ -398,7 +398,7 @@ struct WeeklyInsightsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Memory Recall", systemImage: "memorychip")
                 .font(.headline)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(Theme.secondary)
                 .symbolRenderingMode(.palette)
                 .symbolColorRenderingMode(.gradient)
                 .padding(.horizontal)
@@ -459,7 +459,7 @@ struct WeeklyInsightCard: View {
                 if !isExpanded {
                     Image(systemName: "questionmark.bubble")
                         .font(.body)
-                        .foregroundStyle(.white.opacity(0.3))
+                        .foregroundStyle(Theme.secondary)
                 }
             }
             
@@ -470,7 +470,7 @@ struct WeeklyInsightCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                     
                     Divider()
-                        .background(.white.opacity(0.2))
+                        .background(Theme.secondary)
                     
                     HStack {
                         Label((insights.dominantTheme ?? "Theme").capitalized, systemImage: "crown.fill")
@@ -482,7 +482,7 @@ struct WeeklyInsightCard: View {
                         let trend = insights.mentalHealthTrend ?? "Trend"
                         Text(trend.prefix(1).uppercased() + trend.dropFirst())
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(Theme.secondary)
                     }
                 }
             } else {
@@ -499,6 +499,7 @@ struct WeeklyInsightCard: View {
 
 // MARK: - DETAIL VIEW WITH Q&A
 struct WeeklyInsightDetailView: View {
+    @ObservedObject var store: DreamStore // ADDED STORE HERE
     let insights: WeeklyInsightResult
     let weeklyDreams: [Dream]
     let type: WeeklyInsightsView.WeeklyInsightType
@@ -619,7 +620,7 @@ struct WeeklyInsightDetailView: View {
                 .glassEffect(
                     questionText.isEmpty || isAsking
                     ? .clear.tint(.gray.opacity(0.8))
-                    : .clear.interactive().tint(Theme.accent.opacity(0.8)),
+                    : .clear.interactive().tint(store.themeAccentColor.opacity(0.8)),
                     in: Circle()
                 )
                 .disabled(questionText.isEmpty || isAsking)
@@ -630,7 +631,7 @@ struct WeeklyInsightDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Label("Insight", systemImage: "sparkles")
                         .font(.headline)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(store.themeAccentColor)
                     
                     if isAsking && answerText.isEmpty {
                         Text("Analyzing your week...")

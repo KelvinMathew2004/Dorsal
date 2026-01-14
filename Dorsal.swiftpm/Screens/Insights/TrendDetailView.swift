@@ -227,7 +227,7 @@ struct TrendDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(data.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(Theme.secondary)
                 
                 ForEach(data.items, id: \.name) { item in
                     HStack(alignment: .center, spacing: 4) {
@@ -535,7 +535,7 @@ struct TrendDetailView: View {
             HStack {
                 Button { moveWeek(by: -1) } label: {
                     Image(systemName: "chevron.left")
-                        .foregroundStyle(.white.opacity(0.65))
+                        .foregroundStyle(Theme.secondary)
                         .fontWeight(.bold)
                 }
                 .buttonStyle(.glassProminent)
@@ -547,7 +547,7 @@ struct TrendDetailView: View {
                 Spacer()
                 Button { moveWeek(by: 1) } label: {
                     Image(systemName: "chevron.right")
-                        .foregroundStyle(.white.opacity(0.65))
+                        .foregroundStyle(Theme.secondary)
                         .fontWeight(.bold)
                 }
                 .buttonStyle(.glassProminent)
@@ -570,10 +570,10 @@ struct TrendDetailView: View {
                             .font(.caption.bold())
                     }
                     .font(.subheadline.bold())
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(store.themeAccentColor)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .glassEffect(.regular.interactive().tint(Theme.accent.opacity(0.1)))
+                    .glassEffect(.regular.interactive().tint(store.themeAccentColor.opacity(0.1)))
                 }
             }
             .padding(16)
@@ -606,7 +606,7 @@ struct TrendDetailView: View {
                         } else {
                             Text("No Data")
                                 .font(.subheadline)
-                                .foregroundStyle(.white.opacity(0.3))
+                                .foregroundStyle(Theme.secondary)
                         }
                     }
                     .padding()
@@ -671,7 +671,7 @@ struct TrendDetailView: View {
                                     Text(String(selectedYear))
                                         .foregroundStyle(Theme.secondary)
                                     Image(systemName: "chevron.down")
-                                        .foregroundStyle(Theme.accent)
+                                        .foregroundStyle(store.themeAccentColor)
                                 }
                                 .font(.headline.bold())
                             }
@@ -917,7 +917,7 @@ struct TrendDetailView: View {
                         yStart: .value("", 0),
                         yEnd: .value("", data.maxValue)
                     )
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(Theme.secondary)
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
                     .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                         selectionPopover(data: data)
@@ -990,7 +990,7 @@ struct TrendDetailView: View {
                         yStart: .value("", 0),
                         yEnd: .value("", data.maxValue)
                     )
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(Theme.secondary)
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
                     .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                         selectionPopover(data: data)
@@ -1040,7 +1040,7 @@ struct TrendDetailView: View {
                         yStart: .value("", 0),
                         yEnd: .value("", data.maxValue)
                     )
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(Theme.secondary)
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
                     .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                         selectionPopover(data: data)
@@ -1125,7 +1125,7 @@ struct TrendDetailView: View {
                         yStart: .value("", 0),
                         yEnd: .value("", data.maxValue)
                     )
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(Theme.secondary)
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
                     .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                         selectionPopover(data: data)
@@ -1179,7 +1179,7 @@ struct TrendDetailView: View {
             var link = AttributedString(" Learn more...")
             link.link = URL(string: metric.learnMoreLink)
             link.font = .body.bold()
-            link.foregroundColor = Theme.accent
+            link.foregroundColor = store.themeAccentColor
             
             return desc + link
         }()
@@ -1192,9 +1192,9 @@ struct TrendDetailView: View {
     
     var tipsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Tip", systemImage: "chart.line.text.clipboard.fill")
+            Label("Tip", systemImage: "heart.text.clipboard.fill")
                 .font(.headline)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(store.themeAccentColor)
             
             Text(metric.tips)
                 .font(.body)

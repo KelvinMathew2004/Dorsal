@@ -109,26 +109,29 @@ struct EntityDetailView: View {
                                         Image(systemName: iconForType)
                                             .font(.system(size: 50))
                                             .frame(width: 140, height: 140)
-                                            .foregroundStyle(.white.opacity(0.5))
+                                            .foregroundStyle(textColor.opacity(0.7))
                                             .glassEffect(.clear, in: Circle())
                                     }
                                 }
                                 
                                 // The Edit Pill
                                 Menu {
-                                    Button { showingPhotoPicker = true } label: { Label("Photo Library", systemImage: "photo") }
+                                    Button { showingPhotoPicker = true } label: { Label("Photo Library", systemImage: "photo").tint(textColor) }
                                     
                                     if store.isImageGenerationAvailable {
-                                        Button { showingImagePlayground = true } label: { Label("Create with Image Playground", systemImage: "wand.and.stars") }
-                                        Button { generateAutoImage() } label: { Label("Generate Automatically", systemImage: "sparkles") }
+                                        Button { showingImagePlayground = true } label: { Label("Create with Image Playground", systemImage: "wand.and.stars").tint(textColor) }
+                                        Button { generateAutoImage() } label: { Label("Generate Automatically", systemImage: "sparkles").tint(textColor) }
                                     }
                                     
                                     if imageData != nil {
+                                        Divider()
+                                        
                                         Button(role: .destructive) {
                                             withAnimation { imageData = nil }
                                             saveData()
                                         } label: {
                                             Label("Remove Image", systemImage: "trash")
+                                                .tint(.red)
                                         }
                                     }
                                 } label: {
@@ -140,7 +143,7 @@ struct EntityDetailView: View {
                                     .foregroundStyle(textColor)
                                     .padding(.vertical, 6)
                                     .padding(.horizontal, 12)
-                                    .glassEffect(.clear.tint(buttonColor.opacity(0.6)).interactive())
+                                    .glassEffect(.clear.tint(buttonColor.opacity(0.8)).interactive())
                                 }
                                 .offset(y: 12)
                             }
@@ -191,7 +194,7 @@ struct EntityDetailView: View {
                                         // "L" Arrow visual
                                         Image(systemName: "arrow.turn.down.right")
                                             .font(.system(size: 20, weight: .regular))
-                                            .foregroundStyle(.white.opacity(0.3))
+                                            .foregroundStyle(textColor.opacity(0.8))
                                             .frame(width: 40, height: 40)
                                         
                                         Text(child.name.capitalized)
@@ -249,7 +252,7 @@ struct EntityDetailView: View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("\(contact.givenName) \(contact.familyName)")
                                                 .font(.headline)
-                                                .foregroundStyle(.white)
+                                                .foregroundStyle(textColor.opacity(0.9))
                                             Text("Linked Contact")
                                                 .font(.caption)
                                                 .foregroundStyle(textColor.opacity(0.7))
@@ -288,7 +291,7 @@ struct EntityDetailView: View {
                                         Text("Link to Contact")
                                     }
                                     .font(.subheadline.bold())
-                                    .foregroundStyle(textColor)
+                                    .foregroundStyle(textColor.opacity(0.9))
                                     .padding()
                                     .frame(maxWidth: .infinity)
                                     .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
