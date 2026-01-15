@@ -15,7 +15,7 @@ struct AuroraVisualizer: View {
         GeometryReader { proxy in
             if MTLCreateSystemDefaultDevice() != nil {
                 ZStack {
-                    // LAYER 1: The Sky (Metal + Atmosphere Gradient)
+                    // LAYER 1: The Sky (Metal + Atmosphere Vignette)
                     ZStack {
                         // A. The Aurora Shader
                         MetalAuroraView(
@@ -25,13 +25,15 @@ struct AuroraVisualizer: View {
                             isRecording: isRecording
                         )
                         
-                        // B. Subtle Horizon Vignette (Sky)
-                        // Seamlessly blends sky into water at horizon
+                        // B. Horizon Vignette (Sky Side)
+                        // This darkens the sky slightly as it approaches the horizon
+                        // to simulate distance, but keeps it transparent enough to blend.
                         LinearGradient(
                             stops: [
                                 .init(color: .clear, location: 0.0),
-                                .init(color: .clear, location: 0.70), // Horizon at 0.7
-                                .init(color: Color(red: 0.025, green: 0.01, blue: 0.05).opacity(0.5), location: 1.0) // Matches RecordView horizon
+                                .init(color: .clear, location: 0.5),
+                                .init(color: Color.black.opacity(0.2), location: 0.8), // Very subtle darken
+                                .init(color: Color.black.opacity(0.4), location: 1.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
@@ -40,7 +42,6 @@ struct AuroraVisualizer: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     
                     // LAYER 2: The Water (Native)
-                    // Occupies the visual "Bottom 30%"
                     NativeWaterView(
                         power: power,
                         color: color,
@@ -70,21 +71,19 @@ private struct NativeWaterView: View {
     let waterHeightRatio: CGFloat = 0.30
     let horizonYRatio: CGFloat = 0.70
     
-    // COLORS (Constant - No recording shifting, darkening handled by global overlay)
-    
-    // Horizon: Darker (Matches new Sky Horizon)
-    private let waterHorizonColor = Color(red: 0.025, green: 0.01, blue: 0.05)
-    
-    // Deep: Dark Purple
-    private let waterDeepColor = Color(red: 0.13, green: 0.03, blue: 0.20)
-    
-    // Texture Tint: Consistent Lighter Purple/Blue (0.3, 0.25, 0.5)
-    private let waterTextureTint = Color(red: 0.3, green: 0.25, blue: 0.5)
+    // Texture Tint: Bright Lavender/Purple
+    // This tints the WHITE waves to look purple.
+    // The BLACK background stays black (and becomes transparent in Screen mode).
+    private let waterTextureTint = Color(
+        red: 0.65,
+        green: 0.60,
+        blue: 0.95
+    )
     
     var body: some View {
         ZStack {
             // 1. REFLECTION (Flipped Sky)
-            // This sits BEHIND the water layers.
+            // Sits behind the texture.
             MetalAuroraView(
                 power: isPaused ? 0 : power,
                 color: color,
@@ -93,31 +92,29 @@ private struct NativeWaterView: View {
             )
             .scaleEffect(y: -1) // Flip vertically
             .offset(y: screenSize.height * 0.4) // Re-align horizon
-            .blur(radius: 0.8)
-            .opacity(0.95)
+            .blur(radius: 2.0)
+            .opacity(isRecording ? 0.8 : 0.5)
+            .mask(
+                // FADE IN MASK
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.65),
+                        .init(color: .black, location: 0.8),
+                        .init(color: .black, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
             
-            // 2. WATER LAYERS (Masked to bottom 30%)
+            // 2. WATER TEXTURE (Bottom 30%)
             VStack(spacing: 0) {
-                // Clear top part (Sky area - 70%)
+                // Clear top part
                 Color.clear.frame(height: screenSize.height * horizonYRatio)
                 
-                // Water bottom part (30%)
+                // Water bottom part
                 ZStack {
-                    // A. DEPTH GRADIENT
-                    // Reduced Opacity to 0.4 (was 0.95) to let the Reflection shine through
-                    LinearGradient(
-                        colors: [
-                            // Top (Horizon): Dark (Matches Sky)
-                            waterHorizonColor.opacity(0.4),
-                            
-                            // Bottom (Near): Deep Purple (Lighter than horizon)
-                            waterDeepColor.opacity(0.4)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    
-                    // B. Texture (Image Asset)
+                    // A. Texture (Image Asset)
                     GeometryReader { geo in
                         Image("Ocean")
                             .resizable()
@@ -127,8 +124,7 @@ private struct NativeWaterView: View {
                             .clipped()
                             .colorMultiply(waterTextureTint)
                             .blendMode(.screen)
-                            // CONSTANT OPACITY (0.6) - No shifting
-                            .opacity(0.6)
+                            .opacity(isRecording ? 0.3 : 0.2)
                     }
                 }
                 .frame(height: screenSize.height * waterHeightRatio)
@@ -155,7 +151,6 @@ struct MetalAuroraView: UIViewRepresentable {
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         view.preferredFramesPerSecond = 60
-        // Initial state: Paused if not recording to save compute
         view.isPaused = !isRecording
         view.enableSetNeedsDisplay = false
         view.layer.isOpaque = false
@@ -173,7 +168,6 @@ struct MetalAuroraView: UIViewRepresentable {
         context.coordinator.isPaused = isPaused
         context.coordinator.isRecording = isRecording
         
-        // Wake up the view if we start recording
         if isRecording && uiView.isPaused {
             uiView.isPaused = false
         }
@@ -272,7 +266,6 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
         }
         animationProgress = max(0.0, min(1.0, animationProgress))
         
-        // SAVE COMPUTE: Stop the loop if not recording and animation finished
         if !isRecording && animationProgress <= 0.0 {
             DispatchQueue.main.async {
                 view.isPaused = true
@@ -425,7 +418,7 @@ float4 aurora(float3 ro, float3 rd, float2 fragCoord, float time, float4 aurora_
     }
     col *= (clamp(rd.y * 15.0 + 0.4, 0.0, 1.0));
     
-    float baseIntensity = 0.15; // Slightly reduced for fainter idle state
+    float baseIntensity = 0.15; 
     float finalIntensity = baseIntensity + power_input; 
     
     return col * (1.2 + finalIntensity) * entrance_factor;
@@ -455,7 +448,6 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
     float fade = smoothstep(0.0, 0.01, abs(rd.y)) * 0.1 + 0.9;
     
     float4 user_aurora_color = uniforms.color; 
-    // Increased power modifier for higher sensitivity (lower threshold for max brightness)
     float power_mod = uniforms.power * 5.0;
     float entrance = uniforms.entranceFactor;
 

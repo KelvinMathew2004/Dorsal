@@ -99,6 +99,14 @@ struct SettingsView: View {
             
             // Replaced the variable with this extracted View
             ThemeWheelSelector(currentThemeID: $store.currentThemeID)
+            
+            // NEW: Visualizer Toggle
+            Toggle(isOn: $store.isComplexVisualizerEnabled) {
+                Text("Immersive Recording")
+                    .foregroundStyle(.white)
+            }
+            .padding()
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
         }
     }
     

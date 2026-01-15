@@ -38,9 +38,14 @@ class DreamStore: NSObject, ObservableObject {
         didSet { saveProfileImageToDisk(data: profileImageData) }
     }
     
-    // MARK: - THEME ENGINE
+    // MARK: - THEME & SETTINGS ENGINE
     // Switched to String ID for fixed themes
     @AppStorage("themeID") var currentThemeID: String = "gold" {
+        didSet { objectWillChange.send() }
+    }
+    
+    // NEW: Visualizer Toggle (Default: True)
+    @AppStorage("isComplexVisualizerEnabled") var isComplexVisualizerEnabled: Bool = true {
         didSet { objectWillChange.send() }
     }
     
