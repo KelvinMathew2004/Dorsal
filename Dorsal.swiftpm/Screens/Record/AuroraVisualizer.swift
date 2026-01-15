@@ -8,23 +8,135 @@ import UIKit
 struct AuroraVisualizer: View {
     var power: Float      // Audio power
     var isPaused: Bool
-    var isRecording: Bool // New property to control visibility/animation
+    var isRecording: Bool // Control visibility/animation
     var color: Color = .cyan
     
     var body: some View {
-        // Use a GeometryReader to ensure we fill the space provided
         GeometryReader { proxy in
             if MTLCreateSystemDefaultDevice() != nil {
-                MetalAuroraView(
-                    power: isPaused ? 0 : power,
-                    color: color,
-                    isPaused: isPaused,
-                    isRecording: isRecording
-                )
+                ZStack {
+                    // LAYER 1: The Sky (Metal + Atmosphere Gradient)
+                    ZStack {
+                        // A. The Aurora Shader
+                        MetalAuroraView(
+                            power: isPaused ? 0 : power,
+                            color: color,
+                            isPaused: isPaused,
+                            isRecording: isRecording
+                        )
+                        
+                        // B. Subtle Horizon Vignette (Sky)
+                        // Seamlessly blends sky into water at horizon
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: .clear, location: 0.70), // Horizon at 0.7
+                                .init(color: Color(red: 0.025, green: 0.01, blue: 0.05).opacity(0.5), location: 1.0) // Matches RecordView horizon
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    
+                    // LAYER 2: The Water (Native)
+                    // Occupies the visual "Bottom 30%"
+                    NativeWaterView(
+                        power: power,
+                        color: color,
+                        isPaused: isPaused,
+                        isRecording: isRecording,
+                        screenSize: proxy.size
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .ignoresSafeArea()
             } else {
                 Color.black.opacity(0.8)
             }
         }
+    }
+}
+
+// MARK: - NATIVE WATER VIEW
+private struct NativeWaterView: View {
+    var power: Float
+    var color: Color
+    var isPaused: Bool
+    var isRecording: Bool
+    var screenSize: CGSize
+    
+    // Constants for 30% Water Height (Horizon at 0.70)
+    let waterHeightRatio: CGFloat = 0.30
+    let horizonYRatio: CGFloat = 0.70
+    
+    // COLORS (Constant - No recording shifting, darkening handled by global overlay)
+    
+    // Horizon: Darker (Matches new Sky Horizon)
+    private let waterHorizonColor = Color(red: 0.025, green: 0.01, blue: 0.05)
+    
+    // Deep: Dark Purple
+    private let waterDeepColor = Color(red: 0.13, green: 0.03, blue: 0.20)
+    
+    // Texture Tint: Consistent Lighter Purple/Blue (0.3, 0.25, 0.5)
+    private let waterTextureTint = Color(red: 0.3, green: 0.25, blue: 0.5)
+    
+    var body: some View {
+        ZStack {
+            // 1. REFLECTION (Flipped Sky)
+            // This sits BEHIND the water layers.
+            MetalAuroraView(
+                power: isPaused ? 0 : power,
+                color: color,
+                isPaused: isPaused,
+                isRecording: isRecording
+            )
+            .scaleEffect(y: -1) // Flip vertically
+            .offset(y: screenSize.height * 0.4) // Re-align horizon
+            .blur(radius: 0.8)
+            .opacity(0.95)
+            
+            // 2. WATER LAYERS (Masked to bottom 30%)
+            VStack(spacing: 0) {
+                // Clear top part (Sky area - 70%)
+                Color.clear.frame(height: screenSize.height * horizonYRatio)
+                
+                // Water bottom part (30%)
+                ZStack {
+                    // A. DEPTH GRADIENT
+                    // Reduced Opacity to 0.4 (was 0.95) to let the Reflection shine through
+                    LinearGradient(
+                        colors: [
+                            // Top (Horizon): Dark (Matches Sky)
+                            waterHorizonColor.opacity(0.4),
+                            
+                            // Bottom (Near): Deep Purple (Lighter than horizon)
+                            waterDeepColor.opacity(0.4)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    
+                    // B. Texture (Image Asset)
+                    GeometryReader { geo in
+                        Image("Ocean")
+                            .resizable()
+                            .renderingMode(.original)
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                            .clipped()
+                            .colorMultiply(waterTextureTint)
+                            .blendMode(.screen)
+                            // CONSTANT OPACITY (0.6) - No shifting
+                            .opacity(0.6)
+                    }
+                }
+                .frame(height: screenSize.height * waterHeightRatio)
+                .clipped()
+            }
+        }
+        .allowsHitTesting(false)
+        .animation(.easeInOut(duration: 2.0), value: isRecording)
     }
 }
 
@@ -43,7 +155,8 @@ struct MetalAuroraView: UIViewRepresentable {
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         view.preferredFramesPerSecond = 60
-        view.isPaused = false
+        // Initial state: Paused if not recording to save compute
+        view.isPaused = !isRecording
         view.enableSetNeedsDisplay = false
         view.layer.isOpaque = false
         view.backgroundColor = .clear
@@ -51,7 +164,6 @@ struct MetalAuroraView: UIViewRepresentable {
         if let device = view.device {
             context.coordinator.setupPipeline(device: device)
         }
-        
         return view
     }
     
@@ -60,6 +172,11 @@ struct MetalAuroraView: UIViewRepresentable {
         context.coordinator.targetColor = color.toMetalSimd()
         context.coordinator.isPaused = isPaused
         context.coordinator.isRecording = isRecording
+        
+        // Wake up the view if we start recording
+        if isRecording && uiView.isPaused {
+            uiView.isPaused = false
+        }
     }
     
     func makeCoordinator() -> AuroraCoordinator {
@@ -79,8 +196,6 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
     
     var isPaused: Bool = false
     var isRecording: Bool = false
-    
-    // Transition state for entrance/exit (0.0 to 1.0)
     var animationProgress: Float = 0.0
     
     var targetPower: Float = 0.0
@@ -94,7 +209,7 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
         var power: Float
         var color: SIMD4<Float>
         var isRecording: Float
-        var entranceFactor: Float // Controls opacity and slide-in
+        var entranceFactor: Float
     }
     
     func setupPipeline(device: MTLDevice) {
@@ -110,8 +225,6 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
             desc.vertexFunction = vert
             desc.fragmentFunction = frag
             desc.colorAttachments[0].pixelFormat = .bgra8Unorm
-            
-            // Standard Alpha Blending
             desc.colorAttachments[0].isBlendingEnabled = true
             desc.colorAttachments[0].rgbBlendOperation = .add
             desc.colorAttachments[0].alphaBlendOperation = .add
@@ -131,7 +244,6 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
               let desc = view.currentRenderPassDescriptor,
               let pipeline = pipelineState else { return }
         
-        // Smooth power and color
         currentPower += (targetPower - currentPower) * 0.1
         currentColor = mix(currentColor, targetColor, t: 0.05)
         
@@ -140,7 +252,6 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
         
         encoder.setRenderPipelineState(pipeline)
         
-        // Time management
         let now = Date()
         let deltaTime = Float(now.timeIntervalSince(lastDrawTime))
         
@@ -153,8 +264,6 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
         
         lastDrawTime = now
         
-        // Handle Entrance/Exit Animation
-        // Animate over ~3.0 seconds
         let animationSpeed: Float = 1.0 / 3.0
         if isRecording {
             animationProgress += deltaTime * animationSpeed
@@ -163,9 +272,14 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
         }
         animationProgress = max(0.0, min(1.0, animationProgress))
         
-        // Apply smoothstep for non-linear feel
-        let smoothEntrance = smoothstep(0.0, 1.0, animationProgress)
+        // SAVE COMPUTE: Stop the loop if not recording and animation finished
+        if !isRecording && animationProgress <= 0.0 {
+            DispatchQueue.main.async {
+                view.isPaused = true
+            }
+        }
         
+        let smoothEntrance = smoothstep(0.0, 1.0, animationProgress)
         let res = SIMD2<Float>(Float(view.drawableSize.width), Float(view.drawableSize.height))
         
         var uniforms = Uniforms(
@@ -199,15 +313,11 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
     }
 }
 
-// MARK: - PRIVATE HELPER
 private extension Color {
     func toMetalSimd() -> SIMD4<Float> {
         #if canImport(UIKit)
         let uiColor = UIColor(self)
-        var r: CGFloat = 0
-        var g: CGFloat = 0
-        var b: CGFloat = 0
-        var a: CGFloat = 0
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
         return SIMD4(Float(r), Float(g), Float(b), Float(a))
         #else
@@ -244,10 +354,6 @@ vertex VertexOut vertex_main(uint vertexID [[vertex_id]]) {
     out.uv = uv[vertexID];
     return out;
 }
-
-// --- PORTED GLSL FUNCTIONS ---
-
-constant float PI = 3.14159265358979323846264;
 
 constant float2x2 m2 = float2x2(float2(0.95534, 0.29552), float2(-0.29552, 0.95534));
 
@@ -295,9 +401,6 @@ float4 aurora(float3 ro, float3 rd, float2 fragCoord, float time, float4 aurora_
     float4 col = float4(0);
     float4 avgCol = float4(0);
     
-    // ENTRANCE ANIMATION:
-    // Drop offset based on entrance_factor (0 to 1). 
-    // Starts high (offset 5.0) -> Ends at 0.0.
     float dropOffset = (1.0 - entrance_factor) * 5.0;
     
     for(float i=0.0; i<50.0; i++) {
@@ -306,7 +409,6 @@ float4 aurora(float3 ro, float3 rd, float2 fragCoord, float time, float4 aurora_
         pt -= of;
         float3 bpos = ro + pt * rd;
         
-        // Apply vertical shift for entrance
         bpos.y += dropOffset;
         
         float2 p = bpos.zx * 0.4;
@@ -323,55 +425,10 @@ float4 aurora(float3 ro, float3 rd, float2 fragCoord, float time, float4 aurora_
     }
     col *= (clamp(rd.y * 15.0 + 0.4, 0.0, 1.0));
     
-    // INTENSITY LOGIC:
-    // When paused or silent, we want FAINT lights, not zero.
-    // Lowered base brightness to 0.2 (was 0.4) for fainter look when idle.
-    float baseIntensity = 0.2; 
+    float baseIntensity = 0.15; // Slightly reduced for fainter idle state
     float finalIntensity = baseIntensity + power_input; 
     
-    // Opacity lowered to 1.2 (was 1.8)
     return col * (1.2 + finalIntensity) * entrance_factor;
-}
-
-// --- BACKGROUND ---
-float3 bg(float3 rd, float entranceFactor) {
-    float sd = dot(normalize(float3(-0.5, -0.6, 0.9)), rd) * 0.5 + 0.5;
-    sd = pow(sd, 5.0);
-    
-    float t = abs(rd.y); 
-    float3 col;
-
-    // BASE COLORS (Idle state - Brighter/Lighter)
-    float3 skyStartBase = float3(0.15, 0.05, 0.25);
-    float3 skyEndBase   = float3(0.06, 0.02, 0.10);
-    
-    float3 waterHorizonBase = float3(0.06, 0.02, 0.10);
-    float3 waterDeepBase    = float3(0.20, 0.05, 0.30);
-
-    // RECORDING COLORS (Darker for contrast, but only slightly)
-    // We darken everything by about 30-40% when recording
-    float3 skyStartRec = skyStartBase * 0.7;
-    float3 skyEndRec   = skyEndBase * 0.7;
-    
-    float3 waterHorizonRec = waterHorizonBase * 0.6; // Darker horizon for contrast
-    float3 waterDeepRec    = waterDeepBase * 0.7;
-
-    // Interpolate based on entranceFactor (0=Idle, 1=Recording)
-    float3 skyStart = mix(skyStartBase, skyStartRec, entranceFactor);
-    float3 skyEnd   = mix(skyEndBase, skyEndRec, entranceFactor);
-    
-    float3 waterHorizon = mix(waterHorizonBase, waterHorizonRec, entranceFactor);
-    float3 waterDeep    = mix(waterDeepBase, waterDeepRec, entranceFactor);
-
-    if (rd.y > 0.0) {
-        // SKY GRADIENT
-        col = mix(skyEnd, skyStart, t);
-    } else {
-        // WATER GRADIENT (Opposite/Complementary)
-        col = mix(waterHorizon, waterDeep, t);
-    }
-    
-    return col;
 }
 
 fragment float4 fragment_main(VertexOut in [[stage_in]],
@@ -382,13 +439,13 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
     float2 uv = (2.0 * in.position.xy - iResolution.xy) / iResolution.y;
     uv.y = -uv.y; 
 
-    // OFFSET UV.Y to move horizon DOWN
+    // MODIFIED: Horizon set to 0.4 (results in 70% sky, 30% water)
+    // 2.0 * 0.7 - 1.0 = 0.4
     uv.y += 0.4; 
 
     float3 ro = float3(0, 0, -6.7);
     float3 rd = normalize(float3(uv, 1.3)); 
     
-    // ZERO PITCH
     float pitch = 0.0;
     float c = cos(pitch);
     float s = sin(pitch);
@@ -397,56 +454,17 @@ fragment float4 fragment_main(VertexOut in [[stage_in]],
     
     float fade = smoothstep(0.0, 0.01, abs(rd.y)) * 0.1 + 0.9;
     
-    float4 aurora_val;
     float4 user_aurora_color = uniforms.color; 
-    
-    // Power Mod
-    float power_mod = uniforms.power * 2.0;
-
-    // Use passed-in entrance factor (0.0 to 1.0 based on recording state)
+    // Increased power modifier for higher sensitivity (lower threshold for max brightness)
+    float power_mod = uniforms.power * 5.0;
     float entrance = uniforms.entranceFactor;
 
     if (rd.y > 0.0) {
-        // --- SKY ---
-        float3 skyCol = bg(rd, entrance);
-        float horizonBlend = smoothstep(0.0, 0.4, 1.0 - uv.y); 
-        
-        float4 col = float4(skyCol, 0.5 * horizonBlend); 
-        
-        aurora_val = smoothstep(0.0, 1.5, aurora(ro, rd, in.position.xy, uniforms.time, user_aurora_color, power_mod, entrance));
+        float4 aurora_val = smoothstep(0.0, 1.5, aurora(ro, rd, in.position.xy, uniforms.time, user_aurora_color, power_mod, entrance));
         aurora_val *= fade;
-        
-        float3 finalRgb = col.rgb * (1.0 - aurora_val.a) + aurora_val.rgb;
-        float finalAlpha = max(col.a, aurora_val.a); 
-        
-        return float4(finalRgb, finalAlpha); 
-        
+        return aurora_val;
     } else {
-        // --- WATER (Reflection) ---
-        float3 rrd = rd;
-        rrd.y = abs(rrd.y);
-        
-        // Base Water Color with Gradient
-        float3 col3 = bg(rd, entrance) * fade * 0.9;
-        
-        float4 col = float4(col3, 1.0);
-        
-        // Add Aurora Reflection
-        aurora_val = smoothstep(0.0, 2.5, aurora(ro, rrd, in.position.xy, uniforms.time, user_aurora_color, power_mod, entrance));
-        
-        // Reflection intensity
-        float reflectionIntensity = 0.8;
-        
-        // When not recording (entrance approx 0), aurora_val will be 0, so reflection is 0.
-        col = float4(col.rgb * (1.0 - (aurora_val.a * reflectionIntensity)) + (aurora_val.rgb * reflectionIntensity), 1.0);
-
-        // Water surface noise - ALWAYS VISIBLE
-        float3 pos = ro + ((0.5 - ro.y) / rrd.y) * rrd;
-        float nz2 = triNoise2d(pos.xz * float2(0.5, 0.7), 0.0, uniforms.time);
-        
-        col.rgb += mix(float3(0.2, 0.25, 0.5) * 0.08, float3(0.3, 0.3, 0.5) * 0.7, nz2 * 0.5);
-        
-        return col;
+        return float4(0.0);
     }
 }
 """

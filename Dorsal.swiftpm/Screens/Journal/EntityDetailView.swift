@@ -303,6 +303,7 @@ struct EntityDetailView: View {
                         Spacer()
                     }
                 }
+                .scrollIndicators(.hidden)
             }
             .navigationTitle(name.capitalized)
             .navigationSubtitle("\(appearanceCount) \(appearanceCount == 1 ? "Dream" : "Dreams")")

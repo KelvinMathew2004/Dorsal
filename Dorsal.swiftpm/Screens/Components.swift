@@ -112,27 +112,17 @@ enum Theme {
 
 struct StarryBackground: View {
     var body: some View {
-        ZStack {
-            Theme.gradientBackground
-                .ignoresSafeArea()
+        GeometryReader { proxy in
+            Color.clear
             
-            GeometryReader { proxy in
-                // Force full size
-                Color.clear
-                
-                ZStack {
-                    // Static & Pulsing Stars
-                    // Increased star count from 80 to 200
-                    ForEach(0..<200, id: \.self) { _ in
-                        PulsingStar(containerSize: proxy.size)
-                    }
-                    
-                    // Random Shooting Star System
-                    ShootingStarSystem(containerSize: proxy.size)
+            ZStack {
+                ForEach(0..<150, id: \.self) { _ in
+                    PulsingStar(containerSize: proxy.size)
                 }
+                
+                ShootingStarSystem(containerSize: proxy.size)
             }
         }
-        .ignoresSafeArea()
     }
 }
 
@@ -389,7 +379,7 @@ struct StatCard: View {
                 Image(systemName: icon)
                     .font(.title2)
                     .foregroundStyle(color, color.opacity(0.7))
-                    .symbolRenderingMode(.palette)
+                    .symbolRenderingMode(.hierarchical)
                     .symbolColorRenderingMode(.gradient)
                     .frame(width: 44, height: 44)
                     .background(color.opacity(0.15), in: Circle())

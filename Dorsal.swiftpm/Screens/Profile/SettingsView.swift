@@ -24,6 +24,7 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal)
                 }
+                .scrollIndicators(.hidden)
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -261,7 +262,7 @@ struct ThemeWheelSelector: View {
                 
                 // Glass Joystick Overlay
                 RoundedRectangle(cornerRadius: 12)
-                    .frame(width: 60, height: 80)
+                    .frame(width: 63, height: 83)
                     .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 12))
                     .shadow(color: .black.opacity(0.5), radius: 6, x: 0, y: 4)
                     .simultaneousGesture(

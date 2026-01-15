@@ -253,9 +253,10 @@ class DreamStore: NSObject, ObservableObject {
         guard hasNotificationAccess && isReminderEnabled else { return }
         
         let content = UNMutableNotificationContent()
-        content.title = "Record your dream"
+        content.title = "Record your dream!"
         content.body = "Take a moment to capture what you dreamt about last night."
         content.sound = .default
+        content.interruptionLevel = .timeSensitive
         
         let date = Date(timeIntervalSince1970: reminderTime)
         let calendar = Calendar.current

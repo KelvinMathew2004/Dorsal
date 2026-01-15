@@ -26,11 +26,49 @@ struct RecordView: View {
         }
     }
     
+    // GRADIENT COLORS
+    // 1. Top: Dark Start
+    private let skyTopColor = Color(red: 0.05, green: 0.02, blue: 0.10)
+    
+    // 2. Middle: Slightly Darker to smooth out the diagonal band (was 0.11 -> 0.08)
+    private let skyMidColor = Color(red: 0.08, green: 0.03, blue: 0.14)
+    
+    // 3. Horizon: Darker (was 0.04 -> 0.025)
+    private let skyHorizonColor = Color(red: 0.025, green: 0.01, blue: 0.05)
+    
     var body: some View {
         NavigationStack(path: $store.navigationPath) {
             ZStack {
-                // LAYER 1: Background - SwiftUI Star System (Always Visible)
-                StarryBackground()
+                // LAYER 0: Authentic Night Sky Gradient (Behind Stars)
+                // Diagonal Gradient with Smoother colors
+                LinearGradient(
+                    colors: [skyTopColor, skyMidColor, skyHorizonColor],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                // LAYER 1: Star System (Optimized: Top 70% Only)
+                // Water is 30%, so Stars occupy 70% (0.7)
+                GeometryReader { proxy in
+                    StarryBackground()
+                        .frame(height: proxy.size.height * 0.70)
+                        .allowsHitTesting(false)
+                        // Gradient Mask to fade stars near the horizon
+                        .mask(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .black, location: 0.0),
+                                    .init(color: .black, location: 0.5),
+                                    .init(color: .clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .clipped()
+                }
+                .ignoresSafeArea()
                 
                 // LAYER 2: Visualizer (Always Visible, Transparent Sky, Opaque Water)
                 AuroraVisualizer(
@@ -46,6 +84,13 @@ struct RecordView: View {
                 .allowsHitTesting(false)
                 .transition(.opacity)
                 .zIndex(0)
+                
+                // LAYER 2.5: GLOBAL RECORDING OVERLAY
+                Color.black
+                    .opacity(store.isRecording ? 0.25 : 0.0)
+                    .ignoresSafeArea()
+                    .animation(.easeInOut(duration: 1.5), value: store.isRecording)
+                    .allowsHitTesting(false)
                 
                 // LAYER 3: Main UI (Foreground)
                 VStack {
@@ -108,7 +153,7 @@ struct RecordView: View {
                     Spacer()
                     
                     // MARK: - Controls
-                    GlassEffectContainer(spacing: 0) {
+                    GlassEffectContainer(spacing: 20) {
                         HStack(spacing: store.isPaused ? 20 : 40) {
                             
                             // 1. Pause Button
@@ -128,37 +173,20 @@ struct RecordView: View {
                             }
                             
                             // 2. Record/Stop
-                            ZStack {
-                                // Ripple Layer (Behind Button)
-                                if store.isRecording && !store.isPaused {
-                                    Circle()
-                                        .stroke(.red.opacity(0.5), lineWidth: 2)
-                                        .frame(width: 80, height: 80)
-                                        .scaleEffect(showRipple ? 2.5 : 1.0)
-                                        .opacity(showRipple ? 0 : 1)
-                                        .onAppear {
-                                            showRipple = false
-                                            withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
-                                                showRipple = true
-                                            }
-                                        }
-                                }
-                                
-                                Button {
-                                    handleRecordButtonTap()
-                                } label: {
-                                    Image(systemName: store.isRecording ? "stop.fill" : "mic.fill")
-                                        .contentTransition(.symbolEffect(.replace))
-                                        .padding(15)
-                                }
-                                .font(.title)
-                                .foregroundStyle(.white)
-                                .frame(width: 80, height: 80)
-                                .contentShape(Circle())
-                                .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : store.themeAccentColor.opacity(0.8)), in: Circle())
-                                .disabled(store.isProcessing)
-                                .glassEffectID("recordButton", in: namespace)
+                            Button {
+                                handleRecordButtonTap()
+                            } label: {
+                                Image(systemName: store.isRecording ? "stop.fill" : "mic.fill")
+                                    .contentTransition(.symbolEffect(.replace))
+                                    .padding(15)
                             }
+                            .font(.title)
+                            .foregroundStyle(.white)
+                            .frame(width: 80, height: 80)
+                            .contentShape(Circle())
+                            .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : store.themeAccentColor.opacity(0.7)), in: Circle())
+                            .disabled(store.isProcessing)
+                            .glassEffectID("recordButton", in: namespace)
                             
                             // 3. Cancel
                             if store.isRecording {

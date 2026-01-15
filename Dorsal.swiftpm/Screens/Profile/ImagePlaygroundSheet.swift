@@ -108,6 +108,7 @@ struct ImagePlaygroundSheet: View {
                         }
                         .padding(.horizontal)
                     }
+                    .scrollIndicators(.hidden)
                     
                     // MARK: - Action Button
                     Button {
