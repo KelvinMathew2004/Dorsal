@@ -74,12 +74,13 @@ struct DreamDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    store.regenerateDream(liveDream)
-                } label: {
-                    Image(systemName: "arrow.clockwise")
+                if !store.isProcessing && selectedInsight == nil {
+                    Button {
+                        store.regenerateDream(liveDream)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
-                .disabled(store.isProcessing || selectedInsight != nil)
             }
         }
         .alert("Delete Details?", isPresented: $showDeleteAlert) {
@@ -289,7 +290,7 @@ struct DreamDetailView: View {
     @ViewBuilder
     var metricsSection: some View {
         if let fatigue = liveDream.core?.voiceFatigue {
-            HStack(spacing: 16) {
+            HStack(spacing: 24) {
                 // Vocal Fatigue Card
                 NavigationLink(destination: TrendDetailView(metric: .fatigue, store: store)) {
                     VStack(alignment: .leading, spacing: 12) {

@@ -527,99 +527,132 @@ struct TrendDetailView: View {
     }
     
     // MARK: - Context Generation for AI
+    func getTrendLogicDescription(for metric: DreamMetric) -> String {
+        switch metric {
+        case .anxiety:
+            return "Scale (0-100): <25 Low/Good, 25-50 Moderate, >50 High/Concerning."
+        case .sentiment:
+            return "Scale (0-100): >60 Positive, 40-60 Neutral, <40 Negative."
+        case .lucidity:
+            return "Scale (0-100): >50 High Awareness, 20-50 Some Awareness, <20 Low."
+        case .vividness:
+            return "Scale (0-100): >75 Vivid, 40-75 Moderate, <40 Hazy."
+        case .fatigue:
+            return "Scale (0-100): <30 Rested, 30-60 Normal, >60 Fatigued."
+        case .coherence:
+            return "Scale (0-100): >70 Coherent, 40-70 Dream Logic, <40 Fragmented."
+        case .nightmares:
+            return "Count: 0 Peaceful, 1-2 Occasional, >2 Frequent."
+        case .positive:
+            return "Count: >3 Frequent, 1-3 Occasional, 0 Low."
+        case .dreams:
+            return "Count: >5 High Recall, 2-5 Moderate, <2 Low."
+        default:
+            return ""
+        }
+    }
+
     func generateContextString() -> String {
         var context = ""
         let formatter = DateFormatter()
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
         
         let isMentalHealth = (metric == .anxiety || metric == .sentiment)
         let metricName = isMentalHealth ? "Anxiety & Sentiment" : metric.rawValue
         
         context = "Metric: \(metricName)\nTimeframe: \(selectedTimeFrame.rawValue)\n"
+        context += "Trend Logic: \(getTrendLogicDescription(for: metric))\n"
         context += "Note: These metrics are calculated from your dream logs.\n"
         
-        switch selectedTimeFrame {
-        case .day:
-            let today = Date()
-            formatter.dateFormat = "MMM d, yyyy"
-            
-            // Get all dreams for today
-            let start = Calendar.current.startOfDay(for: today)
-            let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
-            let dreams = store.dreams.filter { $0.date >= start && $0.date < end }
-            
-            context += "Stats for Day (\(formatter.string(from: today))):\n"
-            context += "Total Dreams Recorded: \(dreams.count)\n"
+        // Helper to format values or return "No Data"
+        func getValueString(for dreams: [Dream]) -> String {
+            if dreams.isEmpty { return "No Data" }
             
             if isMentalHealth {
                 let anxiety = calculateValue(for: dreams, metric: .anxiety)
                 let sentiment = calculateValue(for: dreams, metric: .sentiment)
-                context += "Anxiety Level: \(String(format: "%.1f", anxiety))\n"
-                context += "Sentiment Score: \(String(format: "%.1f", sentiment))\n"
+                return "Anxiety: \(Int(anxiety)) | Sentiment: \(Int(sentiment))"
             } else {
                 let val = calculateValue(for: dreams, metric: metric)
-                let valStr = metric.isPercentage ? String(format: "%.0f%%", val) : String(format: "%.1f", val)
-                context += "Average \(metric.rawValue): \(valStr)"
+                if metric.isPercentage {
+                    return String(format: "%.0f%%", val)
+                } else {
+                    return String(format: "%.1f", val)
+                }
+            }
+        }
+        
+        switch selectedTimeFrame {
+        case .day:
+            context += "Recorded Dreams for Today:\n"
+            
+            let startOfDay = calendar.startOfDay(for: Date())
+            let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+            
+            // Filter and sort dreams for today
+            let todaysDreams = store.dreams.filter { $0.date >= startOfDay && $0.date < endOfDay }.sorted(by: { $0.date < $1.date })
+            
+            if todaysDreams.isEmpty {
+                context += "No dreams recorded today.\n"
+            } else {
+                for (index, dream) in todaysDreams.enumerated() {
+                    context += "- Dream \(index + 1): \(getValueString(for: [dream]))\n"
+                }
             }
             
-        case .week, .month:
-            formatter.dateFormat = "MMM d"
-            context += "Detailed breakdown by day:\n"
+        case .week:
+            context += "Daily breakdown for this week:\n"
+            let now = Date()
+            let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now) ?? DateInterval(start: now, duration: 0)
+            let startOfWeek = weekInterval.start
+            formatter.dateFormat = "EEEE" // Monday
             
-            if isMentalHealth {
-                let anxietyPoints = generatePoints(for: .anxiety)
-                let sentimentPoints = generatePoints(for: .sentiment)
-                
-                if anxietyPoints.isEmpty && sentimentPoints.isEmpty {
-                    context += "No data available."
-                } else {
-                    context += "Date | Anxiety (0-100) | Sentiment (0-100)\n"
-                    let allDates = Set(anxietyPoints.map(\.date) + sentimentPoints.map(\.date)).sorted()
-                    for date in allDates {
-                        let aVal = anxietyPoints.first(where: { $0.date == date })?.value ?? 0
-                        let sVal = sentimentPoints.first(where: { $0.date == date })?.value ?? 0
-                        context += "- \(formatter.string(from: date)): A:\(Int(aVal)) | S:\(Int(sVal))\n"
-                    }
+            for i in 0..<7 {
+                if let dayDate = calendar.date(byAdding: .day, value: i, to: startOfWeek) {
+                    let startOfD = calendar.startOfDay(for: dayDate)
+                    let endOfD = calendar.date(byAdding: .day, value: 1, to: startOfD)!
+                    let dreams = store.dreams.filter { $0.date >= startOfD && $0.date < endOfD }
+                    
+                    let dayStr = formatter.string(from: dayDate)
+                    context += "- \(dayStr): \(getValueString(for: dreams))\n"
                 }
-            } else {
-                let points = generatePoints(for: metric)
-                if points.isEmpty {
-                    context += "No data available."
-                } else {
-                    for p in points {
-                        let valStr = metric.isPercentage ? String(format: "%.0f%%", p.value) : String(format: "%.1f", p.value)
-                        context += "- \(formatter.string(from: p.date)): \(valStr)\n"
+            }
+            
+        case .month:
+            let now = Date()
+            formatter.dateFormat = "MMMM yyyy"
+            context += "Daily breakdown for \(formatter.string(from: now)):\n"
+            
+            let components = calendar.dateComponents([.year, .month], from: now)
+            if let startOfMonth = calendar.date(from: components),
+               let range = calendar.range(of: .day, in: .month, for: startOfMonth) {
+                
+                formatter.dateFormat = "MMM d" // Ensures "Jan 1" format
+                
+                for day in range {
+                    if let date = calendar.date(byAdding: .day, value: day - 1, to: startOfMonth) {
+                        let nextDay = calendar.date(byAdding: .day, value: 1, to: date)!
+                        let dreams = store.dreams.filter { $0.date >= date && $0.date < nextDay }
+                        
+                        let dateStr = formatter.string(from: date)
+                        context += "- \(dateStr): \(getValueString(for: dreams))\n"
                     }
                 }
             }
             
         case .year:
-            formatter.dateFormat = "MMMM yyyy"
-            context += "Detailed breakdown by month:\n"
+            context += "Monthly breakdown for \(selectedYear):\n"
+            let yearStart = calendar.date(from: DateComponents(year: selectedYear, month: 1, day: 1))!
+            formatter.dateFormat = "MMMM" // Explicitly "January", "February"
             
-            if isMentalHealth {
-                let anxietyPoints = generatePoints(for: .anxiety)
-                let sentimentPoints = generatePoints(for: .sentiment)
-                
-                if anxietyPoints.isEmpty && sentimentPoints.isEmpty {
-                    context += "No data available."
-                } else {
-                    context += "Month | Anxiety (0-100) | Sentiment (0-100)\n"
-                    let allDates = Set(anxietyPoints.map(\.date) + sentimentPoints.map(\.date)).sorted()
-                    for date in allDates {
-                        let aVal = anxietyPoints.first(where: { $0.date == date })?.value ?? 0
-                        let sVal = sentimentPoints.first(where: { $0.date == date })?.value ?? 0
-                        context += "- \(formatter.string(from: date)): A:\(Int(aVal)) | S:\(Int(sVal))\n"
-                    }
-                }
-            } else {
-                let points = generatePoints(for: metric)
-                if points.isEmpty {
-                    context += "No data available."
-                } else {
-                    for p in points {
-                        let valStr = metric.isPercentage ? String(format: "%.0f%%", p.value) : String(format: "%.1f", p.value)
-                        context += "- \(formatter.string(from: p.date)): \(valStr)\n"
-                    }
+            for month in 0..<12 {
+                if let monthDate = calendar.date(byAdding: .month, value: month, to: yearStart) {
+                    let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthDate)!
+                    let dreams = store.dreams.filter { $0.date >= monthDate && $0.date < nextMonth }
+                    
+                    let monthStr = formatter.string(from: monthDate)
+                    context += "- \(monthStr): \(getValueString(for: dreams))\n"
                 }
             }
         }

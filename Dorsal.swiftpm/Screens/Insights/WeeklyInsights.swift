@@ -144,13 +144,13 @@ struct WeeklyInsightsView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: {
-                        Task { await store.refreshWeeklyInsights() }
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 16, weight: .semibold))
+                    if !store.isGeneratingInsights && selectedInsight == nil {
+                        Button(action: {
+                            Task { await store.refreshWeeklyInsights() }
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                        }
                     }
-                    .disabled(store.isGeneratingInsights || selectedInsight != nil)
                 }
             }
             .navigationDestination(for: DreamMetric.self) { metric in

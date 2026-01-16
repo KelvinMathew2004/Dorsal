@@ -30,7 +30,13 @@ struct ProfileView: View {
     static var cachedGradientColors: [Color] = []
     
     var textColor: Color {
-        let baseColor = gradientColors.first ?? .white
+        let baseColor: Color
+        if let customBase = gradientColors.first {
+            baseColor = customBase
+        } else {
+            baseColor = Color(red: 0.10, green: 0.05, blue: 0.20)
+        }
+        
         return baseColor.mix(with: .white, by: 0.5)
     }
     
@@ -43,7 +49,13 @@ struct ProfileView: View {
     @State private var editFirstName = ""
     @State private var editLastName = ""
     
-    let categories = ["People", "Places", "Symbols"]
+    var availableCategories: [String] {
+        var cats: [String] = []
+        if !store.allPeople.isEmpty { cats.append("People") }
+        if !store.allPlaces.isEmpty { cats.append("Places") }
+        if !store.allTags.isEmpty { cats.append("Symbols") }
+        return cats
+    }
     
     var body: some View {
         NavigationStack {
@@ -177,7 +189,7 @@ struct ProfileView: View {
                         }
                     }
                 }
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
                 .photosPicker(isPresented: $showPhotoPicker, selection: $selectedItem, matching: .images)
                 .sheet(isPresented: $showImagePlayground) {
                     ImagePlaygroundSheet(store: store, entityName: "Profile Picture", entityDescription: "A cool avatar") { data in
@@ -270,7 +282,7 @@ struct ProfileView: View {
                     Image(systemName: "person.fill")
                         .font(.system(size: 35))
                         .frame(width: 90, height: 90)
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(textColor.opacity(0.5))
                         .glassEffect(.clear, in: Circle())
                 }
             }
@@ -301,15 +313,31 @@ struct ProfileView: View {
     
     private func categorySection(proxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker("Category", selection: $selectedCategory) {
-                ForEach(categories, id: \.self) { cat in
-                    Text(cat).tag(cat)
+            // Only show Picker if there are categories available
+            if !availableCategories.isEmpty {
+                Picker("Category", selection: $selectedCategory) {
+                    ForEach(availableCategories, id: \.self) { cat in
+                        Text(cat).tag(cat)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .onAppear {
+                    // Ensure selection is valid when view appears
+                    if !availableCategories.contains(selectedCategory), let first = availableCategories.first {
+                        selectedCategory = first
+                    }
+                }
+                .onChange(of: availableCategories) {
+                    // Ensure selection is valid if categories change (e.g. last item in a category deleted)
+                    if !availableCategories.contains(selectedCategory), let first = availableCategories.first {
+                        selectedCategory = first
+                    }
                 }
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
             
-            LazyVStack(spacing: 0) {
+            // Switched to VStack to prevent glass/material artifacts common in LazyVStack
+            VStack(spacing: 0) {
                 ForEach(itemsForCategory, id: \.self) { item in
                     let itemIdentifier = EntityIdentifier(name: item, type: filterTypeForCategory)
                     let children = store.getChildren(for: item, type: filterTypeForCategory)
@@ -660,12 +688,12 @@ struct ContinuousStatBlock: View {
     let title: String; let value: String; let icon: String; let color: Color; let corners: UIRectCorner
     var body: some View {
         ZStack {
-            Image(systemName: icon).font(.system(size: 50)).foregroundStyle(color.opacity(0.15))
+            Image(systemName: icon).font(.system(size: 50)).foregroundStyle(color.opacity(0.2))
             VStack(spacing: 2) {
                 Text(value).font(.system(size: 24, weight: .bold, design: .rounded)).foregroundStyle(.white).minimumScaleFactor(0.8).lineLimit(1)
                 Text(title.uppercased()).font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.6)).tracking(0.5)
             }.padding(.vertical, 24)
-        }.frame(maxWidth: .infinity).frame(height: 100).glassEffect(.clear.tint(color.opacity(0.15)), in: CustomCorner(corners: corners, radius: 20))
+        }.frame(maxWidth: .infinity).frame(height: 80).glassEffect(.clear.tint(color.opacity(0.3)), in: CustomCorner(corners: corners, radius: 20))
     }
 }
 
