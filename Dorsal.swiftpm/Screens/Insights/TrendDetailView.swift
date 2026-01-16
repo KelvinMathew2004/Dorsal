@@ -3,16 +3,16 @@ import Charts
 
 // Helper enum to define which metric we are analyzing
 enum DreamMetric: String, CaseIterable, Identifiable {
-    case dreams = "Dreams"
-    case anxiety = "Anxiety"
-    case sentiment = "Sentiment"
-    case lucidity = "Lucidity"
-    case vividness = "Vividness"
-    case fatigue = "Vocal Fatigue"
-    case tone = "Tone"
-    case coherence = "Coherence"
-    case nightmares = "Nightmares"
-    case positive = "Positive Dreams"
+    case dreams = "dreams"
+    case anxiety = "anxiety"
+    case sentiment = "sentiment"
+    case lucidity = "lucidity"
+    case vividness = "vividness"
+    case fatigue = "vocal fatigue"
+    case tone = "tone"
+    case coherence = "coherence"
+    case nightmares = "nightmares"
+    case positive = "positive dreams"
     
     var id: String { self.rawValue }
     
@@ -28,6 +28,21 @@ enum DreamMetric: String, CaseIterable, Identifiable {
         case .coherence: return .cyan
         case .nightmares: return .purple
         case .positive: return .green
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .dreams: return "moon.stars.fill"
+        case .anxiety: return "exclamationmark.triangle.fill"
+        case .sentiment: return "heart.fill"
+        case .lucidity: return "sparkles"
+        case .vividness: return "eye.fill"
+        case .fatigue: return "battery.25"
+        case .tone: return "waveform"
+        case .coherence: return "brain.head.profile"
+        case .nightmares: return "cloud.bolt.rain.fill"
+        case .positive: return "sun.max.fill"
         }
     }
     
@@ -138,6 +153,10 @@ struct TrendDetailView: View {
     @ObservedObject var store: DreamStore
     @Environment(\.dismiss) var dismiss
     
+    // MARK: - Animation State
+    @Namespace private var namespace
+    @State private var showCoaching = false
+    
     @State private var selectedTimeFrame: TimeFrame = .week
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
     
@@ -155,7 +174,7 @@ struct TrendDetailView: View {
     
     var viewTitle: String {
         if metric == .anxiety || metric == .sentiment { return "Mental Health" }
-        return metric.rawValue
+        return metric.rawValue.capitalized
     }
     
     var viewDescription: String {
@@ -235,7 +254,7 @@ struct TrendDetailView: View {
                             .fill(item.color)
                             .frame(width: 6, height: 6)
                         
-                        Text(item.name + ":")
+                        Text(item.name.capitalized + ":")
                             .font(.caption.bold())
                             .foregroundStyle(.white)
                         
@@ -461,25 +480,28 @@ struct TrendDetailView: View {
         var calendar = Calendar.current
         calendar.firstWeekday = 2
         let now = Date()
+        
         switch selectedTimeFrame {
         case .day:
             let start = calendar.startOfDay(for: now)
-            let end = calendar.date(byAdding: .hour, value: 23, to: start)!
+            let end = calendar.date(byAdding: .day, value: 1, to: start)!
             return start...end
+            
         case .week:
             let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now) ?? DateInterval(start: now, duration: 0)
             return weekInterval.start...weekInterval.end
+            
         case .month:
             let currentComponents = calendar.dateComponents([.year, .month], from: now)
             let start = calendar.date(from: currentComponents)!
             let range = calendar.range(of: .day, in: .month, for: start)!
             let end = calendar.date(byAdding: .day, value: range.count, to: start)!
             return start...end
+            
         case .year:
              let start = calendar.date(from: DateComponents(year: selectedYear, month: 1, day: 1))!
-             let end = calendar.date(from: DateComponents(year: selectedYear, month: 12, day: 31))!
-             let endBuffered = calendar.date(byAdding: .day, value: 1, to: end)!
-             return start...endBuffered
+             let end = calendar.date(from: DateComponents(year: selectedYear + 1, month: 1, day: 1))!
+             return start...end
         }
     }
     
@@ -504,6 +526,107 @@ struct TrendDetailView: View {
         }
     }
     
+    // MARK: - Context Generation for AI
+    func generateContextString() -> String {
+        var context = ""
+        let formatter = DateFormatter()
+        
+        let isMentalHealth = (metric == .anxiety || metric == .sentiment)
+        let metricName = isMentalHealth ? "Anxiety & Sentiment" : metric.rawValue
+        
+        context = "Metric: \(metricName)\nTimeframe: \(selectedTimeFrame.rawValue)\n"
+        context += "Note: These metrics are calculated from your dream logs.\n"
+        
+        switch selectedTimeFrame {
+        case .day:
+            let today = Date()
+            formatter.dateFormat = "MMM d, yyyy"
+            
+            // Get all dreams for today
+            let start = Calendar.current.startOfDay(for: today)
+            let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
+            let dreams = store.dreams.filter { $0.date >= start && $0.date < end }
+            
+            context += "Stats for Day (\(formatter.string(from: today))):\n"
+            context += "Total Dreams Recorded: \(dreams.count)\n"
+            
+            if isMentalHealth {
+                let anxiety = calculateValue(for: dreams, metric: .anxiety)
+                let sentiment = calculateValue(for: dreams, metric: .sentiment)
+                context += "Anxiety Level: \(String(format: "%.1f", anxiety))\n"
+                context += "Sentiment Score: \(String(format: "%.1f", sentiment))\n"
+            } else {
+                let val = calculateValue(for: dreams, metric: metric)
+                let valStr = metric.isPercentage ? String(format: "%.0f%%", val) : String(format: "%.1f", val)
+                context += "Average \(metric.rawValue): \(valStr)"
+            }
+            
+        case .week, .month:
+            formatter.dateFormat = "MMM d"
+            context += "Detailed breakdown by day:\n"
+            
+            if isMentalHealth {
+                let anxietyPoints = generatePoints(for: .anxiety)
+                let sentimentPoints = generatePoints(for: .sentiment)
+                
+                if anxietyPoints.isEmpty && sentimentPoints.isEmpty {
+                    context += "No data available."
+                } else {
+                    context += "Date | Anxiety (0-100) | Sentiment (0-100)\n"
+                    let allDates = Set(anxietyPoints.map(\.date) + sentimentPoints.map(\.date)).sorted()
+                    for date in allDates {
+                        let aVal = anxietyPoints.first(where: { $0.date == date })?.value ?? 0
+                        let sVal = sentimentPoints.first(where: { $0.date == date })?.value ?? 0
+                        context += "- \(formatter.string(from: date)): A:\(Int(aVal)) | S:\(Int(sVal))\n"
+                    }
+                }
+            } else {
+                let points = generatePoints(for: metric)
+                if points.isEmpty {
+                    context += "No data available."
+                } else {
+                    for p in points {
+                        let valStr = metric.isPercentage ? String(format: "%.0f%%", p.value) : String(format: "%.1f", p.value)
+                        context += "- \(formatter.string(from: p.date)): \(valStr)\n"
+                    }
+                }
+            }
+            
+        case .year:
+            formatter.dateFormat = "MMMM yyyy"
+            context += "Detailed breakdown by month:\n"
+            
+            if isMentalHealth {
+                let anxietyPoints = generatePoints(for: .anxiety)
+                let sentimentPoints = generatePoints(for: .sentiment)
+                
+                if anxietyPoints.isEmpty && sentimentPoints.isEmpty {
+                    context += "No data available."
+                } else {
+                    context += "Month | Anxiety (0-100) | Sentiment (0-100)\n"
+                    let allDates = Set(anxietyPoints.map(\.date) + sentimentPoints.map(\.date)).sorted()
+                    for date in allDates {
+                        let aVal = anxietyPoints.first(where: { $0.date == date })?.value ?? 0
+                        let sVal = sentimentPoints.first(where: { $0.date == date })?.value ?? 0
+                        context += "- \(formatter.string(from: date)): A:\(Int(aVal)) | S:\(Int(sVal))\n"
+                    }
+                }
+            } else {
+                let points = generatePoints(for: metric)
+                if points.isEmpty {
+                    context += "No data available."
+                } else {
+                    for p in points {
+                        let valStr = metric.isPercentage ? String(format: "%.0f%%", p.value) : String(format: "%.1f", p.value)
+                        context += "- \(formatter.string(from: p.date)): \(valStr)\n"
+                    }
+                }
+            }
+        }
+        
+        return context
+    }
+    
     var body: some View {
         ZStack {
             Theme.gradientBackground.ignoresSafeArea()
@@ -518,13 +641,39 @@ struct TrendDetailView: View {
 
                     descriptionSection
                     
-                    tipsSection
+                    Button {
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                            showCoaching = true
+                        }
+                    } label: {
+                        tipsSection
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                     
                     Spacer()
                 }
                 .padding(.top)
             }
             .scrollIndicators(.hidden)
+            .blur(radius: showCoaching ? 10 : 0)
+            
+            // Detail View Overlay
+            if showCoaching {
+                CoachingDetailView(
+                    store: store,
+                    metric: metric,
+                    chartData: generatePoints(for: metric),
+                    secondaryChartData: (metric == .anxiety || metric == .sentiment) ? generatePoints(for: metric == .anxiety ? .sentiment : .anxiety) : nil,
+                    timeFrame: selectedTimeFrame,
+                    xAxisDomain: xAxisDomain,
+                    context: generateContextString(),
+                    trendStatus: determineTrend(for: metric).text,
+                    namespace: namespace,
+                    isVisible: $showCoaching
+                )
+                .zIndex(100)
+            }
         }
         .navigationTitle(viewTitle)
         .navigationBarTitleDisplayMode(.large)
@@ -535,7 +684,7 @@ struct TrendDetailView: View {
             HStack {
                 Button { moveWeek(by: -1) } label: {
                     Image(systemName: "chevron.left")
-                        .foregroundStyle(Theme.secondary)
+                        .foregroundStyle(.white.opacity(0.8))
                         .fontWeight(.bold)
                 }
                 .buttonStyle(.glassProminent)
@@ -547,7 +696,7 @@ struct TrendDetailView: View {
                 Spacer()
                 Button { moveWeek(by: 1) } label: {
                     Image(systemName: "chevron.right")
-                        .foregroundStyle(Theme.secondary)
+                        .foregroundStyle(.white.opacity(0.8))
                         .fontWeight(.bold)
                 }
                 .buttonStyle(.glassProminent)
@@ -577,7 +726,7 @@ struct TrendDetailView: View {
                 }
             }
             .padding(16)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
             .padding(.horizontal)
             
             VStack(spacing: 12) {
@@ -610,7 +759,7 @@ struct TrendDetailView: View {
                         }
                     }
                     .padding()
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
                 }
             }
             .padding(.horizontal)
@@ -1025,7 +1174,7 @@ struct TrendDetailView: View {
     
     var barChartView: some View {
         DetailedChartCard {
-            Chart(groupedSeries) { series in
+            let chart = Chart(groupedSeries) { series in
                 ForEach(series.points) { point in
                     BarMark(
                         x: .value(selectedTimeFrame == .day ? "Time" : "Month", point.date, unit: selectedTimeFrame == .year ? .month : .hour),
@@ -1049,11 +1198,9 @@ struct TrendDetailView: View {
             }
             .chartXSelection(value: $rawSelectedDate)
             .chartXScale(domain: xAxisDomain)
-            .chartYScale(domain: metric.isPercentage ? .automatic(includesZero: true) : .automatic)
             .chartYAxis {
                 AxisMarks { _ in AxisGridLine(); AxisTick(); AxisValueLabel() }
             }
-            .modifier(PercentageScaleModifier(isPercentage: metric.isPercentage))
             .chartXAxis {
                 if selectedTimeFrame == .day {
                     AxisMarks(values: .automatic(desiredCount: 6)) { _ in
@@ -1067,6 +1214,13 @@ struct TrendDetailView: View {
             }
             .frame(height: 250)
             .padding(.trailing, 10)
+            
+            if metric.isPercentage {
+                chart.chartYScale(domain: 0...100)
+            } else {
+                chart.chartYScale(domain: .automatic(includesZero: true))
+            }
+            
         } caption: {
             if metric == .anxiety || metric == .sentiment {
                 HStack(spacing: 16) {
@@ -1133,7 +1287,6 @@ struct TrendDetailView: View {
                 }
             }
             .chartXSelection(value: $rawSelectedDate)
-            .chartYScale(domain: 0...100)
             .chartXScale(domain: xAxisDomain)
             .chartYAxis {
                 AxisMarks { _ in AxisGridLine(); AxisTick(); AxisValueLabel() }
@@ -1157,6 +1310,7 @@ struct TrendDetailView: View {
             }
             .frame(height: 250)
             .padding(.trailing, 10)
+            .modifier(PercentageScaleModifier(isPercentage: metric.isPercentage))
         } caption: {
             if metric == .anxiety || metric == .sentiment {
                 HStack(spacing: 16) {
@@ -1185,25 +1339,35 @@ struct TrendDetailView: View {
         }()
 
         return Text(combinedText)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(24)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
             .padding(.horizontal)
     }
     
     var tipsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Tip", systemImage: "heart.text.clipboard.fill")
-                .font(.headline)
-                .foregroundStyle(store.themeAccentColor)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("General Tip", systemImage: "heart.text.clipboard.fill")
+                    .font(.headline)
+                    .foregroundStyle(store.themeAccentColor)
+                    .symbolColorRenderingMode(.gradient)
+                
+                Spacer()
+                
+                // Question bubble moved to the right
+                Image(systemName: "star.bubble")
+                    .font(.body)
+                    .foregroundStyle(Theme.secondary)
+            }
             
             Text(metric.tips)
                 .font(.body)
-                .foregroundStyle(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
         .padding(.horizontal)
     }
 }
@@ -1217,4 +1381,419 @@ struct PercentageScaleModifier: ViewModifier {
             content
         }
     }
+}
+
+// MARK: - Coaching Detail View (New)
+
+struct CoachingDetailView: View {
+    @ObservedObject var store: DreamStore
+    let metric: DreamMetric
+    let chartData: [ChartDataPoint]
+    var secondaryChartData: [ChartDataPoint]? = nil
+    let timeFrame: TimeFrame
+    let xAxisDomain: ClosedRange<Date>
+    let context: String
+    let trendStatus: String
+    var namespace: Namespace.ID
+    @Binding var isVisible: Bool
+    @State private var showInput = false
+    
+    @State private var questionText: String = ""
+    @State private var answerText: String = ""
+    @State private var initialTip: String = ""
+    @State private var isAsking: Bool = false
+    @State private var showContent = false
+    
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+                .onTapGesture { /* Disabling tap-to-dismiss per user request */ }
+                .transition(.opacity)
+            
+            VStack(spacing: 0) {
+                // Scrollable Content
+                ScrollView {
+                    // Container for content inside ScrollView
+                    GlassEffectContainer(spacing: 24) {
+                        VStack(spacing: 24) {
+                            VStack(spacing: 24) {
+                                CoachingHeader(store: store)
+                                
+                                CoachingTipSection(initialTip: initialTip)
+                                
+                                if showInput {
+                                    CoachingChartSection(
+                                        store: store,
+                                        metric: metric,
+                                        chartData: chartData,
+                                        secondaryChartData: secondaryChartData,
+                                        timeFrame: timeFrame,
+                                        xAxisDomain: xAxisDomain
+                                    )
+                                    .padding(.top)
+                                }
+                            }
+                            .padding(24)
+                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                            .matchedGeometryEffect(id: "coaching_card", in: namespace)
+                            
+                            if showInput {
+                                CoachingInputSection(
+                                    store: store,
+                                    metric: metric,
+                                    initialTip: initialTip,
+                                    questionText: $questionText,
+                                    answerText: $answerText,
+                                    isAsking: isAsking,
+                                    onReset: resetQnA,
+                                    onAsk: askQuestion
+                                )
+                            }
+                            
+                            CoachingAnswerSection(
+                                store: store,
+                                answerText: answerText,
+                                isAsking: isAsking
+                            )
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 20)
+                }
+                .scrollIndicators(.hidden)
+            }
+            
+            // Close Button
+            .safeAreaInset(edge: .bottom) {
+                if showContent {
+                    Button { close() } label: {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                            .frame(width: 60, height: 60)
+                    }
+                    .contentShape(Circle())
+                    .glassEffect(.regular.interactive(), in: Circle())
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .onAppear {
+            showContent = true
+            Task {
+                await generateInitialTip()
+            }
+        }
+    }
+    
+    func close() {
+        showContent = false
+        isVisible = false
+    }
+    
+    func resetQnA() {
+        questionText = ""
+        answerText = ""
+        isAsking = false
+    }
+    
+    func generateInitialTip() async {
+        do {
+            let tip = try await DreamAnalyzer.shared.GenerateCoachingTip(
+                metric: metric.rawValue,
+                description: metric.description,
+                statsContext: context,
+                trendStatus: trendStatus
+            )
+            withAnimation {
+                self.initialTip = tip
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation(.easeIn(duration: 0.3)) {
+                    showInput = true
+                }
+            }
+        } catch {
+            withAnimation {
+                self.initialTip = "Unable to generate a tip right now."
+            }
+        }
+    }
+    
+    func askQuestion() {
+        guard !questionText.isEmpty else { return }
+        isAsking = true
+        
+        Task {
+            do {
+                let answer = try await DreamAnalyzer.shared.TrendQuestion(
+                    metric: metric.rawValue,
+                    statsContext: context,
+                    trendStatus: trendStatus,
+                    question: questionText
+                )
+                withAnimation {
+                    self.answerText = answer
+                    self.isAsking = false
+                }
+            } catch {
+                withAnimation {
+                    self.answerText = "Unable to provide advice right now."
+                    self.isAsking = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Subviews for CoachingDetailView
+
+struct CoachingHeader: View {
+    @ObservedObject var store: DreamStore
+    var body: some View {
+        HStack {
+            Label("Personalized Tips", systemImage: "sparkle.text.clipboard.fill")
+                .font(.headline)
+                .foregroundStyle(store.themeAccentColor)
+            Spacer()
+        }
+    }
+}
+
+struct CoachingTipSection: View {
+    let initialTip: String
+    var body: some View {
+        if initialTip.isEmpty {
+            Text("Analyzing your recent data...")
+                .font(.body)
+                .foregroundStyle(Theme.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .shimmering()
+        } else {
+            Text(LocalizedStringKey(formatText(initialTip)))
+                .font(.body)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+struct CoachingChartSection: View {
+    @ObservedObject var store: DreamStore
+    let metric: DreamMetric
+    let chartData: [ChartDataPoint]
+    let secondaryChartData: [ChartDataPoint]?
+    let timeFrame: TimeFrame
+    let xAxisDomain: ClosedRange<Date>
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Render the chart with the correct scale
+            chartView
+            
+            // Legend
+            HStack(spacing: 12) {
+                if secondaryChartData != nil {
+                    Label("Anxiety", systemImage: "circle.fill")
+                        .foregroundStyle(DreamMetric.anxiety.color)
+                        .font(.caption2)
+                    Label("Sentiment", systemImage: "circle.fill")
+                        .foregroundStyle(DreamMetric.sentiment.color)
+                        .font(.caption2)
+                } else {
+                    Label(metric.rawValue.capitalized, systemImage: "circle.fill")
+                        .foregroundStyle(metric.color)
+                        .font(.caption2)
+                }
+                Spacer()
+            }
+            .padding(.leading, 15)
+        }
+    }
+    
+    // Separate builder to handle conditional modifiers (Y-Scale) cleanly
+    @ViewBuilder
+    var chartView: some View {
+        let chart = Chart {
+            // Primary Metric
+            ForEach(chartData) { point in
+                if timeFrame == .day || timeFrame == .year {
+                    BarMark(
+                        x: .value("Date", point.date, unit: timeFrame == .year ? .month : .hour),
+                        y: .value("Value", point.value)
+                    )
+                    .foregroundStyle(metric.color)
+                } else {
+                    LineMark(
+                        x: .value("Date", point.date, unit: timeFrame == .month ? .day : .day),
+                        y: .value("Value", point.value),
+                        series: .value("Metric", metric.rawValue)
+                    )
+                    .foregroundStyle(metric.color)
+                    .symbol {
+                        Circle().fill(metric.color).frame(width: 5, height: 5)
+                    }
+                }
+            }
+            
+            // Secondary Metric (Mental Health)
+            if let secondary = secondaryChartData {
+                ForEach(secondary) { point in
+                    let secondaryMetric = metric == .anxiety ? DreamMetric.sentiment : DreamMetric.anxiety
+                    
+                    if timeFrame == .day || timeFrame == .year {
+                        BarMark(
+                            x: .value("Date", point.date, unit: timeFrame == .year ? .month : .hour),
+                            y: .value("Value", point.value)
+                        )
+                        .foregroundStyle(secondaryMetric.color)
+                    } else {
+                        LineMark(
+                            x: .value("Date", point.date, unit: timeFrame == .month ? .day : .day),
+                            y: .value("Value", point.value),
+                            series: .value("Metric", secondaryMetric.rawValue)
+                        )
+                        .foregroundStyle(secondaryMetric.color)
+                        .symbol {
+                            Circle().fill(secondaryMetric.color).frame(width: 5, height: 5)
+                        }
+                    }
+                }
+            }
+        }
+        .chartXScale(domain: xAxisDomain)
+        .chartYAxis {
+            AxisMarks(position: .leading) { AxisValueLabel(); AxisTick() }
+        }
+        .chartXAxis {
+            switch timeFrame {
+            case .day:
+                AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) {
+                    AxisValueLabel(format: .dateTime.hour())
+                    AxisTick()
+                }
+            case .week:
+                AxisMarks(position: .bottom, values: .stride(by: .day)) {
+                    AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true)
+                    AxisTick()
+                }
+            case .month:
+                AxisMarks(position: .bottom, values: .stride(by: .day, count: 4)) {
+                    AxisValueLabel(format: .dateTime.day())
+                    AxisTick()
+                }
+            case .year:
+                AxisMarks(position: .bottom, values: .stride(by: .month)) {
+                    AxisValueLabel(format: .dateTime.month(.narrow), centered: true)
+                    AxisTick()
+                }
+            }
+        }
+        .frame(height: 120)
+        .padding(.horizontal, 15)
+        .padding(.bottom, 5)
+        
+        // Apply Y-Axis Scale Logic
+        if metric.isPercentage {
+            chart.chartYScale(domain: 0...100)
+        } else {
+            chart.chartYScale(domain: .automatic(includesZero: true))
+        }
+    }
+}
+
+struct CoachingInputSection: View {
+    @ObservedObject var store: DreamStore
+    let metric: DreamMetric
+    let initialTip: String
+    @Binding var questionText: String
+    @Binding var answerText: String
+    let isAsking: Bool
+    let onReset: () -> Void
+    let onAsk: () -> Void
+    
+    private var inputPlaceholder: String {
+        (metric == .anxiety || metric == .sentiment)
+        ? "Ask about your mental health..."
+        : "Ask about your \(metric.rawValue)..."
+    }
+    
+    var body: some View {
+        if !initialTip.isEmpty {
+            HStack(spacing: 12) {
+                TextField(inputPlaceholder, text: $questionText)
+                    .font(.body)
+                    .textFieldStyle(.plain)
+                    .padding(16)
+                    .glassEffect(.regular.interactive())
+                    .disabled(isAsking || !answerText.isEmpty)
+                
+                Button {
+                    if !answerText.isEmpty {
+                        onReset()
+                    } else {
+                        onAsk()
+                    }
+                } label: {
+                    Image(systemName: answerText.isEmpty ? "arrow.up" : "arrow.counterclockwise")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(questionText.isEmpty || isAsking ? .white.opacity(0.35) : .white.opacity(0.7))
+                        .frame(width: 44, height: 44)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .contentShape(Circle())
+                .glassEffect(
+                    questionText.isEmpty || isAsking
+                    ? .clear.tint(.gray.opacity(0.8))
+                    : .clear.interactive().tint(store.themeAccentColor.opacity(0.8)),
+                    in: Circle()
+                )
+                .disabled(questionText.isEmpty || isAsking)
+            }
+        }
+    }
+}
+
+struct CoachingAnswerSection: View {
+    @ObservedObject var store: DreamStore
+    let answerText: String
+    let isAsking: Bool
+    
+    var body: some View {
+        if !answerText.isEmpty || isAsking {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Response", systemImage: "bubble.left.and.bubble.right.fill")
+                    .font(.headline)
+                    .foregroundStyle(store.themeAccentColor)
+                
+                if isAsking && answerText.isEmpty {
+                    Text("Thinking...")
+                        .font(.body)
+                        .foregroundStyle(Theme.secondary)
+                        .shimmering()
+                } else {
+                    Text(LocalizedStringKey(formatText(answerText)))
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+            .padding(.bottom, 24)
+        }
+    }
+}
+
+// Formatting helper (copied since TrendDetailView is separate file)
+private func formatText(_ text: String) -> String {
+    var formatted = text
+    formatted = formatted.replacingOccurrences(of: "(?m)^#{1,4}\\s+(.+)$", with: "**$1**", options: .regularExpression)
+    formatted = formatted.replacingOccurrences(of: "(?m)^\\d+\\.\\s+(.+:)$", with: "**$0**", options: .regularExpression)
+    formatted = formatted.replacingOccurrences(of: "(?m)^[\\-\\*]\\s+", with: "   • ", options: .regularExpression)
+    return formatted
 }

@@ -258,6 +258,6 @@ struct DreamRow: View {
             .buttonStyle(PlainButtonStyle())
         }
         .padding(16)
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 20))
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
     }
 }

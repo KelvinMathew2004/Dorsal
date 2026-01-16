@@ -204,8 +204,10 @@ struct WeeklyInsightsView: View {
     func insightCardRow(type: WeeklyInsightType, insights: WeeklyInsightResult) -> some View {
         ZStack {
             // 1. Ghost Container (Invisible placeholder for layout)
-            WeeklyInsightCard(type: type, insights: insights, isExpanded: false)
-                .opacity(0)
+            if !store.isGeneratingInsights {
+                WeeklyInsightCard(type: type, insights: insights, isExpanded: false)
+                    .opacity(0)
+            }
             
             // 2. Interactive Card (Matched Geometry Source)
             if selectedInsight != type {
@@ -304,9 +306,14 @@ struct WeeklyInsightsView: View {
                     .chartXScale(domain: xAxisDomain)
                     .chartXAxis {
                         AxisMarks(values: .stride(by: .day)) { _ in
-                            AxisGridLine()
                             AxisTick()
                             AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true)
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { _ in
+                            AxisTick()
+                            AxisValueLabel()
                         }
                     }
                     .frame(height: 200)
@@ -324,7 +331,8 @@ struct WeeklyInsightsView: View {
     }
     
     private var keyStatsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)],
+        spacing: 16) {
             NavigationLink(value: DreamMetric.dreams) {
                 StatCard(title: "Dreams", value: "\(totalDreams)", icon: "book.fill", color: .blue, showArrow: true)
                     .contentShape(Rectangle())
@@ -374,9 +382,14 @@ struct WeeklyInsightsView: View {
                     .chartXScale(domain: xAxisDomain)
                     .chartXAxis {
                         AxisMarks(values: .stride(by: .day)) { _ in
-                            AxisGridLine()
                             AxisTick()
                             AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true)
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { _ in
+                            AxisTick()
+                            AxisValueLabel()
                         }
                     }
                     .chartYScale(domain: 0...100)
@@ -539,7 +552,7 @@ struct WeeklyInsightDetailView: View {
             // Background Dimmer
             Color.black.opacity(0.6)
                 .ignoresSafeArea()
-                .onTapGesture { close() }
+                .onTapGesture { }
                 .transition(.opacity)
             
             ScrollView {
@@ -648,6 +661,7 @@ struct WeeklyInsightDetailView: View {
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+                .padding(.bottom, 24)
             }
         }
     }

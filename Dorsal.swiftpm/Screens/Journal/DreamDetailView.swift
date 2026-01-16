@@ -217,12 +217,14 @@ struct DreamDetailView: View {
     func insightCardRow(type: InsightType, text: String, isProcessing: Bool) -> some View {
         ZStack {
             // 1. Ghost Container (Holds layout space, invisible)
-            InsightCardView(
-                type: type,
-                text: text,
-                animates: false
-            )
-            .opacity(0)
+            if !store.isProcessing {
+                InsightCardView(
+                    type: type,
+                    text: text,
+                    animates: false
+                )
+                .opacity(0)
+            }
             
             // 2. Interactive Card (Matched Geometry Source)
             if selectedInsight != type {
@@ -373,7 +375,7 @@ struct InsightDetailView: View {
             // Background
             Color.black.opacity(0.6)
                 .ignoresSafeArea()
-                .onTapGesture { close() }
+                .onTapGesture { }
                 .transition(.opacity)
             
             ScrollView {

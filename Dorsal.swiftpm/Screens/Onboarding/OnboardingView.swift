@@ -556,7 +556,7 @@ struct CustomTextField: View {
         TextField("", text: $text, prompt: Text(placeholder).foregroundColor(.gray))
             .padding()
             .foregroundStyle(.white)
-            .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
+            .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
@@ -598,7 +598,7 @@ struct PermissionRow: View {
             }
         }
         .padding()
-        .glassEffect(.clear.tint(isGranted ? Color.mint.opacity(0.2) : Color.clear), in: RoundedRectangle(cornerRadius: 16))
+        .glassEffect(.clear.tint(isGranted ? Color.mint.opacity(0.2) : Color.clear), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 

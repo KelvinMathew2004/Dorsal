@@ -167,6 +167,12 @@ struct RecordView: View {
                     
                     Spacer()
                     
+                    if store.isRecording && !store.isComplexVisualizerEnabled {
+                        AudioVisualizer(power: store.audioPower, isPaused: store.isPaused)
+                            .padding(.bottom, 20)
+                            .transition(.opacity)
+                    }
+                    
                     // MARK: - Controls
                     GlassEffectContainer(spacing: 20) {
                         HStack(spacing: store.isPaused ? 20 : 40) {
@@ -222,13 +228,6 @@ struct RecordView: View {
                     .padding(.bottom, (store.isRecording && !store.isPaused) ? 80 : 40)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isRecording)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isPaused)
-                    
-                    // MARK: - NEW: Simple Visualizer Position (Moved to Bottom)
-                    if store.isRecording && !store.isComplexVisualizerEnabled {
-                        AudioVisualizer(power: store.audioPower, isPaused: store.isPaused)
-                            .padding(.bottom, 20)
-                            .transition(.opacity)
-                    }
                 }
                 .zIndex(1) // Ensure UI is ON TOP
             }

@@ -106,7 +106,7 @@ struct SettingsView: View {
                     .foregroundStyle(.white)
             }
             .padding()
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         }
     }
     
@@ -125,7 +125,7 @@ struct SettingsView: View {
                         .foregroundStyle(.white)
                 }
                 .padding()
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
                 
                 if store.isReminderEnabled {
                     HStack {
@@ -143,7 +143,7 @@ struct SettingsView: View {
                         .colorScheme(.dark)
                     }
                     .padding()
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
                 }
             }
         }
@@ -164,7 +164,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             .padding()
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
             
             Button {
                 dismiss()
@@ -181,7 +181,7 @@ struct SettingsView: View {
                 .foregroundStyle(.white)
             }
             .padding()
-            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 16))
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
         }
     }
     
@@ -259,19 +259,19 @@ struct ThemeWheelSelector: View {
                 .frame(height: 80)
                 .mask {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 16)
+                        RoundedRectangle(cornerRadius: 24)
                             .frame(height: 50)
                             .frame(maxWidth: .infinity)
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 24)
                             .frame(width: 60, height: 80)
                     }
                     .compositingGroup()
                 }
                 
                 // Glass Joystick Overlay
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 24)
                     .frame(width: 63, height: 83)
-                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 12))
+                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24))
                     .shadow(color: .black.opacity(0.5), radius: 6, x: 0, y: 4)
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 5)

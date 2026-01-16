@@ -272,4 +272,45 @@ class DreamAnalyzer {
         let response = try await session.respond(to: prompt)
         return response.content
     }
+    
+    // MARK: - Trend Analysis & Coaching
+    
+    func GenerateCoachingTip(metric: String, description: String, statsContext: String, trendStatus: String) async throws -> String {
+        let prompt = """
+        You are a sleep coach analyzing the user's "\(metric)" trend.
+        
+        About this metric:
+        \(description)
+        
+        Data Context (Timeframe & Data Points):
+        \(statsContext)
+        
+        Current Trend Status: \(trendStatus)
+        
+        Task:
+        Based strictly on the provided data points and trend status, provide a single, short (1-2 sentences) insight or tip.
+        - If the data/status is concerning (e.g. High Anxiety, Nightmares), offer a calming, actionable tip to improve.
+        - If the data/status is positive, offer reinforcement to maintain it.
+        - Reference the specific data trend (e.g., "Since your anxiety spiked on Tuesday...") if relevant.
+        """
+        let response = try await session.respond(to: prompt)
+        return response.content
+    }
+    
+    func TrendQuestion(metric: String, statsContext: String, trendStatus: String, question: String) async throws -> String {
+        let prompt = """
+        Context:
+        Metric: \(metric)
+        Data Points:
+        \(statsContext)
+        Current Status: \(trendStatus)
+        
+        User Question:
+        "\(question)"
+        
+        Answer concisely (max 100 words) using the provided data context.
+        """
+        let response = try await session.respond(to: prompt)
+        return response.content
+    }
 }

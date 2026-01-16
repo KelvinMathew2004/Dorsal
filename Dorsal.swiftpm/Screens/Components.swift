@@ -392,7 +392,7 @@ struct StatCard: View {
             }
         }
         .padding()
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 16))
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
@@ -405,8 +405,8 @@ struct PreviewChartCard<Content: View, Caption: View>: View {
             content
             caption
         }
-        .padding(20)
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 16))
+        .padding()
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
@@ -419,7 +419,7 @@ struct DetailedChartCard<Content: View, Caption: View>: View {
             content
             caption
         }
-        .padding(20)
+        .padding(.leading)
     }
 }
 
@@ -452,7 +452,7 @@ struct RingView: View {
             .frame(maxWidth: .infinity)
             .padding(20)
         }
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 16))
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 

@@ -174,7 +174,7 @@ struct EntityDetailView: View {
                             }
                             .padding(16)
                             .frame(minHeight: 120, alignment: .topLeading)
-                            .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
+                            .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24))
                             .onTapGesture {
                                 isDescriptionFocused = true
                             }
@@ -218,7 +218,7 @@ struct EntityDetailView: View {
                                         .tint(Color.orange.opacity(0.1))
                                     }
                                     .padding()
-                                    .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 16))
+                                    .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 24))
                                 }
                             }
                             .padding(.horizontal)
@@ -273,7 +273,7 @@ struct EntityDetailView: View {
                                         .tint(Color.orange.opacity(0.1))
                                     }
                                     .padding()
-                                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
+                                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24))
                                 }
                                 .buttonStyle(.plain)
                                 .padding(.horizontal)
@@ -294,7 +294,7 @@ struct EntityDetailView: View {
                                     .foregroundStyle(textColor.opacity(0.9))
                                     .padding()
                                     .frame(maxWidth: .infinity)
-                                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 16))
+                                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24))
                                 }
                                 .padding(.horizontal)
                             }
