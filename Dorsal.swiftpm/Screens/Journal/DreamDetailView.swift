@@ -51,6 +51,10 @@ struct DreamDetailView: View {
         store.isProcessing && liveDream.id == store.currentDreamID
     }
     
+    var isAnalyzingFatigue: Bool {
+        store.isAnalyzingFatigue && liveDream.id == store.currentDreamID
+    }
+    
     var body: some View {
         ZStack {
             Theme.gradientBackground.ignoresSafeArea()
@@ -201,9 +205,11 @@ struct DreamDetailView: View {
                         ProgressView()
                             .scaleEffect(1.5)
                             .tint(.white)
-                        Text("Analyzing...")
+                        
+                        Text(isAnalyzingFatigue ? "Measuring Vocal Fatigue..." : "Analyzing Dream...")
                             .font(.headline)
                             .foregroundStyle(.white)
+                            .contentTransition(.numericText())
                     }
                     .padding(32)
                     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
@@ -289,7 +295,7 @@ struct DreamDetailView: View {
     
     @ViewBuilder
     var metricsSection: some View {
-        if let fatigue = liveDream.core?.voiceFatigue {
+        if let fatigue = liveDream.voiceFatigue {
             HStack(spacing: 24) {
                 // Vocal Fatigue Card
                 NavigationLink(destination: TrendDetailView(metric: .fatigue, store: store)) {

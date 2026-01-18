@@ -1,0 +1,29 @@
+{
+  "activityEntities" : [
+    "projectCreated",
+    [
+      {
+        "createdDate" : "2026-01-17T21:15:54Z",
+        "event" : "projectCreated",
+        "id" : "30EA541C-DBAD-4A22-B386-A9E21C113B7A",
+        "subtitle" : "VocalFatigueModel",
+        "title" : "Project Created"
+      }
+    ]
+  ],
+  "authorName" : "Kelvin Mathew",
+  "createdDate" : "2026-01-17T21:15:54Z",
+  "description" : "",
+  "id" : "19235F99-CFCC-49F7-9D79-BB8369DE6F03",
+  "license" : "",
+  "location" : "",
+  "modifiedDate" : "2026-01-17T21:15:54Z",
+  "projectName" : "VocalFatigueModel",
+  "settingsEntity" : {
+    "snapshotOnExtendTraining" : true,
+    "snapshotOnResumeTraining" : false
+  },
+  "taskType" : "audioClassifier",
+  "title" : "Sound Classification",
+  "version" : "1.1"
+}

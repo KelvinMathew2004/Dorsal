@@ -1,6 +1,15 @@
 import Foundation
 import Observation
 import FoundationModels
+import SoundAnalysis
+import CoreML
+import AVFoundation
+
+@Generable
+struct RepairVoiceFatigue: Codable, Sendable {
+    @Guide(description: "Voice fatigue score (0-100) based on tone.", .range(0...100))
+    var voiceFatigue: Int
+}
 
 @MainActor
 @Observable
@@ -86,6 +95,115 @@ class DreamAnalyzer {
         return response.content
     }
     
+    // MARK: - CUSTOM COREML FATIGUE MODEL (Window Averaging)
+    
+    func analyzeVocalFatigue(audioURL: URL) async throws -> Int {
+        // Create the delegate helper which is NOT on the MainActor
+        let delegate = FatigueDelegate()
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            delegate.continuation = continuation
+            
+            do {
+                // MANUAL LOADING: Load the compiled .mlmodelc directly from the bundle
+                guard let modelURL = Bundle.main.url(forResource: "VocalFatigueModel", withExtension: "mlmodelc") else {
+                    throw NSError(domain: "DreamAnalyzer", code: 404, userInfo: [NSLocalizedDescriptionKey: "VocalFatigueModel.mlmodelc not found in bundle. Make sure it is added to your project resources."])
+                }
+                
+                let config = MLModelConfiguration()
+                let model = try MLModel(contentsOf: modelURL, configuration: config)
+                
+                let request = try SNClassifySoundRequest(mlModel: model)
+                // request.overlapFactor defaults to 0.5, meaning windows overlap by 50%
+                // This is good for smoothing out the average.
+                
+                let analyzer = try SNAudioFileAnalyzer(url: audioURL)
+                
+                try analyzer.add(request, withObserver: delegate)
+                
+                // Run analysis.
+                try analyzer.analyze()
+                
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+    
+    // MARK: - FALLBACK: TEXT-BASED FATIGUE
+    // This is the replacement function you requested
+    func estimateFallbackFatigue(transcript: String) async -> Int {
+        do {
+            let res = try await session.respond(
+                to: "Estimate a voice fatigue score (0-100) based purely on the exhaustion level described in this text: \"\(transcript)\"",
+                generating: RepairVoiceFatigue.self
+            )
+            return res.content.voiceFatigue
+        } catch {
+            print("Fallback fatigue estimation failed: \(error)")
+            return 0 // Default to 0 if even the LLM fails
+        }
+    }
+    
+    // MARK: - Internal Helper Class (Non-Isolated)
+    // Handles accumulation and averaging of scores
+    private class FatigueDelegate: NSObject, SNResultsObserving {
+        var continuation: CheckedContinuation<Int, Error>?
+        var scores: [Double] = [] // Store confidence scores for every window
+        
+        func request(_ request: SNRequest, didProduce result: SNResult) {
+            guard let result = result as? SNClassificationResult else { return }
+            
+            // Logic to extract "Fatigued" confidence from this specific window
+            // Note: Labels are Case Sensitive based on your training data
+            let fatiguedClass = result.classifications.first(where: { $0.identifier.lowercased() == "fatigued" })
+            let healthyClass = result.classifications.first(where: { $0.identifier.lowercased() == "healthy" })
+            
+            var windowScore: Double = 0.0
+            
+            if let fScore = fatiguedClass?.confidence {
+                // If "Fatigued" label exists, use its confidence directly
+                windowScore = fScore
+            } else if let hScore = healthyClass?.confidence {
+                // If only "Healthy" exists, Fatigue is the inverse
+                windowScore = 1.0 - hScore
+            } else if let top = result.classifications.first {
+                // Fallback: Check top classification
+                if top.identifier.lowercased().contains("fatigue") {
+                    windowScore = top.confidence
+                } else {
+                    windowScore = 1.0 - top.confidence
+                }
+            }
+            
+            // Add this window's score to our collection
+            scores.append(windowScore)
+        }
+        
+        func request(_ request: SNRequest, didFailWithError error: Error) {
+            continuation?.resume(throwing: error)
+            continuation = nil
+        }
+        
+        func requestDidComplete(_ request: SNRequest) {
+            // Once the entire file is processed, calculate the average
+            if let cont = continuation {
+                if scores.isEmpty {
+                    cont.resume(returning: 0)
+                } else {
+                    let total = scores.reduce(0, +)
+                    let average = total / Double(scores.count)
+                    
+                    // Return the averaged percentage
+                    cont.resume(returning: Int(average * 100))
+                }
+                continuation = nil // Ensure we only resume once
+            }
+        }
+    }
+    
+    // MARK: - Extras & Legacy
+    
     func streamExtras(transcript: String) -> AsyncThrowingStream<DreamExtraAnalysis.PartiallyGenerated, Error> {
         let prompt = """
         Analyze the remaining metrics based on the transcript: "\(transcript)"
@@ -131,16 +249,10 @@ class DreamAnalyzer {
                 let res = try await session.respond(to: "Provide actionable advice for: \"\(transcript)\"", generating: RepairAdvice.self)
                 updated.actionableAdvice = res.content.actionableAdvice
             }
-            
             if updated.tone == nil {
                 let res = try await session.respond(to: "Determine the tone of this dream: \"\(transcript)\"", generating: RepairTone.self)
                 updated.tone = res.content.tone
             }
-            if updated.voiceFatigue == nil {
-                let res = try await session.respond(to: "Estimate voice fatigue (0-100) for: \"\(transcript)\"", generating: RepairVoiceFatigue.self)
-                updated.voiceFatigue = res.content.voiceFatigue
-            }
-            
         } catch {
             print("Repair Core Error: \(error)")
         }

@@ -21,15 +21,15 @@ let package = Package(
             displayVersion: "1.0",
             bundleVersion: "1",
             appIcon: .asset("AppIcon"),
-            accentColor: .presetColor(.indigo),
+            accentColor: .presetColor(.yellow),
             supportedDeviceFamilies: [
                 .pad,
                 .phone
             ],
             supportedInterfaceOrientations: [
                 .portrait,
-                .landscapeRight,
-                .landscapeLeft,
+                .landscapeRight(.when(deviceFamilies: [.pad])),
+                .landscapeLeft(.when(deviceFamilies: [.pad])),
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
             ],
             capabilities: [
@@ -44,7 +44,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "AppModule",
-            path: "."
+            path: ".",
+            resources: [
+                .copy("VocalFatigueModel.mlmodelc")
+            ]
         )
     ],
     swiftLanguageVersions: [.version("6")]

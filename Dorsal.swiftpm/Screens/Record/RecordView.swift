@@ -155,6 +155,7 @@ struct RecordView: View {
                             
                             Text(greetingData.text)
                                 .font(.largeTitle.weight(.bold))
+                                .fontDesign(.rounded)
                                 .multilineTextAlignment(.center)
                             
                             Text("Ready to capture your dreams?")
@@ -174,7 +175,7 @@ struct RecordView: View {
                     }
                     
                     // MARK: - Controls
-                    GlassEffectContainer(spacing: 20) {
+                    GlassEffectContainer(spacing: store.isPaused ? 20 : 40) {
                         HStack(spacing: store.isPaused ? 20 : 40) {
                             
                             // 1. Pause Button

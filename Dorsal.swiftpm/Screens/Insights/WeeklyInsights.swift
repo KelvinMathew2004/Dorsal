@@ -74,7 +74,7 @@ struct WeeklyInsightsView: View {
                 if !dreamsForDay.isEmpty {
                     let totalAnxiety = dreamsForDay.reduce(0.0) { $0 + Double($1.extras?.anxietyLevel ?? 0) }
                     let totalSentiment = dreamsForDay.reduce(0.0) { $0 + Double($1.extras?.sentimentScore ?? 50) }
-                    let totalFatigue = dreamsForDay.reduce(0.0) { $0 + Double($1.core?.voiceFatigue ?? 0) }
+                    let totalFatigue = dreamsForDay.reduce(0.0) { $0 + Double($1.voiceFatigue ?? 0) }
                     let count = Double(dreamsForDay.count)
                     
                     aggregates.append(DailyAggregate(

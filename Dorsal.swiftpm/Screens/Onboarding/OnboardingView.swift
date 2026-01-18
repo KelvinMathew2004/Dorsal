@@ -598,7 +598,8 @@ struct PermissionRow: View {
             }
         }
         .padding()
-        .glassEffect(.clear.tint(isGranted ? Color.mint.opacity(0.2) : Color.clear), in: RoundedRectangle(cornerRadius: 24))
+        .glassEffect(.regular.tint(isGranted ? Color.mint.opacity(0.2) : OnboardingStep.profile.buttonColor.opacity(0.1)), in: RoundedRectangle(cornerRadius: 24))
+        .colorScheme(.dark)
     }
 }
 

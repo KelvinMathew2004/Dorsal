@@ -106,7 +106,7 @@ extension SavedDream {
             symbols: dream.core?.symbols ?? [],
             toneLabel: dream.core?.tone?.label ?? "Neutral",
             toneConfidence: dream.core?.tone?.confidence ?? 0,
-            voiceFatigue: dream.core?.voiceFatigue ?? 0,
+            voiceFatigue: dream.voiceFatigue ?? 0,
             sentimentScore: dream.extras?.sentimentScore ?? 50,
             lucidityScore: dream.extras?.lucidityScore ?? 0,
             vividnessScore: dream.extras?.vividnessScore ?? 0,

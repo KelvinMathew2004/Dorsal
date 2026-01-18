@@ -24,8 +24,6 @@ class DreamStore: NSObject, ObservableObject {
     @Published var currentDreamID: UUID?
     
     // MARK: - PERSISTENT USER DATA
-    
-    // Names backed by UserDefaults
     @Published var firstName: String {
         didSet { UserDefaults.standard.set(firstName, forKey: "userFirstName") }
     }
@@ -33,18 +31,15 @@ class DreamStore: NSObject, ObservableObject {
         didSet { UserDefaults.standard.set(lastName, forKey: "userLastName") }
     }
     
-    // Profile Image backed by FileManager
     @Published var profileImageData: Data? {
         didSet { saveProfileImageToDisk(data: profileImageData) }
     }
     
     // MARK: - THEME & SETTINGS ENGINE
-    // Switched to String ID for fixed themes
     @AppStorage("themeID") var currentThemeID: String = "gold" {
         didSet { objectWillChange.send() }
     }
     
-    // NEW: Visualizer Toggle (Default: True)
     @AppStorage("isComplexVisualizerEnabled") var isComplexVisualizerEnabled: Bool = true {
         didSet { objectWillChange.send() }
     }
@@ -70,7 +65,11 @@ class DreamStore: NSObject, ObservableObject {
     
     @Published var selectedTab: Int = 0
     @Published var navigationPath = NavigationPath()
+    
+    // MARK: - PROCESS STATES
     @Published var isProcessing: Bool = false
+    @Published var isAnalyzingFatigue: Bool = false
+    
     @Published var permissionError: String?
     @Published var showPermissionAlert: Bool = false
     
@@ -82,6 +81,9 @@ class DreamStore: NSObject, ObservableObject {
     @Published var hasNotificationAccess: Bool = false
     @AppStorage("reminderTime") var reminderTime: Double = 0
     @AppStorage("isReminderEnabled") var isReminderEnabled: Bool = false
+    
+    // MARK: - TASK MANAGEMENT
+    private var currentAnalysisTask: Task<Void, Never>?
     
     var isOnboardingComplete: Bool {
         hasMicAccess && hasSpeechAccess && UserDefaults.standard.bool(forKey: "isOnboardingFullyComplete")
@@ -428,7 +430,6 @@ class DreamStore: NSObject, ObservableObject {
         self.entityUpdateTrigger += 1
     }
     
-    // UPDATED: Added contactId parameter
     func updateEntity(name: String, type: String, description: String, image: Data?, contactId: String? = nil) {
         guard let context = modelContext else { return }
         let id = "\(type):\(name)"
@@ -437,11 +438,11 @@ class DreamStore: NSObject, ObservableObject {
             if let existing = try context.fetch(descriptor).first {
                 existing.details = description
                 existing.imageData = image
-                existing.contactId = contactId // Save Contact ID
+                existing.contactId = contactId
                 existing.lastUpdated = Date()
             } else {
                 let newEntity = SavedEntity(name: name, type: type, details: description, imageData: image)
-                newEntity.contactId = contactId // Save Contact ID
+                newEntity.contactId = contactId
                 context.insert(newEntity)
             }
             try context.save()
@@ -742,13 +743,16 @@ class DreamStore: NSObject, ObservableObject {
         withAnimation { isRecording = false; isPaused = false }
         
         if save && !currentTranscript.isEmpty {
-            processDream(transcript: currentTranscript)
+            processDream(transcript: currentTranscript, audioURL: url)
         }
         if !save { currentTranscript = "" }
     }
 
     // MARK: - PROCESSING PIPELINE
-    private func processDream(transcript: String) {
+    private func processDream(transcript: String, audioURL: URL) {
+        // Cancel existing task if any
+        currentAnalysisTask?.cancel()
+        
         isProcessing = true
         let newID = UUID()
         currentDreamID = newID
@@ -762,30 +766,41 @@ class DreamStore: NSObject, ObservableObject {
         navigationPath = NavigationPath()
         navigationPath.append(newDream)
         
-        runAnalysis(for: newID, transcript: transcript)
+        runAnalysis(for: newID, transcript: transcript, audioURL: audioURL)
     }
     
     func regenerateDream(_ dream: Dream) {
         guard !isProcessing else { return }
+        
+        // Cancel existing task if any
+        currentAnalysisTask?.cancel()
+        
         guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
         
         isProcessing = true
         currentDreamID = dream.id
         
+        // Clear AI fields but keep VoiceFatigue if possible
+        let existingFatigue = dreams[index].voiceFatigue
+        
         dreams[index].core = nil
         dreams[index].extras = nil
         dreams[index].generatedImageData = nil
         dreams[index].analysisError = nil
+        dreams[index].voiceFatigue = existingFatigue // Preserve if we can't re-run audio
         
         persistDream(dreams[index])
         
-        runAnalysis(for: dream.id, transcript: dream.rawTranscript)
+        runAnalysis(for: dream.id, transcript: dream.rawTranscript, audioURL: nil)
     }
     
-    private func runAnalysis(for dreamID: UUID, transcript: String) {
-        Task {
+    private func runAnalysis(for dreamID: UUID, transcript: String, audioURL: URL?) {
+        currentAnalysisTask = Task {
             do {
+                // STEP 1: CORE ANALYSIS (LLM)
                 for try await partialCore in DreamAnalyzer.shared.streamCore(transcript: transcript, userName: self.firstName) {
+                    if Task.isCancelled { return }
+                    
                     if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
                         var currentCore = dreams[index].core ?? DreamCoreAnalysis()
                         
@@ -798,7 +813,7 @@ class DreamStore: NSObject, ObservableObject {
                         if let sym = partialCore.symbols { currentCore.symbols = sym }
                         if let i = partialCore.interpretation { currentCore.interpretation = i }
                         if let a = partialCore.actionableAdvice { currentCore.actionableAdvice = a }
-                        if let f = partialCore.voiceFatigue { currentCore.voiceFatigue = f }
+                        
                         if let toneLabel = partialCore.tone?.label {
                             currentCore.tone = ToneAnalysis(label: toneLabel, confidence: partialCore.tone?.confidence)
                         }
@@ -807,12 +822,43 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
+                // Repaire Core Fields
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }),
                    let currentCore = dreams[index].core {
                     let repairedCore = await DreamAnalyzer.shared.ensureCoreFields(current: currentCore, transcript: transcript)
                     dreams[index].core = repairedCore
                 }
                 
+                // STEP 2: VOCAL FATIGUE (COREML or FALLBACK)
+                var fatigueScore = 0
+                await MainActor.run {
+                     withAnimation { self.isAnalyzingFatigue = true }
+                }
+
+                if let url = audioURL {
+                    do {
+                        // Try CoreML First
+                        fatigueScore = try await DreamAnalyzer.shared.analyzeVocalFatigue(audioURL: url)
+                    } catch {
+                        print("CoreML failed, falling back to text analysis: \(error)")
+                        // Fallback: Estimate from text
+                        fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: transcript)
+                    }
+                } else {
+                    // No Audio: Fallback immediately
+                    fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: transcript)
+                }
+
+                // Save Score
+                await MainActor.run {
+                    if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                        dreams[index].voiceFatigue = fatigueScore
+                        persistDream(dreams[index])
+                    }
+                    withAnimation { self.isAnalyzingFatigue = false }
+                }
+                
+                // Image Generation
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }),
                    let summary = dreams[index].core?.summary {
                     if isImageGenerationAvailable {
@@ -826,7 +872,10 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
+                // STEP 3: EXTRAS (LLM)
                 for try await partialExtra in DreamAnalyzer.shared.streamExtras(transcript: transcript) {
+                    if Task.isCancelled { return }
+                    
                     if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
                         var currentExtras = dreams[index].extras ?? DreamExtraAnalysis()
                         if let s = partialExtra.sentimentScore { currentExtras.sentimentScore = s }
@@ -850,10 +899,12 @@ class DreamStore: NSObject, ObservableObject {
                 }
                 
                 isProcessing = false
+                isAnalyzingFatigue = false
                 Task { await refreshWeeklyInsights() }
                 
             } catch {
-                print("Streaming failed: \(error)")
+                if Task.isCancelled { return }
+                print("Analysis failed: \(error)")
                 
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
                     dreams[index].analysisError = error.localizedDescription
@@ -861,6 +912,7 @@ class DreamStore: NSObject, ObservableObject {
                 }
                 
                 isProcessing = false
+                isAnalyzingFatigue = false
             }
         }
     }

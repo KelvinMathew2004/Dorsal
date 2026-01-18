@@ -259,19 +259,19 @@ struct ThemeWheelSelector: View {
                 .frame(height: 80)
                 .mask {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 24)
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
                             .frame(height: 50)
                             .frame(maxWidth: .infinity)
-                        RoundedRectangle(cornerRadius: 24)
-                            .frame(width: 60, height: 80)
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .frame(width: 55, height: 75)
                     }
                     .compositingGroup()
                 }
                 
                 // Glass Joystick Overlay
-                RoundedRectangle(cornerRadius: 24)
-                    .frame(width: 63, height: 83)
-                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24))
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .frame(width: 60, height: 80)
+                    .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                     .shadow(color: .black.opacity(0.5), radius: 6, x: 0, y: 4)
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 5)

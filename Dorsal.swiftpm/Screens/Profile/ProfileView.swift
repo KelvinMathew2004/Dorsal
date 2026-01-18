@@ -98,6 +98,7 @@ struct ProfileView: View {
                         showSettings = true
                     } label: {
                         Image(systemName: "gearshape")
+                            .foregroundStyle(textColor)
                     }
                 }
                 
@@ -107,7 +108,8 @@ struct ProfileView: View {
                         editLastName = store.lastName
                         showEditSheet = true
                     } label: {
-                        Label("Edit", systemImage: "pencil")
+                        Image(systemName: "pencil")
+                            .foregroundStyle(textColor)
                     }
                 }
             }

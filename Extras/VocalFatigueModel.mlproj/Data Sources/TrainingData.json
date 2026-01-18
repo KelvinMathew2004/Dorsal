@@ -1,0 +1,133 @@
+{
+  "activityEntities" : [
+    "dataSourceCreated",
+    [
+      {
+        "createdDate" : "2026-01-17T21:16:07Z",
+        "event" : "dataSourceCreated",
+        "id" : "94E3F099-30F7-4295-8D7E-9BDA5B7BA51D",
+        "subtitle" : "TrainingData",
+        "title" : "Data Source Created"
+      }
+    ],
+    "dataSourceTrainingStarted",
+    [
+      {
+        "createdDate" : "2026-01-17T21:20:19Z",
+        "event" : "dataSourceTrainingStarted",
+        "id" : "4DE5538E-391D-4775-AE1F-9C6A27B0495D",
+        "subtitle" : "VocalFatigueModel 1",
+        "title" : "Used By"
+      }
+    ],
+    "dataSourceMetrics",
+    [
+      {
+        "createdDate" : "2026-01-17T21:20:19Z",
+        "event" : "dataSourceMetrics",
+        "id" : "CCB6DBC7-2147-4627-988B-BB73DB65F499",
+        "subtitle" : "2 Classes, 10 Items",
+        "title" : "Data Summary"
+      }
+    ]
+  ],
+  "createdDate" : "2026-01-17T21:16:07Z",
+  "dataPathRelativeToProjectURL" : "../TrainingData/",
+  "dataResult" : {
+    "classesCount" : 2,
+    "createdDate" : "2026-01-17T21:16:07Z",
+    "dataAnalysis" : {
+      "classifierAnalysis" : {
+        "details" : [
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%203%20Sleep.m4a",
+          [
+            "Fatigued"
+          ],
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Healthy/Day%201%20Normal%20Voice.m4a",
+          [
+            "Healthy"
+          ],
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Tired%20Talking.m4a",
+          [
+            "Fatigued"
+          ],
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Healthy/The%20Secret%20To%20Achieving%20the%20Impossible%20%20Ravi%20Dubey%20%20TEDxGGDSDCollege%20-%20TEDx%20Talks%20(youtube).m4a",
+          [
+            "Healthy"
+          ],
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%201%20Evening%20Nap.m4a",
+          [
+            "Fatigued"
+          ],
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Healthy/Confident%20Talking.m4a",
+          [
+            "Healthy"
+          ],
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%202%20Sleep.m4a",
+          [
+            "Fatigued"
+          ],
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%201%20Sleep%20+%20Nap.m4a",
+          [
+            "Fatigued"
+          ],
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Tired%20Talking%202.m4a",
+          [
+            "Fatigued"
+          ],
+          "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%204%20Sleep.m4a",
+          [
+            "Fatigued"
+          ]
+        ],
+        "labelStats" : {
+          "Fatigued" : 7,
+          "Healthy" : 3
+        }
+      },
+      "issues" : [
+        {
+          "description" : "2 classes found, including Fatigued, Healthy",
+          "severity" : "debug"
+        },
+        {
+          "description" : "Less than 50 total sounds found - add more to improve model validation",
+          "severity" : "warning"
+        },
+        {
+          "description" : "Smallest class is \"Healthy\" with 3 sounds",
+          "severity" : "debug"
+        },
+        {
+          "description" : "Largest class is \"Fatigued\" with 7 sounds",
+          "severity" : "debug"
+        }
+      ],
+      "objectDetectorAnalysis" : {
+        "details" : {
+
+        }
+      },
+      "summary" : {
+        "canUseValidation" : 0,
+        "classCount" : 2,
+        "sampleCount" : 10
+      },
+      "warning" : "Less than 50 total sounds found - add more to improve model validation"
+    },
+    "dataSourceID" : "CB764031-8ED7-4F36-946A-34D96DF43727",
+    "dataURL" : "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/",
+    "itemsCount" : 10,
+    "warning" : "Less than 50 total sounds found - add more to improve model validation"
+  },
+  "dataURL" : "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/",
+  "experimentIDs" : [
+    "7FEE3B66-CB43-4193-B55E-3FC63661E32A"
+  ],
+  "id" : "CB764031-8ED7-4F36-946A-34D96DF43727",
+  "modifiedDate" : "2026-01-17T21:40:57Z",
+  "pathType" : 0,
+  "preferredFilename" : "TrainingData",
+  "title" : "TrainingData",
+  "version" : "1.0"
+}

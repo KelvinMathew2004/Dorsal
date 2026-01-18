@@ -14,6 +14,7 @@ enum DreamError: Error, LocalizedError {
     case formatError
     case systemBusy
     case internalError
+    case audioFileNotFound
     
     // Image Generation Errors
     case imageNotSupported
@@ -33,6 +34,7 @@ enum DreamError: Error, LocalizedError {
         case .formatError: return "Failed to process the model output."
         case .systemBusy: return "System is busy with other AI tasks. Try again in a moment."
         case .internalError: return "Internal Foundation Model error."
+        case .audioFileNotFound: return "Could not find the audio recording for fatigue analysis."
             
         case .imageNotSupported: return "Image creation is not supported on this device."
         case .imageUnavailable: return "Image creation services are currently unavailable."
@@ -73,9 +75,6 @@ struct DreamCoreAnalysis: Codable, Sendable, Hashable {
     
     @Guide(description: "Actionable advice based on the dream's themes.")
     var actionableAdvice: String?
-    
-    @Guide(description: "Voice fatigue (0-100).", .range(0...100))
-    var voiceFatigue: Int?
     
     var tone: ToneAnalysis?
 }
@@ -135,12 +134,6 @@ struct RepairTitle: Codable, Sendable {
 struct RepairSummary: Codable, Sendable {
     @Guide(description: "A 1-2 sentence summary of the dream's narrative flow.")
     var summary: String
-}
-
-@Generable
-struct RepairVoiceFatigue: Codable, Sendable {
-    @Guide(description: "Voice fatigue (0-100).", .range(0...100))
-    var voiceFatigue: Int
 }
 
 @Generable
@@ -226,6 +219,9 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     
     var core: DreamCoreAnalysis?
     var extras: DreamExtraAnalysis?
+    
+    var voiceFatigue: Int?
+    
     var generatedImageData: Data?
     
     var isBookmarked: Bool
@@ -260,7 +256,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
             emotions: emotions,
             symbols: core?.symbols ?? [],
             tone: core?.tone ?? ToneAnalysis(label: "Neutral", confidence: 0),
-            voiceFatigue: core?.voiceFatigue ?? 0,
+            voiceFatigue: voiceFatigue ?? 0,
             sentimentScore: extras?.sentimentScore ?? 50,
             lucidityScore: extras?.lucidityScore ?? 0,
             vividnessScore: extras?.vividnessScore ?? 0,
@@ -277,6 +273,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         rawTranscript: String,
         core: DreamCoreAnalysis? = nil,
         extras: DreamExtraAnalysis? = nil,
+        voiceFatigue: Int? = nil,
         generatedImageData: Data? = nil,
         isBookmarked: Bool = false,
         analysisError: String? = nil
@@ -286,6 +283,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.rawTranscript = rawTranscript
         self.core = core
         self.extras = extras
+        self.voiceFatigue = voiceFatigue
         self.generatedImageData = generatedImageData
         self.isBookmarked = isBookmarked
         self.analysisError = analysisError
@@ -298,6 +296,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.rawTranscript = saved.rawText
         self.generatedImageData = saved.generatedImageData
         self.isBookmarked = saved.isBookmarked
+        self.voiceFatigue = saved.voiceFatigue
         
         // Reconstruct Core Analysis from flat properties
         self.core = DreamCoreAnalysis(
@@ -310,7 +309,6 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
             symbols: saved.symbols,
             interpretation: saved.interpretation,
             actionableAdvice: saved.actionableAdvice,
-            voiceFatigue: saved.voiceFatigue,
             tone: ToneAnalysis(label: saved.toneLabel, confidence: saved.toneConfidence)
         )
         

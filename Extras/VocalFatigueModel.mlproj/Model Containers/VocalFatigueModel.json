@@ -1,0 +1,623 @@
+{
+  "activityEntities" : [
+    "trainingFinished",
+    [
+      {
+        "createdDate" : "2026-01-17T21:20:27Z",
+        "event" : "trainingFinished",
+        "id" : "6C6C81C0-5D05-44BB-B068-248A2CD6CBE4",
+        "subtitle" : "Model converged at 26 iterations",
+        "title" : "Training Completed"
+      }
+    ],
+    "trainingStarted",
+    [
+      {
+        "createdDate" : "2026-01-17T21:20:19Z",
+        "event" : "trainingStarted",
+        "id" : "8B909139-59A8-490B-91FF-D40C302E6C90",
+        "subtitle" : "25 iterations",
+        "title" : "Training Started"
+      }
+    ],
+    "trainingDataAdded",
+    [
+      {
+        "createdDate" : "2026-01-17T21:16:07Z",
+        "event" : "trainingDataAdded",
+        "id" : "B36B3608-87F6-48C4-9308-EE9505452722",
+        "subtitle" : "TrainingData",
+        "title" : "Training Data Added"
+      }
+    ],
+    "experimentCreated",
+    [
+      {
+        "createdDate" : "2026-01-17T21:15:54Z",
+        "event" : "experimentCreated",
+        "id" : "339EF0F9-FC61-4FB0-8820-DF9984512FF6",
+        "subtitle" : "VocalFatigueModel",
+        "title" : "Model Source Created"
+      }
+    ]
+  ],
+  "contentDataResult" : {
+    "createdDate" : "2026-01-17T21:16:07Z"
+  },
+  "createdDate" : "2026-01-17T21:15:54Z",
+  "evaluationContainerEntity" : {
+    "createdDate" : "2026-01-17T21:46:44Z",
+    "evaluationEntities" : [
+      {
+        "analysedDataType" : "none",
+        "createdDate" : "2026-01-17T21:20:27Z",
+        "dataResult" : {
+          "createdDate" : "2026-01-17T21:45:11Z"
+        },
+        "id" : "9c632aba-0f4c-488f-a128-cb11b2d117cd"
+      }
+    ],
+    "id" : "508b1a4f-4d0f-4e07-b0e3-c60ca5c9374b",
+    "modifiedDate" : "2026-01-17T21:46:44Z",
+    "previewType" : "soundClassifier",
+    "testingEvaluationEntity" : {
+      "analysedDataType" : "none",
+      "createdDate" : "2026-01-17T21:15:54Z",
+      "dataResult" : {
+        "createdDate" : "2026-01-17T21:16:07Z"
+      },
+      "id" : "5f08eac7-89f6-444b-b08b-843af546ecb5"
+    },
+    "trainingEvaluationEntity" : {
+      "analysedDataType" : "none",
+      "createdDate" : "2026-01-17T21:15:54Z",
+      "dataResult" : {
+        "classesCount" : 2,
+        "createdDate" : "2026-01-17T21:16:07Z",
+        "dataAnalysis" : {
+          "classifierAnalysis" : {
+            "details" : [
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%203%20Sleep.m4a",
+              [
+                "Fatigued"
+              ],
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Healthy/Confident%20Talking.m4a",
+              [
+                "Healthy"
+              ],
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Tired%20Talking%202.m4a",
+              [
+                "Fatigued"
+              ],
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Healthy/Day%201%20Normal%20Voice.m4a",
+              [
+                "Healthy"
+              ],
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%201%20Sleep%20+%20Nap.m4a",
+              [
+                "Fatigued"
+              ],
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Healthy/The%20Secret%20To%20Achieving%20the%20Impossible%20%20Ravi%20Dubey%20%20TEDxGGDSDCollege%20-%20TEDx%20Talks%20(youtube).m4a",
+              [
+                "Healthy"
+              ],
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%202%20Sleep.m4a",
+              [
+                "Fatigued"
+              ],
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Tired%20Talking.m4a",
+              [
+                "Fatigued"
+              ],
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%204%20Sleep.m4a",
+              [
+                "Fatigued"
+              ],
+              "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%201%20Evening%20Nap.m4a",
+              [
+                "Fatigued"
+              ]
+            ],
+            "labelStats" : {
+              "Fatigued" : 7,
+              "Healthy" : 3
+            }
+          },
+          "issues" : [
+            {
+              "description" : "2 classes found, including Fatigued, Healthy",
+              "severity" : "debug"
+            },
+            {
+              "description" : "Less than 50 total sounds found - add more to improve model validation",
+              "severity" : "warning"
+            },
+            {
+              "description" : "Smallest class is \"Healthy\" with 3 sounds",
+              "severity" : "debug"
+            },
+            {
+              "description" : "Largest class is \"Fatigued\" with 7 sounds",
+              "severity" : "debug"
+            }
+          ],
+          "objectDetectorAnalysis" : {
+            "details" : {
+
+            }
+          },
+          "summary" : {
+            "canUseValidation" : 0,
+            "classCount" : 2,
+            "sampleCount" : 10
+          },
+          "warning" : "Less than 50 total sounds found - add more to improve model validation"
+        },
+        "dataSourceID" : "CB764031-8ED7-4F36-946A-34D96DF43727",
+        "dataURL" : "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/",
+        "itemsCount" : 10,
+        "warning" : "Less than 50 total sounds found - add more to improve model validation"
+      },
+      "dataSourceID" : "CB764031-8ED7-4F36-946A-34D96DF43727",
+      "evaluationResult" : {
+        "soundClassifier" : {
+          "accuracy" : 0.9985428051001821,
+          "confusionMatrix" : [
+            {
+              "actual" : "Fatigued",
+              "count" : 2948,
+              "expected" : "Fatigued"
+            },
+            {
+              "actual" : "Fatigued",
+              "count" : 3,
+              "expected" : "Healthy"
+            },
+            {
+              "actual" : "Healthy",
+              "count" : 5,
+              "expected" : "Fatigued"
+            },
+            {
+              "actual" : "Healthy",
+              "count" : 2534,
+              "expected" : "Healthy"
+            }
+          ],
+          "statsByLabel" : {
+            "Fatigued" : {
+              "count" : 2951,
+              "precisionRecall" : {
+                "success" : {
+                  "precision" : 0.998306806637318,
+                  "recall" : 0.9989833954591664
+                }
+              }
+            },
+            "Healthy" : {
+              "count" : 2539,
+              "precisionRecall" : {
+                "success" : {
+                  "precision" : 0.9988175009854159,
+                  "recall" : 0.9980307207562032
+                }
+              }
+            }
+          }
+        }
+      },
+      "id" : "ea068461-defd-43d9-ac4e-aae085e12c79"
+    },
+    "validationEvaluationEntity" : {
+      "analysedDataType" : "auto",
+      "createdDate" : "2026-01-17T21:15:54Z",
+      "dataResult" : {
+        "createdDate" : "2026-01-17T21:16:07Z"
+      },
+      "evaluationResult" : {
+        "soundClassifier" : {
+          "accuracy" : 0,
+          "confusionMatrix" : [
+
+          ],
+          "statsByLabel" : {
+
+          }
+        }
+      },
+      "id" : "c8e7e1d0-dbae-4574-93e0-81edd21f8415"
+    }
+  },
+  "evaluationEntity" : {
+    "analysedDataType" : "none",
+    "dataResult" : {
+
+    },
+    "id" : "7f24d3d7-71e2-483b-a127-21e972bc9e75"
+  },
+  "evaluationState" : "uninitialized",
+  "id" : "7FEE3B66-CB43-4193-B55E-3FC63661E32A",
+  "modelEntity" : {
+    "createdDate" : "2026-01-17T21:15:54Z",
+    "experimentID" : "7FEE3B66-CB43-4193-B55E-3FC63661E32A",
+    "id" : "061D5675-8D88-4622-9BE7-6A4F8598856D",
+    "modelURL" : "Models/VocalFatigueModel.mlmodel/",
+    "modifiedDate" : "2026-01-17T21:15:54Z",
+    "title" : "",
+    "version" : "1.0"
+  },
+  "modifiedDate" : "2026-01-17T21:46:44Z",
+  "preferredFilename" : "VocalFatigueModel",
+  "settingEntity" : {
+    "algorithmType" : "maxEnt",
+    "augmentations" : [
+
+    ],
+    "featureNames" : [
+
+    ],
+    "handActionClassifierAugmentations" : [
+
+    ],
+    "handPoseClassifierAugmentations" : [
+
+    ],
+    "harVideoAugmentations" : 0,
+    "iterationCount" : 25,
+    "seedType" : "default",
+    "soundAlgorithmType" : "transferLearning",
+    "soundClassifierMLPLayers" : [
+      2
+    ],
+    "soundClassifierType" : "logisticRegressor",
+    "soundFeatureExtractionType" : "audioFeaturePrint",
+    "soundIsCustomOverlapFactor" : false,
+    "soundOverlapFactor" : 0.5,
+    "soundTimeWindow" : 0.975,
+    "styleTransferAlgorithmType" : "image",
+    "taskType" : "audioClassifier",
+    "transferLearningEmbeddingType" : "dynamic"
+  },
+  "snapshotRole" : {
+    "withoutSnapshots" : 0
+  },
+  "state" : "trained",
+  "title" : "VocalFatigueModel 1",
+  "trainingEntity" : {
+    "analysedDataType" : "datasource",
+    "checkpointMetrics" : {
+
+    },
+    "dataResult" : {
+      "classesCount" : 2,
+      "createdDate" : "2026-01-17T21:16:07Z",
+      "dataAnalysis" : {
+        "classifierAnalysis" : {
+          "details" : [
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%203%20Sleep.m4a",
+            [
+              "Fatigued"
+            ],
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Healthy/Confident%20Talking.m4a",
+            [
+              "Healthy"
+            ],
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Tired%20Talking%202.m4a",
+            [
+              "Fatigued"
+            ],
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Healthy/Day%201%20Normal%20Voice.m4a",
+            [
+              "Healthy"
+            ],
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%201%20Sleep%20+%20Nap.m4a",
+            [
+              "Fatigued"
+            ],
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Healthy/The%20Secret%20To%20Achieving%20the%20Impossible%20%20Ravi%20Dubey%20%20TEDxGGDSDCollege%20-%20TEDx%20Talks%20(youtube).m4a",
+            [
+              "Healthy"
+            ],
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%202%20Sleep.m4a",
+            [
+              "Fatigued"
+            ],
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Tired%20Talking.m4a",
+            [
+              "Fatigued"
+            ],
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%204%20Sleep.m4a",
+            [
+              "Fatigued"
+            ],
+            "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/Fatigued/Day%201%20Evening%20Nap.m4a",
+            [
+              "Fatigued"
+            ]
+          ],
+          "labelStats" : {
+            "Fatigued" : 7,
+            "Healthy" : 3
+          }
+        },
+        "issues" : [
+          {
+            "description" : "2 classes found, including Fatigued, Healthy",
+            "severity" : "debug"
+          },
+          {
+            "description" : "Less than 50 total sounds found - add more to improve model validation",
+            "severity" : "warning"
+          },
+          {
+            "description" : "Smallest class is \"Healthy\" with 3 sounds",
+            "severity" : "debug"
+          },
+          {
+            "description" : "Largest class is \"Fatigued\" with 7 sounds",
+            "severity" : "debug"
+          }
+        ],
+        "objectDetectorAnalysis" : {
+          "details" : {
+
+          }
+        },
+        "summary" : {
+          "canUseValidation" : 0,
+          "classCount" : 2,
+          "sampleCount" : 10
+        },
+        "warning" : "Less than 50 total sounds found - add more to improve model validation"
+      },
+      "dataSourceID" : "CB764031-8ED7-4F36-946A-34D96DF43727",
+      "dataURL" : "file:///Users/kelvinmathew/Documents/Swift%20Challenge%202026/TrainingData/",
+      "itemsCount" : 10,
+      "warning" : "Less than 50 total sounds found - add more to improve model validation"
+    },
+    "dataSourceID" : "CB764031-8ED7-4F36-946A-34D96DF43727",
+    "featureExtractionCheckpointMayBeAvailable" : false,
+    "finishTime" : "2026-01-17T21:20:27Z",
+    "progress" : [
+      {
+        "count" : 0,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "tableDone" : true,
+        "tableIndex" : 1
+      },
+      {
+        "count" : 1,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "tableDone" : false,
+        "tableIndex" : 0
+      },
+      {
+        "count" : 2,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "scTrainingColumnHeader" : {
+          "elapsedTime" : 0.12042295932769775,
+          "hasValidation" : false,
+          "iterationCount" : 2,
+          "trainingAccuracy" : 0.9080145719489982,
+          "validationAccuracy" : 0
+        },
+        "tableDone" : false,
+        "tableIndex" : 2
+      },
+      {
+        "count" : 3,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "scTrainingColumnHeader" : {
+          "elapsedTime" : 0.12638700008392334,
+          "hasValidation" : false,
+          "iterationCount" : 3,
+          "trainingAccuracy" : 0.9398907103825137,
+          "validationAccuracy" : 0
+        },
+        "tableDone" : false,
+        "tableIndex" : 2
+      },
+      {
+        "count" : 4,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "scTrainingColumnHeader" : {
+          "elapsedTime" : 0.13540196418762207,
+          "hasValidation" : false,
+          "iterationCount" : 4,
+          "trainingAccuracy" : 0.9355191256830601,
+          "validationAccuracy" : 0
+        },
+        "tableDone" : false,
+        "tableIndex" : 2
+      },
+      {
+        "count" : 5,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "scTrainingColumnHeader" : {
+          "elapsedTime" : 0.14107298851013184,
+          "hasValidation" : false,
+          "iterationCount" : 5,
+          "trainingAccuracy" : 0.9426229508196722,
+          "validationAccuracy" : 0
+        },
+        "tableDone" : false,
+        "tableIndex" : 2
+      },
+      {
+        "count" : 6,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "tableDone" : false,
+        "tableIndex" : 0
+      },
+      {
+        "count" : 7,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "tableDone" : false,
+        "tableIndex" : 0
+      },
+      {
+        "count" : 8,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "tableDone" : false,
+        "tableIndex" : 0
+      },
+      {
+        "count" : 9,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "tableDone" : false,
+        "tableIndex" : 0
+      },
+      {
+        "count" : 10,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "tableDone" : true,
+        "tableIndex" : 0
+      },
+      {
+        "count" : 11,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "scTrainingColumnHeader" : {
+          "elapsedTime" : 0.1804269552230835,
+          "hasValidation" : false,
+          "iterationCount" : 11,
+          "trainingAccuracy" : 0.9795992714025501,
+          "validationAccuracy" : 0
+        },
+        "tableDone" : false,
+        "tableIndex" : 2
+      },
+      {
+        "count" : 21,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "scTrainingColumnHeader" : {
+          "elapsedTime" : 0.2310580015182495,
+          "hasValidation" : false,
+          "iterationCount" : 21,
+          "trainingAccuracy" : 0.992896174863388,
+          "validationAccuracy" : 0
+        },
+        "tableDone" : false,
+        "tableIndex" : 2
+      },
+      {
+        "count" : 26,
+        "currentRowIndex" : 0,
+        "isLast" : false,
+        "percentComplete" : 0,
+        "scTrainingColumnHeader" : {
+          "elapsedTime" : 0.2554910182952881,
+          "hasValidation" : false,
+          "iterationCount" : 26,
+          "trainingAccuracy" : 0.9985428051001821,
+          "validationAccuracy" : 0
+        },
+        "tableDone" : true,
+        "tableIndex" : 2
+      }
+    ],
+    "snapshottableCheckpoints" : {
+
+    },
+    "startTime" : "2026-01-17T21:20:19Z",
+    "trainingAccuracy" : 0.9985428051001821,
+    "trainingResults" : {
+      "soundClassifier" : {
+        "accuracy" : 0.9985428051001821,
+        "confusionMatrix" : [
+          {
+            "actual" : "Fatigued",
+            "count" : 2948,
+            "expected" : "Fatigued"
+          },
+          {
+            "actual" : "Fatigued",
+            "count" : 3,
+            "expected" : "Healthy"
+          },
+          {
+            "actual" : "Healthy",
+            "count" : 5,
+            "expected" : "Fatigued"
+          },
+          {
+            "actual" : "Healthy",
+            "count" : 2534,
+            "expected" : "Healthy"
+          }
+        ],
+        "statsByLabel" : {
+          "Fatigued" : {
+            "count" : 2951,
+            "precisionRecall" : {
+              "success" : {
+                "precision" : 0.998306806637318,
+                "recall" : 0.9989833954591664
+              }
+            }
+          },
+          "Healthy" : {
+            "count" : 2539,
+            "precisionRecall" : {
+              "success" : {
+                "precision" : 0.9988175009854159,
+                "recall" : 0.9980307207562032
+              }
+            }
+          }
+        }
+      }
+    },
+    "validationAccuracy" : 0,
+    "validationResults" : {
+      "soundClassifier" : {
+        "accuracy" : 0,
+        "confusionMatrix" : [
+
+        ],
+        "statsByLabel" : {
+
+        }
+      }
+    }
+  },
+  "validationEntity" : {
+    "analysedDataType" : "auto",
+    "dataResult" : {
+      "createdDate" : "2026-01-17T21:16:07Z"
+    },
+    "splitOptions" : {
+      "strategy" : {
+        "automatic" : {
+
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

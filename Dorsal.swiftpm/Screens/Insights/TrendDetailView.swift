@@ -365,7 +365,7 @@ struct TrendDetailView: View {
                 case .sentiment: return sum + Double(dream.extras?.sentimentScore ?? 50)
                 case .lucidity: return sum + Double(dream.extras?.lucidityScore ?? 0)
                 case .vividness: return sum + Double(dream.extras?.vividnessScore ?? 0)
-                case .fatigue: return sum + Double(dream.core?.voiceFatigue ?? 0)
+                case .fatigue: return sum + Double(dream.voiceFatigue ?? 0)
                 case .coherence: return sum + Double(dream.extras?.coherenceScore ?? 0)
                 default: return sum
                 }
@@ -417,7 +417,7 @@ struct TrendDetailView: View {
             case .sentiment: return sum + Double(dream.extras?.sentimentScore ?? 50)
             case .lucidity: return sum + Double(dream.extras?.lucidityScore ?? 0)
             case .vividness: return sum + Double(dream.extras?.vividnessScore ?? 0)
-            case .fatigue: return sum + Double(dream.core?.voiceFatigue ?? 0)
+            case .fatigue: return sum + Double(dream.voiceFatigue ?? 0)
             case .coherence: return sum + Double(dream.extras?.coherenceScore ?? 0)
             default: return sum
             }
