@@ -14,6 +14,29 @@ enum OnboardingStep {
     case allSet
 }
 
+// MARK: - Step Colors
+extension OnboardingStep {
+    var textColor: Color {
+        switch self {
+        case .welcome: return Color(red: 220/255, green: 210/255, blue: 255/255) // Light Lavender
+        case .profile: return Color(red: 255/255, green: 210/255, blue: 210/255) // Light Pink
+        case .permissions: return Color(red: 210/255, green: 230/255, blue: 255/255) // Light Blue
+        case .notifications: return Color(red: 255/255, green: 230/255, blue: 200/255) // Light Peach
+        case .allSet: return Color(red: 210/255, green: 255/255, blue: 230/255) // Light Mint
+        }
+    }
+    
+    var buttonColor: Color {
+        switch self {
+        case .welcome: return Color(red: 60/255, green: 40/255, blue: 120/255) // Dark Purple
+        case .profile: return Color(red: 120/255, green: 20/255, blue: 40/255) // Dark Red
+        case .permissions: return Color(red: 0/255, green: 50/255, blue: 140/255) // Dark Blue
+        case .notifications: return Color(red: 160/255, green: 60/255, blue: 0/255) // Dark Orange
+        case .allSet: return Color(red: 0/255, green: 100/255, blue: 40/255) // Dark Green
+        }
+    }
+}
+
 struct OnboardingView: View {
     @ObservedObject var store: DreamStore
     @State private var currentStep: OnboardingStep = .welcome
@@ -155,11 +178,12 @@ struct WelcomeIntroView: View {
                 Text("Welcome to Dorsal")
                     .font(.system(size: 36, weight: .bold))
                     .foregroundStyle(.white)
+                    .fontDesign(.rounded)
                 
                 Text("Your personal dream journal and analyzer.")
                     .multilineTextAlignment(.center)
                     .font(.body)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(OnboardingStep.welcome.textColor) // Updated
                     .padding(.horizontal, 32)
             }
             
@@ -185,6 +209,7 @@ struct ProfileSetupView: View {
                 .font(.title)
                 .fontWeight(.bold)
                 .foregroundStyle(.white)
+                .fontDesign(.rounded)
             
             // Profile Image Picker
             VStack {
@@ -199,7 +224,7 @@ struct ProfileSetupView: View {
                     Image(systemName: "person.fill")
                         .font(.system(size: 40))
                         .frame(width: 120, height: 120)
-                        .foregroundStyle(Theme.secondary)
+                        .foregroundStyle(OnboardingStep.profile.textColor)
                         .glassEffect(.clear, in: Circle())
                 }
                 
@@ -209,10 +234,11 @@ struct ProfileSetupView: View {
                         Text("Set Photo")
                     }
                     .font(.subheadline.bold())
-                    .foregroundStyle(Theme.secondary)
+                    .foregroundStyle(OnboardingStep.profile.textColor)
                     .padding(.vertical, 6)
                     .padding(.horizontal, 12)
-                    .glassEffect(.clear.interactive())
+                    .glassEffect(.regular.interactive())
+                    .colorScheme(.dark)
                 }
                 .padding(.top, -20)
             }
@@ -226,8 +252,16 @@ struct ProfileSetupView: View {
             
             // Name Fields
             VStack(spacing: 16) {
-                CustomTextField(placeholder: "First Name", text: $store.firstName)
-                CustomTextField(placeholder: "Last Name", text: $store.lastName)
+                CustomTextField(
+                    placeholder: "First Name",
+                    text: $store.firstName,
+                    placeholderColor: OnboardingStep.profile.textColor // Updated
+                )
+                CustomTextField(
+                    placeholder: "Last Name",
+                    text: $store.lastName,
+                    placeholderColor: OnboardingStep.profile.textColor // Updated
+                )
             }
             .padding(.horizontal, 32)
             
@@ -268,11 +302,12 @@ struct PermissionsView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundStyle(.white)
+                    .fontDesign(.rounded)
                 
                 Text("Access is needed to analyze dreams.")
                     .multilineTextAlignment(.center)
                     .font(.body)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(OnboardingStep.permissions.textColor) // Updated
                     .padding(.horizontal, 32)
             }
             
@@ -332,7 +367,7 @@ struct PermissionsView: View {
                 } else {
                      Text("Please enable permissions to continue")
                         .font(.caption)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(OnboardingStep.permissions.textColor) // Updated
                         .padding(.bottom, 40) // Standardized bottom padding
                 }
             }
@@ -378,11 +413,12 @@ struct NotificationOnboardingView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundStyle(.white)
+                    .fontDesign(.rounded)
                 
                 Text("Set a time to record your dreams right after you wake up.")
                     .multilineTextAlignment(.center)
                     .font(.body)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(OnboardingStep.notifications.textColor) // Updated
                     .padding(.horizontal, 32)
             }
             
@@ -505,10 +541,11 @@ struct AllSetView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundStyle(.white)
+                    .fontDesign(.rounded)
                 
                 Text("Your dream journal is ready. Sleep well!")
                     .font(.body)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(OnboardingStep.allSet.textColor) // Updated
                     .multilineTextAlignment(.center)
             }
             
@@ -551,12 +588,14 @@ struct OnboardingActionButton: View {
 struct CustomTextField: View {
     let placeholder: String
     @Binding var text: String
+    var placeholderColor: Color = .gray
     
     var body: some View {
-        TextField("", text: $text, prompt: Text(placeholder).foregroundColor(.gray))
+        TextField("", text: $text, prompt: Text(placeholder).foregroundColor(placeholderColor))
             .padding()
             .foregroundStyle(.white)
-            .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24))
+            .glassEffect(.regular.interactive().tint(OnboardingStep.profile.buttonColor.opacity(0.1)), in: RoundedRectangle(cornerRadius: 24))
+            .colorScheme(.dark)
     }
 }
 
@@ -598,8 +637,7 @@ struct PermissionRow: View {
             }
         }
         .padding()
-        .glassEffect(.regular.tint(isGranted ? Color.mint.opacity(0.2) : OnboardingStep.profile.buttonColor.opacity(0.1)), in: RoundedRectangle(cornerRadius: 24))
-        .colorScheme(.dark)
+        .glassEffect(.clear.tint(isGranted ? Color.mint.opacity(0.2) : Color.clear), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 

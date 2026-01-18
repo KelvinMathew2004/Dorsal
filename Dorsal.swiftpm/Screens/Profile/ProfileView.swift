@@ -307,8 +307,20 @@ struct ProfileView: View {
         HStack(spacing: 6) {
             ContinuousStatBlock(title: "Streak", value: "\(store.currentStreak)", icon: "flame.fill", color: .orange, corners: [.topLeft, .bottomLeft])
             ContinuousStatBlock(title: "Dreams", value: "\(store.dreams.count)", icon: "moon.fill", color: .purple, corners: [])
-            ContinuousStatBlock(title: "Places", value: "\(store.allPlaces.count)", icon: "map.fill", color: .green, corners: [])
-            ContinuousStatBlock(title: "People", value: "\(store.allPeople.count)", icon: "person.2.fill", color: .blue, corners: [.topRight, .bottomRight])
+            
+            // Filter Places to exclude children
+            let placesCount = store.allPlaces.filter { placeName in
+                store.getEntity(name: placeName, type: "place")?.parentID == nil
+            }.count
+            
+            ContinuousStatBlock(title: "Places", value: "\(placesCount)", icon: "map.fill", color: .green, corners: [])
+            
+            // Filter People to exclude children
+            let peopleCount = store.allPeople.filter { personName in
+                store.getEntity(name: personName, type: "person")?.parentID == nil
+            }.count
+            
+            ContinuousStatBlock(title: "People", value: "\(peopleCount)", icon: "person.2.fill", color: .blue, corners: [.topRight, .bottomRight])
         }
         .padding(.horizontal)
     }

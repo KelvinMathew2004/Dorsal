@@ -8,6 +8,18 @@ struct WeeklyInsightsView: View {
     @Namespace private var namespace
     @State private var selectedInsight: WeeklyInsightType?
     
+    // Analysis Animation State
+    @State private var currentAnalysisIconIndex = 0
+    private let analysisIcons: [(name: String, color: Color)] = [
+        ("sparkles.rectangle.stack", .indigo),      // Overview
+        ("lightbulb.fill", .green),                 // Advice
+        ("stethoscope", .pink),                     // Mental Health
+        ("book.fill", .blue),                       // Dreams Count
+        ("exclamationmark.triangle.fill", .purple), // Nightmares
+        ("battery.50", .red),                       // Fatigue
+        ("memorychip", .orange)                     // Memory Recall
+    ]
+    
     enum WeeklyInsightType: String, Identifiable {
         case overview = "Overview"
         case advice = "General Advice"
@@ -47,7 +59,8 @@ struct WeeklyInsightsView: View {
     
     // Helper struct for chart data
     struct DailyAggregate: Identifiable {
-        let id = UUID()
+        // FIXED: Use date as stable ID instead of UUID() to prevent chart flashing
+        var id: Date { date }
         let date: Date
         let anxiety: Double
         let sentiment: Double
@@ -180,16 +193,35 @@ struct WeeklyInsightsView: View {
             Color.black.opacity(0.3)
                 .ignoresSafeArea()
             
-            VStack(spacing: 16) {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(.white)
-                Text("Analyzing...")
+            VStack(spacing: 40) {
+                Image(systemName: analysisIcons[currentAnalysisIconIndex].name)
+                    .font(.system(size: 48, weight: .semibold))
+                    .foregroundStyle(analysisIcons[currentAnalysisIconIndex].color)
+                    .symbolRenderingMode(.hierarchical)
+                    .symbolColorRenderingMode(.gradient)
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 64, height: 64)
+                
+                Text("Analyzing Week...")
                     .font(.headline)
                     .foregroundStyle(.white)
             }
-            .padding(32)
+            .padding(40)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+        }
+        .onAppear {
+            currentAnalysisIconIndex = 0
+        }
+        .task {
+            // Loop for animation
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 seconds
+                if !store.isGeneratingInsights { break }
+                
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                    currentAnalysisIconIndex = (currentAnalysisIconIndex + 1) % analysisIcons.count
+                }
+            }
         }
     }
     

@@ -15,6 +15,19 @@ struct DreamDetailView: View {
     // Insight Selection State
     @State private var selectedInsight: InsightType?
     
+    // Analysis Animation State
+    @State private var currentAnalysisIconIndex = 0
+    private let analysisIcons: [(name: String, color: Color)] = [
+        ("sparkles.rectangle.stack", .purple), // Interpretation
+        ("brain.head.profile", .green),        // Advice
+        ("person.2.fill", .blue),             // People
+        ("map.fill", .green),                 // Places
+        ("heart.fill", .pink),                // Emotions
+        ("star.fill", .yellow),               // Symbols
+        ("battery.50", .red),                 // Fatigue
+        ("waveform", .orange)                 // Tone
+    ]
+    
     enum InsightType: String, Identifiable {
         case interpretation = "Interpretation"
         case advice = "Actionable Advice"
@@ -201,18 +214,36 @@ struct DreamDetailView: View {
                     Color.black.opacity(0.3)
                         .ignoresSafeArea()
                     
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                            .tint(.white)
+                    VStack(spacing: 40) {
+                        // Dynamic cycling icon
+                        Image(systemName: analysisIcons[currentAnalysisIconIndex].name)
+                            .font(.system(size: 48, weight: .semibold))
+                            .foregroundStyle(analysisIcons[currentAnalysisIconIndex].color)
+                            .symbolRenderingMode(.hierarchical)
+                            .symbolColorRenderingMode(.gradient)
+                            .contentTransition(.symbolEffect(.replace))
+                            .frame(width: 64, height: 64)
                         
-                        Text(isAnalyzingFatigue ? "Measuring Vocal Fatigue..." : "Analyzing Dream...")
+                        Text("Analyzing...")
                             .font(.headline)
                             .foregroundStyle(.white)
-                            .contentTransition(.numericText())
                     }
-                    .padding(32)
+                    .padding(40)
                     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                }
+                .onAppear {
+                    currentAnalysisIconIndex = 0
+                }
+                .task {
+                    // Loop for animation
+                    while !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 seconds
+                        if !isProcessingThisDream { break }
+                        
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                            currentAnalysisIconIndex = (currentAnalysisIconIndex + 1) % analysisIcons.count
+                        }
+                    }
                 }
             }
         }
