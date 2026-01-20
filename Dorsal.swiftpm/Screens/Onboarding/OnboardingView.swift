@@ -307,7 +307,7 @@ struct PermissionsView: View {
                 Text("Access is needed to analyze dreams.")
                     .multilineTextAlignment(.center)
                     .font(.body)
-                    .foregroundStyle(OnboardingStep.permissions.textColor) // Updated
+                    .foregroundStyle(OnboardingStep.permissions.textColor)
                     .padding(.horizontal, 32)
             }
             
@@ -321,17 +321,7 @@ struct PermissionsView: View {
                         icon: "mic.fill",
                         isGranted: store.hasMicAccess,
                         action: {
-                            Task {
-                                if await AVAudioApplication.requestRecordPermission() {
-                                    await MainActor.run {
-                                        store.requestMicrophoneAccess()
-                                    }
-                                } else {
-                                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                                        await UIApplication.shared.open(url)
-                                    }
-                                }
-                            }
+                            store.requestMicrophoneAccess()
                         }
                     )
                     
@@ -340,22 +330,7 @@ struct PermissionsView: View {
                         icon: "text.bubble.fill",
                         isGranted: store.hasSpeechAccess,
                         action: {
-                            SFSpeechRecognizer.requestAuthorization { authStatus in
-                                Task {
-                                    await MainActor.run {
-                                        switch authStatus {
-                                        case .authorized:
-                                            store.requestSpeechAccess()
-                                        case .denied, .restricted, .notDetermined:
-                                            if let url = URL(string: UIApplication.openSettingsURLString) {
-                                                UIApplication.shared.open(url)
-                                            }
-                                        @unknown default:
-                                            break
-                                        }
-                                    }
-                                }
-                            }
+                            store.requestSpeechAccess()
                         }
                     )
                 }
@@ -445,7 +420,7 @@ struct NotificationOnboardingView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .padding(.vertical, 16)
-                        .glassEffect(.clear.tint(Color.orange.opacity(0.1)), in: RoundedRectangle(cornerRadius: 24))
+                        .glassEffect(.clear.tint(OnboardingStep.notifications.buttonColor.opacity(0.2)), in: RoundedRectangle(cornerRadius: 24))
                         .glassEffectID("picker", in: namespace)
                     } else {
                         // Permission Row (wrapped as requested)

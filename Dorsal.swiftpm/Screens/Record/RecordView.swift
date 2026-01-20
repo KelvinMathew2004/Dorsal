@@ -121,7 +121,7 @@ struct RecordView: View {
                                     .foregroundStyle(.green)
                                     .symbolEffect(.pulse)
                                 
-                                Text("Listening...")
+                                Text(store.isPaused ? "Paused" : "Listening...")
                                     .font(.title2.bold())
                                     .foregroundStyle(.white)
                                 
@@ -181,7 +181,11 @@ struct RecordView: View {
                             // 1. Pause Button
                             if store.isRecording {
                                 Button {
-                                    store.pauseRecording()
+                                    if store.isPaused {
+                                        store.resumeRecording()
+                                    } else {
+                                        store.pauseRecording()
+                                    }
                                 } label: {
                                     Image(systemName: store.isPaused ? "play.fill" : "pause.fill")
                                         .contentTransition(.symbolEffect(.replace))

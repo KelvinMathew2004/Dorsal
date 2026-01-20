@@ -180,6 +180,7 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     private func setupObservers() {
+        // --- 1. Audio Recorder Observers ---
         audioRecorder.$audioLevel
             .receive(on: RunLoop.main)
             .assign(to: \.audioPower, on: self)
@@ -197,28 +198,67 @@ class DreamStore: NSObject, ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+            
+        // Sync pause state from recorder
+        audioRecorder.$isPaused
+            .receive(on: RunLoop.main)
+            .assign(to: \.isPaused, on: self)
+            .store(in: &cancellables)
     }
     
     // MARK: - PERMISSION LOGIC
+    
     func checkPermissions() {
         let micStatus = AVAudioApplication.shared.recordPermission
         self.hasMicAccess = (micStatus == .granted)
+        
         let speechStatus = SFSpeechRecognizer.authorizationStatus()
         self.hasSpeechAccess = (speechStatus == .authorized)
     }
     
     func requestMicrophoneAccess() {
-        AVAudioApplication.requestRecordPermission { [weak self] granted in
-            Task { @MainActor [weak self] in self?.hasMicAccess = granted }
+        let status = AVAudioApplication.shared.recordPermission
+        switch status {
+        case .undetermined:
+            AVAudioApplication.requestRecordPermission { granted in
+                Task { @MainActor [weak self] in
+                    self?.hasMicAccess = granted
+                }
+            }
+        case .denied:
+            openSettings()
+        case .granted:
+            self.hasMicAccess = true
+        @unknown default:
+            break
         }
     }
     
     func requestSpeechAccess() {
-        SFSpeechRecognizer.requestAuthorization { [weak self] status in
-            Task { @MainActor [weak self] in self?.hasSpeechAccess = (status == .authorized) }
+        let status = SFSpeechRecognizer.authorizationStatus()
+        switch status {
+        case .notDetermined:
+            SFSpeechRecognizer.requestAuthorization { newStatus in
+                Task { @MainActor [weak self] in
+                    self?.hasSpeechAccess = (newStatus == .authorized)
+                }
+            }
+        case .denied, .restricted:
+            openSettings()
+        case .authorized:
+            self.hasSpeechAccess = true
+        @unknown default:
+            break
         }
     }
     
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+    }
+    
+    // Notification logic
     func checkNotificationStatus() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             let status = settings.authorizationStatus
@@ -724,7 +764,11 @@ class DreamStore: NSObject, ObservableObject {
         recommendationCache = [:]
         activeQuestion = questions.first
         
-        audioRecorder.startRecording { [weak self] success in
+        // --- NEW: Gather Keywords for Speech Analyzer Biasing ---
+        let keywords = questions.flatMap { $0.keywords }
+        
+        // Pass keywords to recorder to bias the recognition engine
+        audioRecorder.startRecording(keywords: keywords) { [weak self] success in
             Task { @MainActor [weak self] in
                 guard let self = self, success else { return }
                 withAnimation { self.isRecording = true; self.isPaused = false }
@@ -732,9 +776,16 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
     
-    func pauseRecording() { withAnimation { isPaused.toggle() } }
-    func openSettings() {}
+    func pauseRecording() {
+        withAnimation { isPaused = true }
+        audioRecorder.pauseRecording()
+    }
     
+    func resumeRecording() {
+        withAnimation { isPaused = false }
+        audioRecorder.resumeRecording()
+    }
+        
     func stopRecording(save: Bool) {
         guard let url = audioRecorder.stopRecording() else {
             withAnimation { isRecording = false; isPaused = false }
