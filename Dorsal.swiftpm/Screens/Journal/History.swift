@@ -77,6 +77,7 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("Journal")
+            .navigationBarTitleColor(Theme.accent)
             .navigationBarTitleDisplayMode(.large)
             .searchable(
                 text: $store.searchQuery,

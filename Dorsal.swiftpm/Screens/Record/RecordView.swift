@@ -96,10 +96,12 @@ struct RecordView: View {
                     
                 } else {
                     // === SIMPLE MODE ===
-                    
-                    // LAYER 0: Theme Background
-                    Theme.gradientBackground
-                        .ignoresSafeArea()
+                    LinearGradient(
+                        colors: [Color(red: 0.05, green: 0.02, blue: 0.10), Color(red: 0.10, green: 0.05, blue: 0.20), Color(red: 0.02, green: 0.02, blue: 0.05)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .ignoresSafeArea()
                     
                     // LAYER 1: Full Screen Stars (No Mask)
                     StarryBackground()
@@ -237,6 +239,7 @@ struct RecordView: View {
                 .zIndex(1) // Ensure UI is ON TOP
             }
             .navigationTitle("Record")
+            .navigationBarTitleColor(Theme.accent)
             // MARK: - NEW: Toolbar Toggle
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

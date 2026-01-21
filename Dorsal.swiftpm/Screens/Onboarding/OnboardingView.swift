@@ -430,37 +430,7 @@ struct NotificationOnboardingView: View {
                             isGranted: store.hasNotificationAccess,
                             action: {
                                 store.reminderTime = selectedTime.timeIntervalSince1970
-                                let center = UNUserNotificationCenter.current()
-                                
-                                Task {
-                                    // Check existing settings
-                                    let settings = await center.notificationSettings()
-                                    let status = settings.authorizationStatus
-                                    
-                                    if status == .denied {
-                                        await MainActor.run {
-                                            if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
-                                                UIApplication.shared.open(url)
-                                            }
-                                        }
-                                    } else if status == .notDetermined {
-                                        do {
-                                            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-                                            await MainActor.run {
-                                                if granted {
-                                                    store.requestNotificationAccess()
-                                                }
-                                            }
-                                        } catch {
-                                            print("Error requesting notification authorization: \(error)")
-                                        }
-                                    } else {
-                                        // Already authorized or provisional
-                                        await MainActor.run {
-                                            store.requestNotificationAccess()
-                                        }
-                                    }
-                                }
+                                store.requestNotificationAccess()
                             }
                         )
                         .glassEffectID("permission", in: namespace)

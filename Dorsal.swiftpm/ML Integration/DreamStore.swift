@@ -8,7 +8,6 @@ import Speech
 import NaturalLanguage
 import UserNotifications
 
-// ... (Filter Structs) ...
 struct DreamFilter: Equatable {
     var people: Set<String> = []
     var places: Set<String> = []
@@ -32,7 +31,12 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     @Published var profileImageData: Data? {
-        didSet { saveProfileImageToDisk(data: profileImageData) }
+        didSet {
+            saveProfileImageToDisk(data: profileImageData)
+            if profileImageData == nil {
+                clearProfileColor()
+            }
+        }
     }
     
     // MARK: - THEME & SETTINGS ENGINE
@@ -42,6 +46,32 @@ class DreamStore: NSObject, ObservableObject {
     
     @AppStorage("isComplexVisualizerEnabled") var isComplexVisualizerEnabled: Bool = true {
         didSet { objectWillChange.send() }
+    }
+    
+    // MARK: - PROFILE COLOR STORAGE
+    @AppStorage("profileColorComponents") var profileColorComponents: String = ""
+
+    var cachedProfileColor: Color? {
+        if profileColorComponents.isEmpty { return nil }
+        let components = profileColorComponents.split(separator: ",").compactMap { Double($0) }
+        guard components.count >= 3 else { return nil }
+        return Color(.sRGB, red: components[0], green: components[1], blue: components[2], opacity: components.count > 3 ? components[3] : 1)
+    }
+
+    func saveProfileColor(_ color: Color) {
+        let uiColor = UIColor(color)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        
+        if uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            profileColorComponents = "\(red),\(green),\(blue),\(alpha)"
+        }
+    }
+    
+    func clearProfileColor() {
+        profileColorComponents = ""
     }
     
     var themeAccentColor: Color {
@@ -77,7 +107,7 @@ class DreamStore: NSObject, ObservableObject {
     @Published var hasMicAccess: Bool = false
     @Published var hasSpeechAccess: Bool = false
     
-    // NEW: Notification Permission & Settings
+    // MARK: - NOTIFICATION STATE
     @Published var hasNotificationAccess: Bool = false
     @AppStorage("reminderTime") var reminderTime: Double = 0
     @AppStorage("isReminderEnabled") var isReminderEnabled: Bool = false
@@ -180,7 +210,6 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     private func setupObservers() {
-        // --- 1. Audio Recorder Observers ---
         audioRecorder.$audioLevel
             .receive(on: RunLoop.main)
             .assign(to: \.audioPower, on: self)
@@ -199,7 +228,6 @@ class DreamStore: NSObject, ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
             
-        // Sync pause state from recorder
         audioRecorder.$isPaused
             .receive(on: RunLoop.main)
             .assign(to: \.isPaused, on: self)
@@ -258,22 +286,41 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
     
-    // Notification logic
     func checkNotificationStatus() {
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            let status = settings.authorizationStatus
-            Task { @MainActor in
-                self.hasNotificationAccess = (status == .authorized)
+        let center = UNUserNotificationCenter.current()
+        Task {
+            let settings = await center.notificationSettings()
+            await MainActor.run {
+                self.hasNotificationAccess = (settings.authorizationStatus == .authorized)
             }
         }
     }
-    
+
     func requestNotificationAccess() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-            Task { @MainActor in
-                self.hasNotificationAccess = granted
-                if granted && self.isReminderEnabled {
-                    self.scheduleDailyReminder()
+        let center = UNUserNotificationCenter.current()
+        Task {
+            let settings = await center.notificationSettings()
+            let status = settings.authorizationStatus
+            
+            if status == .denied {
+                await MainActor.run {
+                    self.openSettings()
+                }
+            } else if status == .notDetermined {
+                do {
+                    let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                    await MainActor.run {
+                        self.hasNotificationAccess = granted
+                        if granted && self.isReminderEnabled {
+                            self.scheduleDailyReminder()
+                        }
+                    }
+                } catch {
+                    print("Error requesting notification authorization: \(error)")
+                }
+            } else if status == .authorized {
+                await MainActor.run {
+                    self.hasNotificationAccess = true
                 }
             }
         }
@@ -287,8 +334,6 @@ class DreamStore: NSObject, ObservableObject {
                     Task { @MainActor in self.scheduleDailyReminder() }
                 } else if settings.authorizationStatus == .notDetermined {
                     Task { @MainActor in self.requestNotificationAccess() }
-                } else {
-                    // User denied, just keep the toggle visual but we can't schedule
                 }
             }
         } else {
@@ -322,7 +367,6 @@ class DreamStore: NSObject, ObservableObject {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
     
-    // Calculate storage used by the app's documents
     var storageUsageString: String {
         let fileManager = FileManager.default
         guard let docDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else { return "Unknown" }
@@ -339,7 +383,6 @@ class DreamStore: NSObject, ObservableObject {
                 }
             }
             
-            // Use instance method for compatibility
             let formatter = ByteCountFormatter()
             formatter.countStyle = .file
             return formatter.string(fromByteCount: totalSize)
@@ -527,8 +570,6 @@ class DreamStore: NSObject, ObservableObject {
         throw DreamError.imageGenerationFailed
     }
     
-    // ... Computed Props ...
-    
     private func resolveAliases(for names: Set<String>, type: String) -> Set<String> {
         guard let context = modelContext else { return names }
         var resolved = names
@@ -620,13 +661,12 @@ class DreamStore: NSObject, ObservableObject {
         
         updateStateTask?.cancel()
         updateStateTask = Task {
-            try? await Task.sleep(nanoseconds: 200_000_000) // Debounce 0.2s
+            try? await Task.sleep(nanoseconds: 200_000_000)
             if Task.isCancelled { return }
             
             let transcriptSnapshot = await MainActor.run { self.currentTranscript }
             guard !transcriptSnapshot.isEmpty else { return }
             
-            // Check ALL unanswered questions for a match, not just the active one
             let unansweredQuestions = await MainActor.run {
                 self.questions.filter { !self.answeredQuestions.contains($0.id) }
             }
@@ -635,7 +675,6 @@ class DreamStore: NSObject, ObservableObject {
             
             let transcriptLower = transcriptSnapshot.lowercased()
             
-            // Prepare NLTagger once for reuse
             let tagger = NLTagger(tagSchemes: [.tokenType])
             let words = transcriptSnapshot.split(separator: " ")
             let recentText = words.suffix(15).joined(separator: " ")
@@ -644,24 +683,20 @@ class DreamStore: NSObject, ObservableObject {
             for question in unansweredQuestions {
                 var isSatisfied = false
                 
-                // 1. Keyword check
                 if question.keywords.contains(where: { transcriptLower.contains($0.lowercased()) }) {
                     isSatisfied = true
                 }
-                // 2. Semantic check (if embedding available)
                 else if let embedding = self.embedding {
                     tagger.enumerateTags(in: recentText.startIndex..<recentText.endIndex, unit: .word, scheme: .tokenType, options: [.omitPunctuation, .omitWhitespace]) { _, tokenRange in
                         let word = String(recentText[tokenRange]).lowercased()
                         if word.count < 3 { return true }
                         
-                        // Check broad concepts
                         for concept in question.semanticConcepts {
                             let distance = embedding.distance(between: word, and: concept)
                             if distance < 0.65 {
                                 isSatisfied = true; return false
                             }
                         }
-                        // Check specific keywords via embedding
                         for keyword in question.keywords {
                             let distance = embedding.distance(between: word, and: keyword)
                             if distance < 0.4 {
@@ -685,7 +720,6 @@ class DreamStore: NSObject, ObservableObject {
         if answeredQuestions.contains(questionID) { return }
         
         if activeQuestion?.id == questionID {
-            // If the ACTIVE question is answered, show animation
             withAnimation { self.isQuestionSatisfied = true }
             Task {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -699,7 +733,6 @@ class DreamStore: NSObject, ObservableObject {
                 }
             }
         } else {
-            // If a FUTURE/BACKGROUND question is answered, just mark it done
             self.answeredQuestions.insert(questionID)
         }
     }
@@ -764,10 +797,8 @@ class DreamStore: NSObject, ObservableObject {
         recommendationCache = [:]
         activeQuestion = questions.first
         
-        // --- NEW: Gather Keywords for Speech Analyzer Biasing ---
         let keywords = questions.flatMap { $0.keywords }
         
-        // Pass keywords to recorder to bias the recognition engine
         audioRecorder.startRecording(keywords: keywords) { [weak self] success in
             Task { @MainActor [weak self] in
                 guard let self = self, success else { return }
@@ -801,7 +832,6 @@ class DreamStore: NSObject, ObservableObject {
 
     // MARK: - PROCESSING PIPELINE
     private func processDream(transcript: String, audioURL: URL) {
-        // Cancel existing task if any
         currentAnalysisTask?.cancel()
         
         isProcessing = true
@@ -823,7 +853,6 @@ class DreamStore: NSObject, ObservableObject {
     func regenerateDream(_ dream: Dream) {
         guard !isProcessing else { return }
         
-        // Cancel existing task if any
         currentAnalysisTask?.cancel()
         
         guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
@@ -831,14 +860,13 @@ class DreamStore: NSObject, ObservableObject {
         isProcessing = true
         currentDreamID = dream.id
         
-        // Clear AI fields but keep VoiceFatigue if possible
         let existingFatigue = dreams[index].voiceFatigue
         
         dreams[index].core = nil
         dreams[index].extras = nil
         dreams[index].generatedImageData = nil
         dreams[index].analysisError = nil
-        dreams[index].voiceFatigue = existingFatigue // Preserve if we can't re-run audio
+        dreams[index].voiceFatigue = existingFatigue
         
         persistDream(dreams[index])
         

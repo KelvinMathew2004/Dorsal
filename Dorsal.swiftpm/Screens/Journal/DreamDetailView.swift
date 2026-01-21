@@ -830,7 +830,7 @@ struct ContextRow: View {
 struct DreamTranscriptSection: View {
     let transcript: String
     var body: some View {
-        MagicCard(title: "Transcript", icon: "quote.opening", color: Theme.secondary) {
+        TranscriptCard(title: "Transcript", icon: "quote.opening", color: Theme.secondary) {
             Text(transcript)
                 .font(.callout.monospaced())
                 .frame(maxWidth: .infinity, alignment: .leading)

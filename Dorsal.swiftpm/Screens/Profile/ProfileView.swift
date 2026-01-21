@@ -12,22 +12,27 @@ struct ProfileView: View {
     
     @State private var showImagePlayground = false
     @State private var showPhotoPicker = false
-    @State private var showSettings = false // Added settings sheet
-    @State private var showOnboarding = false // For re-onboarding
+    @State private var showSettings = false
+    @State private var showOnboarding = false
     
-    // Navigation for Entity Details
     @State private var selectedEntity: EntityIdentifier?
     
     @State private var showDeleteAlert = false
     @State private var itemToDelete: EntityIdentifier?
     
-    // Drag & Drop State
     @State private var draggedItem: EntityIdentifier?
     @State private var dropTargetItem: EntityIdentifier?
     
-    // Gradient State - Cached in View to persist across tab changes
-    @State private var gradientColors: [Color] = ProfileView.cachedGradientColors
-    static var cachedGradientColors: [Color] = []
+    @State private var gradientColors: [Color] = {
+        if let saved = UserDefaults.standard.string(forKey: "profileColorComponents") {
+            let components = saved.split(separator: ",").compactMap { Double($0) }
+            if components.count >= 3 {
+                let color = Color(.sRGB, red: components[0], green: components[1], blue: components[2], opacity: components.count > 3 ? components[3] : 1)
+                return [color, color.opacity(0.8), color.opacity(0.6)]
+            }
+        }
+        return []
+    }()
     
     var textColor: Color {
         let baseColor: Color
@@ -61,9 +66,14 @@ struct ProfileView: View {
         NavigationStack {
             ZStack {
                 // Background Layer 1: Default Theme (Always visible)
-                Theme.gradientBackground.ignoresSafeArea()
+                LinearGradient(
+                    colors: [Color(red: 0.05, green: 0.02, blue: 0.10), Color(red: 0.10, green: 0.05, blue: 0.20), Color(red: 0.02, green: 0.02, blue: 0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
                 
-                // Background Layer 2: Dynamic Gradient (Fades in)
+                // Background Layer 2: Dynamic Gradient
                 if !gradientColors.isEmpty {
                     Group {
                         MeshGradient(
@@ -82,7 +92,6 @@ struct ProfileView: View {
                     }
                     .ignoresSafeArea()
                     .overlay(Color.black.opacity(0.6))
-                    .transition(.opacity)
                 }
                 
                 ScrollViewReader { proxy in
@@ -91,6 +100,7 @@ struct ProfileView: View {
             }
             .animation(.easeInOut(duration: 1.0), value: gradientColors)
             .navigationTitle("Profile")
+            .navigationBarTitleColor(textColor)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -127,7 +137,6 @@ struct ProfileView: View {
                             HStack {
                                 Spacer()
                                 ZStack(alignment: .bottom) {
-                                    // Profile Image
                                     if let data = store.profileImageData, let uiImage = UIImage(data: data) {
                                         Image(uiImage: uiImage)
                                             .resizable()
@@ -145,7 +154,6 @@ struct ProfileView: View {
                                         }
                                     }
                                     
-                                    // The Edit Pill
                                     Menu {
                                         Button { showPhotoPicker = true } label: { Label("Photo Library", systemImage: "photo") }
                                         if store.isImageGenerationAvailable {
@@ -207,7 +215,6 @@ struct ProfileView: View {
                 }
             }
             .onChange(of: store.profileImageData) { updateGradient() }
-            .task { updateGradient() }
             .sheet(item: $selectedEntity) { entity in
                 EntityDetailView(store: store, name: entity.name, type: entity.type)
                     .presentationDetents([.large])
@@ -222,36 +229,29 @@ struct ProfileView: View {
                 DispatchQueue.main.async {
                     let newColors = [color, color.opacity(0.8), color.opacity(0.6)]
                     self.gradientColors = newColors
-                    ProfileView.cachedGradientColors = newColors
+                    
+                    store.saveProfileColor(color)
                 }
             }
         } else {
             self.gradientColors = []
-            ProfileView.cachedGradientColors = []
+            store.clearProfileColor()
         }
     }
     
-    // MARK: - Extracted Scroll Content
     @ViewBuilder
     private func scrollableContent(proxy: ScrollViewProxy) -> some View {
         ScrollView {
             VStack(spacing: 40) {
-                // MARK: - Header
                 headerView.id("top")
-                
-                // MARK: - Stats
                 statsRow
-                
-                // MARK: - Category Filter & List
                 categorySection(proxy: proxy)
             }
             .padding(.bottom, 100)
         }
         .coordinateSpace(name: "scroll")
-        // Global Drop Zone for Unlinking (dropping outside list items)
         .onDrop(of: [UTType.text], delegate: RootDropDelegate(draggedItem: $draggedItem, store: store))
         
-        // MARK: - Global Dialogs
         .alert("Delete Details?", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
                 if let entity = itemToDelete {
@@ -266,11 +266,8 @@ struct ProfileView: View {
         }
     }
     
-    // MARK: - Subviews
-    
     private var headerView: some View {
         HStack(spacing: 24) {
-            // Just Display Image, No Action
             if let data = store.profileImageData, let uiImage = UIImage(data: data) {
                 Image(uiImage: uiImage)
                     .resizable()
@@ -300,7 +297,7 @@ struct ProfileView: View {
         }
         .padding(.top, 40)
         .padding(.horizontal)
-        .frame(maxWidth: .infinity) // Center the entire HStack horizontally
+        .frame(maxWidth: .infinity)
     }
     
     private var statsRow: some View {
@@ -308,14 +305,12 @@ struct ProfileView: View {
             ContinuousStatBlock(title: "Streak", value: "\(store.currentStreak)", icon: "flame.fill", color: .orange, corners: [.topLeft, .bottomLeft])
             ContinuousStatBlock(title: "Dreams", value: "\(store.dreams.count)", icon: "moon.fill", color: .purple, corners: [])
             
-            // Filter Places to exclude children
             let placesCount = store.allPlaces.filter { placeName in
                 store.getEntity(name: placeName, type: "place")?.parentID == nil
             }.count
             
             ContinuousStatBlock(title: "Places", value: "\(placesCount)", icon: "map.fill", color: .green, corners: [])
             
-            // Filter People to exclude children
             let peopleCount = store.allPeople.filter { personName in
                 store.getEntity(name: personName, type: "person")?.parentID == nil
             }.count
@@ -327,7 +322,6 @@ struct ProfileView: View {
     
     private func categorySection(proxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Only show Picker if there are categories available
             if !availableCategories.isEmpty {
                 Picker("Category", selection: $selectedCategory) {
                     ForEach(availableCategories, id: \.self) { cat in
@@ -337,20 +331,17 @@ struct ProfileView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
                 .onAppear {
-                    // Ensure selection is valid when view appears
                     if !availableCategories.contains(selectedCategory), let first = availableCategories.first {
                         selectedCategory = first
                     }
                 }
                 .onChange(of: availableCategories) {
-                    // Ensure selection is valid if categories change (e.g. last item in a category deleted)
                     if !availableCategories.contains(selectedCategory), let first = availableCategories.first {
                         selectedCategory = first
                     }
                 }
             }
             
-            // Switched to VStack to prevent glass/material artifacts common in LazyVStack
             VStack(spacing: 0) {
                 ForEach(itemsForCategory, id: \.self) { item in
                     let itemIdentifier = EntityIdentifier(name: item, type: filterTypeForCategory)
@@ -358,9 +349,7 @@ struct ProfileView: View {
                     let hasChildren = !children.isEmpty
                     
                     VStack(spacing: 0) {
-                        // Parent Item Row Container
                         HStack(spacing: 16) {
-                            // Navigation Button (Left Side)
                             Button {
                                 selectedEntity = itemIdentifier
                             } label: {
@@ -373,11 +362,10 @@ struct ProfileView: View {
                                     
                                     Spacer()
                                 }
-                                .contentShape(Rectangle()) // Ensures the whole area is tappable for navigation
+                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain) // Prevents button styling from interfering with the menu
+                            .buttonStyle(.plain)
                             
-                            // Parent Options Menu (Right Side - Actual Button)
                             Menu {
                                 Button {
                                     selectedEntity = itemIdentifier
@@ -412,13 +400,11 @@ struct ProfileView: View {
                         .padding()
                         .glassEffect(.clear.interactive(), in: Capsule())
                         .overlay(
-                            // UPDATED: Using dynamic Theme
                             Capsule()
                                 .stroke(dropTargetItem?.name == item ? Theme.accent.opacity(0.8) : Color.clear, lineWidth: 3)
                         )
                         .padding(.vertical, 8)
                         .padding(.horizontal)
-                        // Drag conditional: Only draggable if it DOES NOT have children
                         .draggableIf(!hasChildren) {
                             self.draggedItem = itemIdentifier
                             return NSItemProvider(object: item as NSString)
@@ -434,11 +420,9 @@ struct ProfileView: View {
                         ForEach(children, id: \.id) { child in
                             let childIdentifier = EntityIdentifier(name: child.name, type: child.type)
                             
-                            // Child Row Container
                             HStack(spacing: 16) {
-                                // Navigation Button (Left Side)
                                 Button {
-                                    selectedEntity = itemIdentifier // Clicking child goes to parent (as per logic)
+                                    selectedEntity = itemIdentifier
                                 } label: {
                                     HStack(spacing: 16) {
                                         Image(systemName: "arrow.turn.down.right")
@@ -456,9 +440,7 @@ struct ProfileView: View {
                                 }
                                 .buttonStyle(.plain)
                                 
-                                // Child Options Menu (Right Side - Actual Button)
                                 Menu {
-                                    // Option to view details (Parent)
                                     Button {
                                         selectedEntity = itemIdentifier
                                     } label: {
@@ -466,7 +448,6 @@ struct ProfileView: View {
                                             .tint(textColor)
                                     }
                                     
-                                    // Option to filter by PARENT
                                     Button {
                                         store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
                                     } label: {
@@ -495,7 +476,6 @@ struct ProfileView: View {
                             .glassEffect(.clear.interactive(), in: Capsule())
                             .padding(.vertical, 8)
                             .padding(.horizontal)
-                            // Drag conditional for children
                             .draggableIf(true) {
                                 self.draggedItem = childIdentifier
                                 return NSItemProvider(object: child.name as NSString)
@@ -507,8 +487,6 @@ struct ProfileView: View {
             }
         }
     }
-    
-    // MARK: - Computed Props
     
     var itemsForCategory: [String] {
         switch selectedCategory {
@@ -538,8 +516,6 @@ struct ProfileView: View {
     }
 }
 
-// MARK: - Helper Views & Extensions
-
 extension View {
     @ViewBuilder
     func draggableIf(_ condition: Bool, _ payload: @escaping () -> NSItemProvider) -> some View {
@@ -567,7 +543,6 @@ struct EntityListImage: View {
                 .resizable().aspectRatio(contentMode: .fill).frame(width: 40, height: 40)
                 .clipShape(Circle()).overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
         } else {
-            // UPDATED: Use dynamic theme color
             Image(systemName: icon)
                 .foregroundStyle(textColor)
                 .frame(width: 40, height: 40)
@@ -577,8 +552,6 @@ struct EntityListImage: View {
     }
 }
 
-// MARK: - Drop Delegates
-
 struct RootDropDelegate: DropDelegate {
     @Binding var draggedItem: ProfileView.EntityIdentifier?
     let store: DreamStore
@@ -586,20 +559,16 @@ struct RootDropDelegate: DropDelegate {
     func dropUpdated(info: DropInfo) -> DropProposal {
         guard let dragged = draggedItem else { return DropProposal(operation: .cancel) }
         
-        // Check if the dragged item is currently a child of someone
         if let entity = store.getEntity(name: dragged.name, type: dragged.type), entity.parentID != nil {
-            // It's a child, so dropping it on root means unlinking (returning to parent/root level)
             return DropProposal(operation: .move)
         }
         
-        // If it's already a root item, we don't do anything
         return DropProposal(operation: .forbidden)
     }
     
     func performDrop(info: DropInfo) -> Bool {
         guard let dragged = draggedItem else { return false }
         
-        // Perform unlink if it was a child
         if let entity = store.getEntity(name: dragged.name, type: dragged.type), entity.parentID != nil {
             withAnimation { store.unlinkEntity(name: dragged.name, type: dragged.type) }
             draggedItem = nil
@@ -625,18 +594,15 @@ struct EntityDropDelegate: DropDelegate {
     func dropEntered(info: DropInfo) {
         guard let dragged = draggedItem, dragged.id != item.id else { return }
         
-        // 1. Forbidden if dragged item is a parent (has children)
         if !store.getChildren(for: dragged.name, type: dragged.type).isEmpty {
             return
         }
         
-        // 2. Forbidden if dragging over own parent
         if let childEntity = store.getEntity(name: dragged.name, type: dragged.type),
            childEntity.parentID == item.id {
             return
         }
         
-        // If passed checks, it's a valid target
         withAnimation { dropTargetItem = item }
     }
     
@@ -647,10 +613,7 @@ struct EntityDropDelegate: DropDelegate {
     }
     
     func dropUpdated(info: DropInfo) -> DropProposal {
-        // ... scroll handling ...
-        
         guard let dragged = draggedItem, dragged.id != item.id else {
-            // Not dragging anything valid, clear target if it was us
             if dropTargetItem?.id == item.id {
                 DispatchQueue.main.async {
                     withAnimation { dropTargetItem = nil }
@@ -659,14 +622,12 @@ struct EntityDropDelegate: DropDelegate {
             return DropProposal(operation: .cancel)
         }
         
-        // Validate drop target
         let isValid = store.getChildren(for: dragged.name, type: dragged.type).isEmpty &&
                       !(store.getEntity(name: dragged.name, type: dragged.type)?.parentID == item.id)
         
         if isValid && dropTargetItem?.id == item.id {
             return DropProposal(operation: .copy)
         } else {
-            // Clear highlighting if we're no longer valid or not over this item
             if dropTargetItem?.id == item.id {
                 DispatchQueue.main.async {
                     withAnimation { dropTargetItem = nil }
@@ -679,7 +640,6 @@ struct EntityDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         guard let dragged = draggedItem, dragged.id != item.id else { return false }
         
-        // Double check validations
         if !store.getChildren(for: dragged.name, type: dragged.type).isEmpty { return false }
         if let childEntity = store.getEntity(name: dragged.name, type: dragged.type), childEntity.parentID == item.id { return false }
 

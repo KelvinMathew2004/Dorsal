@@ -154,6 +154,7 @@ struct WeeklyInsightsView: View {
                 }
             }
             .navigationTitle("Weekly Insights")
+            .navigationBarTitleColor(Theme.accent)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

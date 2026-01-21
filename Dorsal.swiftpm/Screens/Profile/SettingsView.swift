@@ -13,6 +13,7 @@ struct SettingsView: View {
         NavigationStack {
             ZStack {
                 Theme.gradientBackground.ignoresSafeArea()
+                    .animation(.easeInOut(duration: 0.5), value: store.currentThemeID)
                 
                 ScrollView {
                     VStack(spacing: 32) {

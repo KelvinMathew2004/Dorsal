@@ -9,17 +9,25 @@ struct ThemeOption: Identifiable, Hashable {
 }
 
 enum Theme {
+    static var bgStart: Color {
+        Theme.accent.mix(with: .black, by: 0.7)
+    }
+    
+    static var bgMid: Color {
+        Color(red: 0.10, green: 0.05, blue: 0.20)
+    }
+    
+    static var bgEnd: Color {
+        Color(red: 0.02, green: 0.02, blue: 0.05)
+    }
 
-    // MARK: Background gradient
-    static let bgStart = Color(red: 0.05, green: 0.02, blue: 0.10)
-    static let bgMid   = Color(red: 0.10, green: 0.05, blue: 0.20)
-    static let bgEnd   = Color(red: 0.02, green: 0.02, blue: 0.05)
-
-    static let gradientBackground = LinearGradient(
-        colors: [bgStart, bgMid, bgEnd],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
+    static var gradientBackground: LinearGradient {
+        LinearGradient(
+            colors: [bgStart, bgMid, bgEnd],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
     
     // MARK: - PREDEFINED THEMES (Rainbow Order)
     static let availableThemes: [ThemeOption] = [
@@ -330,7 +338,7 @@ extension Color {
 
 // MARK: - SHARED COMPONENTS
 
-struct MagicCard<Content: View>: View {
+struct TranscriptCard<Content: View>: View {
     let title: String
     let icon: String
     let color: Color
@@ -350,7 +358,7 @@ struct MagicCard<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(24)
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
     }
 }
 

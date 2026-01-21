@@ -29,10 +29,10 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $store.selectedTab) {
-            Tab(value: 0) {
+            Tab(value: 0, role: .search) {
                 RecordView(store: store)
             } label: {
-                Label("Record", systemImage: "zzz")
+                Label("Record", systemImage: "plus")
                     .symbolColorRenderingMode(.gradient)
                     .labelStyle(iPhoneIconOnlyLabelStyle())
             }
@@ -65,7 +65,7 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             store.setContext(modelContext)
-            Task { await DreamAnalyzer.shared.prewarmModel() }
+            Task { DreamAnalyzer.shared.prewarmModel() }
         }
     }
 }

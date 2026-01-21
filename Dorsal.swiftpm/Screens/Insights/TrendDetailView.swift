@@ -530,11 +530,11 @@ struct TrendDetailView: View {
     func getTrendLogicDescription(for metric: DreamMetric) -> String {
         switch metric {
         case .anxiety:
-            return "Scale (0-100): <25 Low/Good, 25-50 Moderate, >50 High/Concerning."
+            return "Scale (0-100): <20 Low/Good, 20-40 Moderate, >40 High/Concerning."
         case .sentiment:
-            return "Scale (0-100): >60 Positive, 40-60 Neutral, <40 Negative."
+            return "Scale (0-100): >50 Positive, 40-50 Neutral, <40 Negative."
         case .lucidity:
-            return "Scale (0-100): >50 High Awareness, 20-50 Some Awareness, <20 Low."
+            return "Scale (0-100): >40 High Awareness, 20-40 Some Awareness, <20 Low."
         case .vividness:
             return "Scale (0-100): >75 Vivid, 40-75 Moderate, <40 Hazy."
         case .fatigue:
@@ -935,20 +935,12 @@ struct TrendDetailView: View {
         
         switch metric {
         case .anxiety:
-            // Clinical anxiety scales often treat >10 as mild, >15 as moderate. Scaled 0-100:
-            // < 25: Low/Normal (Good)
-            // 25 - 50: Moderate
-            // > 50: High (Concerning)
-            if value < 25 { return ("hand.thumbsup.fill", "Low Anxiety", .green) }
-            if value < 50 { return ("minus", "Moderate", .yellow) }
+            if value < 20 { return ("hand.thumbsup.fill", "Low Anxiety", .green) }
+            if value < 40 { return ("minus", "Moderate", .yellow) }
             return ("hand.thumbsdown.fill", "High Anxiety", .orange)
             
         case .sentiment:
-            // Sentiment -1 to 1 scaled to 0-100. Neutral is 50.
-            // > 60: Positive
-            // 40 - 60: Neutral
-            // < 40: Negative
-            if value > 60 { return ("hand.thumbsup.fill", "Positive", .green) }
+            if value > 50 { return ("hand.thumbsup.fill", "Positive", .green) }
             if value >= 40 { return ("minus", "Neutral", .yellow) }
             return ("hand.thumbsdown.fill", "Negative", .orange)
             
@@ -957,60 +949,36 @@ struct TrendDetailView: View {
             // > 50: High Awareness (Excellent)
             // 20 - 50: Some Awareness (Good)
             // < 20: Low Awareness (Normal)
-            if value > 50 { return ("star.fill", "High Lucid", .teal) }
+            if value > 40 { return ("star.fill", "High Lucid", .teal) }
             if value > 20 { return ("star.leadinghalf.filled", "Some Lucid", .green) }
             return ("moon.zzz.fill", "Normal", .blue)
             
         case .vividness:
-            // Vividness 0-100.
-            // > 75: Highly Vivid (Excellent Recall)
-            // 40 - 75: Moderate
-            // < 40: Hazy
             if value > 75 { return ("eye.fill", "Vivid", .green) }
             if value > 40 { return ("eye.square", "Moderate", .yellow) }
             return ("eye.slash", "Hazy", .orange)
             
         case .fatigue:
-            // Vocal fatigue.
-            // < 30: Rested
-            // 30 - 60: Normal Use
-            // > 60: Strained/Fatigued
             if value < 30 { return ("battery.100", "Rested", .green) }
             if value < 60 { return ("battery.50", "Normal", .yellow) }
             return ("battery.0", "Fatigued", .orange)
             
         case .coherence:
-            // Narrative cohesion.
-            // > 70: Strong Narrative
-            // 40 - 70: Dream Logic
-            // < 40: Fragmented
             if value > 70 { return ("text.alignleft", "Coherent", .green) }
             if value > 40 { return ("text.aligncenter", "Dream Logic", .blue) }
             return ("text.alignright", "Fragmented", .orange)
             
         case .nightmares:
-            // Count.
-            // 0: Great
-            // 1-2: Normal/Occasional
-            // > 2: Frequent
             if value == 0 { return ("shield.fill", "Peaceful", .green) }
             if value <= 2 { return ("exclamationmark.shield", "Occasional", .yellow) }
             return ("exclamationmark.triangle.fill", "Frequent", .red)
             
         case .positive:
-            // Count.
-            // > 3: Frequent Positivity
-            // 1-3: Occasional
-            // 0: Low
             if value >= 3 { return ("sun.max.fill", "Frequent", .green) }
             if value >= 1 { return ("sun.min", "Occasional", .yellow) }
             return ("cloud", "Low", .gray)
             
         case .dreams:
-            // Dream recall frequency (per week/period).
-            // > 5: High Recall
-            // 2 - 5: Moderate
-            // < 2: Low Recall
             if value >= 5 { return ("book.fill", "High Recall", .green) }
             if value >= 2 { return ("book.closed", "Moderate", .blue) }
             return ("moon.zzz", "Low Recall", .gray)
