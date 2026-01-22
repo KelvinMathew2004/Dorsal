@@ -2,10 +2,6 @@ import SwiftUI
 import AVFoundation
 import Speech
 
-// MARK: - Buffer Converter Helper
-// Helper class moved to file scope to ensure visibility of Sendable conformance.
-// Marked @unchecked Sendable because it is used within a synchronous block
-// where we know it won't be accessed from multiple threads simultaneously.
 private final class ConversionState: @unchecked Sendable {
     var isProcessed = false
 }
@@ -59,8 +55,6 @@ private class BufferConverter {
     }
 }
 
-// Mark as @unchecked Sendable because we manage thread safety manually for the Engine
-// and AVAudioEngine itself isn't fully Sendable-compliant in older OS versions.
 class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
     @Published var isRecording = false
     @Published var isPaused = false
@@ -68,32 +62,34 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
     @Published var audioLevel: Float = 0
     @Published var liveTranscript: String = ""
     
-    // Core Audio Engine
+    @Published var isModelReady = false
+    @Published var isModelInstalling = false
+    
     private let audioEngine = AVAudioEngine()
     private var audioFile: AVAudioFile?
     private var recordingURL: URL?
     
-    // New iOS 26+ Speech Components
     private var analyzer: SpeechAnalyzer?
-    private var transcriber: DictationTranscriber?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private var analysisTask: Task<Void, Never>?
     private let bufferConverter = BufferConverter()
     
-    // Time Tracking
     private var startTime: Date?
     private var accumulatedTime: TimeInterval = 0
     private var timer: Timer?
     
-    // Internal queue to serialize audio engine operations
     private let queue = DispatchQueue(label: "com.dorsal.audioQueue", qos: .userInitiated)
     
-    // Throttle visualizer updates
     private var lastUpdateTime: TimeInterval = 0
+    
+    private let targetLocale = Locale(identifier: "en-US")
     
     override init() {
         super.init()
         setupInterruptionObserver()
+        Task {
+            await checkAndPrepareModels()
+        }
     }
     
     deinit {
@@ -103,7 +99,58 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         }
     }
     
-    // MARK: - Interruption Handling
+    func checkAndPrepareModels() async {
+        if isModelInstalling { return }
+        
+        let isSupported = await SpeechTranscriber.supportedLocales.contains { $0.identifier == "en-US" }
+        
+        guard isSupported else {
+            print("SpeechTranscriber does not support en-US, will attempt fallback.")
+            DispatchQueue.main.async { self.isModelReady = true }
+            return
+        }
+        
+        let isInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == "en-US" }
+        
+        if isInstalled {
+            DispatchQueue.main.async {
+                self.isModelReady = true
+                self.isModelInstalling = false
+            }
+        } else {
+            DispatchQueue.main.async {
+                self.isModelReady = false
+                self.isModelInstalling = true
+            }
+            
+            do {
+                print("Downloading speech assets for en-US...")
+                let dummyTranscriber = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
+                
+                if let request = try await AssetInventory.assetInstallationRequest(supporting: [dummyTranscriber]) {
+                    try await request.downloadAndInstall()
+                    print("Assets installed successfully.")
+                    
+                    DispatchQueue.main.async {
+                        self.isModelReady = true
+                        self.isModelInstalling = false
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.isModelReady = true
+                        self.isModelInstalling = false
+                    }
+                }
+            } catch {
+                print("Failed to download speech assets: \(error)")
+                DispatchQueue.main.async {
+                    self.isModelInstalling = false
+                    self.isModelReady = true
+                }
+            }
+        }
+    }
+    
     private func setupInterruptionObserver() {
         NotificationCenter.default.addObserver(
             self,
@@ -130,7 +177,6 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
             
             if options.contains(.shouldResume) {
-                // We leave it in .paused state for safety, user can manually resume.
             }
             
         @unknown default:
@@ -138,18 +184,13 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         }
     }
     
-    // MARK: - Public API
-    
     func startRecording(keywords: [String] = [], completion: @escaping @Sendable (Bool) -> Void) {
-        // 1. Check Microphone Permission
         if AVAudioApplication.shared.recordPermission != .granted {
             print("Microphone not authorized in Recorder")
             completion(false)
             return
         }
         
-        // 2. Check Speech Recognition Permission
-        // Crucial check to ensure we have permission before starting the analyzer
         if SFSpeechRecognizer.authorizationStatus() != .authorized {
             print("Speech Recognition not authorized in Recorder")
             completion(false)
@@ -206,24 +247,20 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     func stopRecording() -> URL? {
-        // Stop Engine
         if audioEngine.isRunning {
             audioEngine.stop()
         }
         let inputNode = audioEngine.inputNode
         inputNode.removeTap(onBus: 0)
         
-        // Stop Analysis Stream
         inputContinuation?.finish()
         inputContinuation = nil
         
-        // Wait for analyzer to finish (best effort)
         let _ = Task { [weak self] in
             try? await self?.analyzer?.finalizeAndFinishThroughEndOfInput()
             self?.analysisTask?.cancel()
             self?.analysisTask = nil
             self?.analyzer = nil
-            self?.transcriber = nil
         }
         
         audioFile = nil
@@ -240,24 +277,6 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         return recordingURL
     }
     
-    // MARK: - Asset Management
-    
-    private func ensureAssetsInstalled(for transcriber: DictationTranscriber) async throws {
-        // Check if the locale is already installed
-        if await DictationTranscriber.installedLocales.contains(where: { $0.identifier == "en-US" }) {
-            return
-        }
-        
-        // Download if needed
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            print("Downloading speech assets for en-US...")
-            try await request.downloadAndInstall()
-            print("Assets installed.")
-        }
-    }
-    
-    // MARK: - Internal Logic
-    
     private func setupAndStartEngine(keywords: [String], completion: @escaping @Sendable (Bool) -> Void) async {
         let session = AVAudioSession.sharedInstance()
         do {
@@ -269,10 +288,8 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             return
         }
         
-        // cleanup previous state
         analysisTask?.cancel()
         analyzer = nil
-        transcriber = nil
         
         DispatchQueue.main.async {
             self.liveTranscript = ""
@@ -294,7 +311,6 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
              return
         }
         
-        // Setup Audio File for backup
         do {
             audioFile = try AVAudioFile(forWriting: url, settings: recordingFormat.settings)
         } catch {
@@ -303,62 +319,83 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             return
         }
         
-        // --- NEW SPEECH ANALYZER SETUP ---
         do {
-            // 1. Create Dictation Transcriber
-            // Use .progressiveLongDictation for continuous speech with partial results
-            let newTranscriber = DictationTranscriber(locale: Locale(identifier: "en-US"), preset: .progressiveLongDictation)
-            self.transcriber = newTranscriber
+            var selectedModule: any SpeechModule
+            var usedDictationFallback = false
             
-            // 2. Ensure Assets (Models) are present
-            try await ensureAssetsInstalled(for: newTranscriber)
+            let isSupported = SpeechTranscriber.isAvailable
+            let isInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == "en-US" }
             
-            // 3. Configure Keyword Biasing (Checklist Optimization)
+            if isSupported && isInstalled {
+                let st = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
+                selectedModule = st
+                print("Using SpeechTranscriber for en-US")
+            } else {
+                print("SpeechTranscriber unavailable or assets missing, falling back to DictationTranscriber")
+                let dt = DictationTranscriber(locale: targetLocale, preset: .progressiveLongDictation)
+                selectedModule = dt
+                usedDictationFallback = true
+                
+                if isSupported && !isInstalled {
+                    print("Triggering background asset download...")
+                    Task {
+                        do {
+                            let dummy = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
+                            if let req = try await AssetInventory.assetInstallationRequest(supporting: [dummy]) {
+                                try await req.downloadAndInstall()
+                                print("Background asset download complete.")
+                            }
+                        } catch {
+                            print("Background asset download failed: \(error)")
+                        }
+                    }
+                }
+            }
+            
             let context = AnalysisContext()
-            // Provide context to bias the recognizer towards our checklist keywords
             if !keywords.isEmpty {
                 context.contextualStrings = [.general: keywords]
             }
             
-            // 4. Create Analyzer with Context
-            let newAnalyzer = SpeechAnalyzer(modules: [newTranscriber])
+            let newAnalyzer = SpeechAnalyzer(modules: [selectedModule])
             try await newAnalyzer.setContext(context)
             self.analyzer = newAnalyzer
             
-            // 5. Prepare Input Stream
             let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
             self.inputContinuation = continuation
             
-            // 6. Determine best format for analyzer
-            let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [newTranscriber]) ?? recordingFormat
+            let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [selectedModule]) ?? recordingFormat
             
-            // 7. Start Analysis Task loop
             self.analysisTask = Task {
                 do {
-                    // Start the analyzer processing the stream
                     try await newAnalyzer.start(inputSequence: stream)
                     
-                    // Consume results
-                    for try await result in newTranscriber.results {
-                        // FIX: DictationTranscriber.Result accesses text directly via .text property,
-                        // which is an AttributedString. We extract the string from it.
-                        let text = String(result.text.characters)
-                        DispatchQueue.main.async {
-                            self.liveTranscript = text
+                    if usedDictationFallback {
+                        if let dt = selectedModule as? DictationTranscriber {
+                            for try await result in dt.results {
+                                let text = String(result.text.characters)
+                                await MainActor.run { self.liveTranscript = text }
+                            }
+                        }
+                    } else {
+                        if let st = selectedModule as? SpeechTranscriber {
+                            for try await result in st.results {
+                                let text = String(result.text.characters)
+                                await MainActor.run { self.liveTranscript = text }
+                            }
                         }
                     }
+                    
                 } catch {
                     print("Speech Analysis Error: \(error)")
                 }
             }
             
-            // 8. Install Tap
             inputNode.removeTap(onBus: 0)
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, time in
                 self?.handleAudioBuffer(buffer: buffer, targetFormat: analyzerFormat)
             }
             
-            // 9. Start Engine
             audioEngine.prepare()
             try audioEngine.start()
             
@@ -379,10 +416,8 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
     private func handleAudioBuffer(buffer: AVAudioPCMBuffer, targetFormat: AVAudioFormat) {
         if !audioEngine.isRunning { return }
         
-        // 1. Write to local file for backup/playback
         try? audioFile?.write(from: buffer)
         
-        // 2. Feed to Speech Analyzer
         do {
             let convertedBuffer = try bufferConverter.convertBuffer(buffer, to: targetFormat)
             inputContinuation?.yield(AnalyzerInput(buffer: convertedBuffer))
@@ -390,7 +425,6 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             print("Buffer conversion error: \(error)")
         }
         
-        // 3. Throttled visualizer update
         let now = Date().timeIntervalSince1970
         if now - lastUpdateTime < 0.03 { return }
         lastUpdateTime = now
@@ -408,7 +442,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             let rms = sqrt(sum / Float(frameLength))
             let normalized = min(max(rms * 10.0, 0), 1.0)
             
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.audioLevel = normalized
             }
         }

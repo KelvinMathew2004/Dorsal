@@ -11,7 +11,9 @@ struct RecordView: View {
     @State private var showAvailabilityAlert = false
     @State private var availabilityMessage = ""
     
-    // Greeting logic based on time of day
+    @State private var showInstallationAlert = false
+    @State private var showProcessingAlert = false
+    
     private var greetingData: (text: String, icon: String) {
         let hour = Calendar.current.component(.hour, from: Date())
         let name = store.firstName
@@ -26,26 +28,20 @@ struct RecordView: View {
         }
     }
     
-    // VISUAL THEME LOCAL CONSTANTS (Cosmic Purple Gradient)
-    // Tuned for a "more beautiful" look with smoother transitions
-    private let cosmosTop     = Color(red: 0.02, green: 0.00, blue: 0.05) // Almost black, hint of indigo
-    private let cosmosMid     = Color(red: 0.08, green: 0.02, blue: 0.18) // Deep velvet purple
-    private let cosmosHorizon = Color(red: 0.18, green: 0.06, blue: 0.32) // Glowing violet horizon
-    private let cosmosBase    = Color(red: 0.04, green: 0.01, blue: 0.10) // Dark foundation
+    private let cosmosTop     = Color(red: 0.02, green: 0.00, blue: 0.05)
+    private let cosmosMid     = Color(red: 0.08, green: 0.02, blue: 0.18)
+    private let cosmosHorizon = Color(red: 0.18, green: 0.06, blue: 0.32)
+    private let cosmosBase    = Color(red: 0.04, green: 0.01, blue: 0.10)
     
     var body: some View {
         NavigationStack(path: $store.navigationPath) {
             ZStack {
-                // MARK: - BACKGROUND LAYERS
                 if store.isComplexVisualizerEnabled {
-                    // === COMPLEX MODE ===
-                    
-                    // LAYER 0: Cosmic Purple Gradient
                     LinearGradient(
                         stops: [
                             .init(color: cosmosTop, location: 0.0),
                             .init(color: cosmosMid, location: 0.4),
-                            .init(color: cosmosHorizon, location: 0.75), // Pushed slightly down to blend with water
+                            .init(color: cosmosHorizon, location: 0.75),
                             .init(color: cosmosBase, location: 1.0)
                         ],
                         startPoint: .top,
@@ -53,7 +49,6 @@ struct RecordView: View {
                     )
                     .ignoresSafeArea()
                     
-                    // LAYER 1: Star System (Optimized: Top 70% Only)
                     GeometryReader { proxy in
                         StarryBackground()
                             .frame(height: proxy.size.height * 0.70)
@@ -73,14 +68,12 @@ struct RecordView: View {
                     }
                     .ignoresSafeArea()
                     
-                    // LAYER 1.5: RECORDING OVERLAY
                     Color.black
                         .opacity(store.isRecording ? 0.5 : 0.0)
                         .ignoresSafeArea()
                         .animation(.easeInOut(duration: 1.5), value: store.isRecording)
                         .allowsHitTesting(false)
                     
-                    // LAYER 2.5: Visualizer (Aurora)
                     AuroraVisualizer(
                         power: store.isRecording ? store.audioPower : 0,
                         isPaused: store.isPaused,
@@ -95,7 +88,6 @@ struct RecordView: View {
                     
                     
                 } else {
-                    // === SIMPLE MODE ===
                     LinearGradient(
                         colors: [Color(red: 0.05, green: 0.02, blue: 0.10), Color(red: 0.10, green: 0.05, blue: 0.20), Color(red: 0.02, green: 0.02, blue: 0.05)],
                         startPoint: .topLeading,
@@ -103,20 +95,15 @@ struct RecordView: View {
                     )
                     .ignoresSafeArea()
                     
-                    // LAYER 1: Full Screen Stars (No Mask)
                     StarryBackground()
                         .ignoresSafeArea()
                 }
                 
-                // MARK: - FOREGROUND UI
-                // LAYER 3: Main UI
                 VStack {
                     Spacer()
                     
-                    // MARK: - Prompts
                     if store.isRecording {
                         if store.activeQuestion == nil {
-                            // ENCOURAGING TEXT
                             VStack(spacing: 12) {
                                 Image(systemName: "mic.circle.fill")
                                     .font(.system(size: 50))
@@ -138,7 +125,6 @@ struct RecordView: View {
                             .padding(.horizontal, 30)
                             .transition(.scale.combined(with: .opacity))
                         } else {
-                            // QUESTIONS
                             ChecklistOverlay(store: store)
                                 .transition(.asymmetric(
                                     insertion: .move(edge: .bottom).combined(with: .opacity),
@@ -146,7 +132,6 @@ struct RecordView: View {
                                 ))
                         }
                     } else {
-                        // Welcome State (Dynamic)
                         VStack(spacing: 16) {
                             Image(systemName: greetingData.icon)
                                 .font(.system(size: 60))
@@ -176,11 +161,9 @@ struct RecordView: View {
                             .transition(.opacity)
                     }
                     
-                    // MARK: - Controls
                     GlassEffectContainer(spacing: store.isPaused ? 20 : 40) {
                         HStack(spacing: store.isPaused ? 20 : 40) {
                             
-                            // 1. Pause Button
                             if store.isRecording {
                                 Button {
                                     if store.isPaused {
@@ -200,7 +183,6 @@ struct RecordView: View {
                                 .glassEffectID("pauseButton", in: namespace)
                             }
                             
-                            // 2. Record/Stop
                             Button {
                                 handleRecordButtonTap()
                             } label: {
@@ -216,7 +198,6 @@ struct RecordView: View {
                             .disabled(store.isProcessing)
                             .glassEffectID("recordButton", in: namespace)
                             
-                            // 3. Cancel
                             if store.isRecording {
                                 Button {
                                     store.stopRecording(save: false)
@@ -236,11 +217,10 @@ struct RecordView: View {
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isRecording)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: store.isPaused)
                 }
-                .zIndex(1) // Ensure UI is ON TOP
+                .zIndex(1)
             }
             .navigationTitle("Record")
             .navigationBarTitleColor(Theme.accent)
-            // MARK: - NEW: Toolbar Toggle
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     if !store.isRecording {
@@ -263,6 +243,20 @@ struct RecordView: View {
             } message: {
                 Text(availabilityMessage)
             }
+            .alert("Speech Model Updating", isPresented: $showInstallationAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                if store.isSpeechModelInstalling {
+                    Text("The high-quality English (US) speech model is currently downloading. Please wait a moment.")
+                } else {
+                    Text("Checking speech model availability...")
+                }
+            }
+            .alert("Processing in Background", isPresented: $showProcessingAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Please wait for the current dream analysis to complete before starting a new recording.")
+            }
             .onChange(of: store.selectedTab) {
                 if store.selectedTab == 0 {
                     store.navigationPath = NavigationPath()
@@ -272,10 +266,18 @@ struct RecordView: View {
     }
     
     func handleRecordButtonTap() {
-        if store.isProcessing { return }
+        if store.isProcessing {
+            showProcessingAlert = true
+            return
+        }
         
         if store.isRecording {
             store.stopRecording(save: true)
+            return
+        }
+        
+        if !store.isSpeechModelReady || store.isSpeechModelInstalling {
+            showInstallationAlert = true
             return
         }
         
@@ -306,8 +308,6 @@ struct RecordView: View {
         showAvailabilityAlert = true
     }
 }
-
-// MARK: - Subviews
 
 struct ChecklistOverlay: View {
     @ObservedObject var store: DreamStore
@@ -371,7 +371,6 @@ struct SimpleWrappedPills: View {
     let items: [String]
     
     var body: some View {
-        // Enforce maximum of 3 items
         HStack(spacing: 8) {
             ForEach(Array(items.prefix(3)), id: \.self) { item in
                 RecommendationPill(text: item.capitalized)
@@ -392,7 +391,6 @@ struct RecommendationPill: View {
     }
 }
 
-// MARK: - SIMPLE AUDIO VISUALIZER
 struct AudioVisualizer: View {
     var power: Float
     var isPaused: Bool
@@ -402,7 +400,6 @@ struct AudioVisualizer: View {
         HStack(spacing: 5) {
             ForEach(0..<bars, id: \.self) { index in
                 let gateThreshold: Float = 0.05
-                // Force gatedPower to 0 if paused
                 let rawGatedPower = power < gateThreshold ? 0 : power
                 let gatedPower = isPaused ? 0 : rawGatedPower
                 
@@ -419,7 +416,7 @@ struct AudioVisualizer: View {
                     .animation(.easeOut(duration: 0.15), value: power)
             }
         }
-        .frame(height: 120) // Fixed container
+        .frame(height: 120)
         .opacity(isPaused ? 0.5 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isPaused)
     }
