@@ -3,6 +3,7 @@ import PhotosUI
 import CoreImage
 import Contacts
 import ContactsUI
+import ImagePlayground
 
 struct EntityDetailView: View {
     @ObservedObject var store: DreamStore
@@ -16,6 +17,8 @@ struct EntityDetailView: View {
     @State private var showingPhotoPicker = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isGenerating = false
+    
+    @Environment(\.supportsImagePlayground) private var supportsImagePlayground
     
     // Contact Linking State
     @State private var contactId: String?
@@ -115,37 +118,42 @@ struct EntityDetailView: View {
                                 }
                                 
                                 // The Edit Pill
-                                Menu {
-                                    Button { showingPhotoPicker = true } label: { Label("Photo Library", systemImage: "photo").tint(textColor) }
-                                    
-                                    if store.isImageGenerationAvailable {
-                                        Button { showingImagePlayground = true } label: { Label("Create with Image Playground", systemImage: "wand.and.stars").tint(textColor) }
-                                        Button { generateAutoImage() } label: { Label("Generate Automatically", systemImage: "sparkles").tint(textColor) }
-                                    }
-                                    
-                                    if imageData != nil {
-                                        Divider()
+                                if !isGenerating {
+                                    Menu {
+                                        Button { showingPhotoPicker = true } label: { Label("Photo Library", systemImage: "photo").tint(textColor) }
                                         
-                                        Button(role: .destructive) {
-                                            withAnimation { imageData = nil }
-                                            saveData()
-                                        } label: {
-                                            Label("Remove Image", systemImage: "trash")
-                                                .tint(.red)
+                                        if supportsImagePlayground {
+                                            Button { showingImagePlayground = true } label: { Label("Create with AI", systemImage: "apple.image.playground").tint(textColor) }
                                         }
+                                        
+                                        if store.isImageGenerationAvailable {
+                                            Button { generateAutoImage() } label: { Label("Generate with AI", systemImage: "sparkles").tint(textColor) }
+                                        }
+                                        
+                                        if imageData != nil {
+                                            Divider()
+                                            
+                                            Button(role: .destructive) {
+                                                withAnimation { imageData = nil }
+                                                saveData()
+                                            } label: {
+                                                Label("Remove Image", systemImage: "trash")
+                                                    .tint(.red)
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "camera.fill")
+                                            Text("Edit")
+                                        }
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(textColor)
+                                        .padding(.vertical, 6)
+                                        .padding(.horizontal, 12)
+                                        .glassEffect(.clear.tint(buttonColor.opacity(0.8)).interactive())
                                     }
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "camera.fill")
-                                        Text("Edit")
-                                    }
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(textColor)
-                                    .padding(.vertical, 6)
-                                    .padding(.horizontal, 12)
-                                    .glassEffect(.clear.tint(buttonColor.opacity(0.8)).interactive())
+                                    .offset(y: 12)
                                 }
-                                .offset(y: 12)
                             }
                         }
                         .padding(.top, 40)
@@ -304,6 +312,26 @@ struct EntityDetailView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                
+                // MARK: - TOAST OVERLAY
+                VStack {
+                    Spacer()
+                    if let error = store.generationError {
+                        Text(error)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.white)
+                            .padding()
+                            .background(Color.red.opacity(0.8))
+                            .clipShape(Capsule())
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .onAppear {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                                    withAnimation { store.generationError = nil }
+                                }
+                            }
+                            .padding(.bottom, 20)
+                    }
+                }
             }
             .navigationTitle(name.capitalized)
             .navigationSubtitle("\(appearanceCount) \(appearanceCount == 1 ? "Dream" : "Dreams")")
@@ -361,12 +389,17 @@ struct EntityDetailView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingImagePlayground) {
-                ImagePlaygroundSheet(
-                    store: store,
-                    entityName: name,
-                    entityDescription: descriptionText
-                ) { data in
+            // MARK: - Native Image Playground Sheet
+            .imagePlaygroundSheet(
+                isPresented: $showingImagePlayground,
+                concepts: [
+                    .text(name),
+                    .text(descriptionText.isEmpty ? type : descriptionText),
+                    .text("Dream context"),
+                    .text("Illustration")
+                ]
+            ) { url in
+                if let data = try? Data(contentsOf: url) {
                     withAnimation(.easeInOut(duration: 0.5)) {
                         self.imageData = data
                     }
@@ -489,7 +522,9 @@ struct EntityDetailView: View {
                 }
                 saveData()
             } catch {
-                print("Auto generation failed")
+                await MainActor.run {
+                    store.generationError = "Failed to generate image. Please try again."
+                }
             }
             isGenerating = false
         }

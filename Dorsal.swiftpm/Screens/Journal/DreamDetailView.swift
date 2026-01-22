@@ -6,26 +6,23 @@ struct DreamDetailView: View {
     
     @Namespace private var namespace
     
-    // Interaction State
     @State private var activeEntity: EntityIdentifier?
     @State private var selectedEntity: EntityIdentifier?
     @State private var entityToDelete: EntityIdentifier?
     @State private var showDeleteAlert = false
     
-    // Insight Selection State
     @State private var selectedInsight: InsightType?
     
-    // Analysis Animation State
     @State private var currentAnalysisIconIndex = 0
     private let analysisIcons: [(name: String, color: Color)] = [
-        ("sparkles.rectangle.stack", .purple), // Interpretation
-        ("brain.head.profile", .green),        // Advice
-        ("person.2.fill", .blue),             // People
-        ("map.fill", .green),                 // Places
-        ("heart.fill", .pink),                // Emotions
-        ("star.fill", .yellow),               // Symbols
-        ("battery.50", .red),                 // Fatigue
-        ("waveform", .orange)                 // Tone
+        ("sparkles.rectangle.stack", .purple),
+        ("brain.head.profile", .green),
+        ("person.2.fill", .blue),
+        ("map.fill", .green),
+        ("heart.fill", .pink),
+        ("star.fill", .yellow),
+        ("battery.50", .red),
+        ("waveform", .orange)
     ]
     
     enum InsightType: String, Identifiable {
@@ -64,6 +61,10 @@ struct DreamDetailView: View {
         store.isProcessing && liveDream.id == store.currentDreamID
     }
     
+    var isGeneratingImage: Bool {
+        isProcessingThisDream && liveDream.generatedImageData == nil && liveDream.core?.summary != nil
+    }
+    
     var isAnalyzingFatigue: Bool {
         store.isAnalyzingFatigue && liveDream.id == store.currentDreamID
     }
@@ -72,13 +73,31 @@ struct DreamDetailView: View {
         ZStack {
             Theme.gradientBackground.ignoresSafeArea()
             
-            // Content
             contentLayer
             
-            // SEPARATE MODAL VIEW
+            VStack {
+                Spacer()
+                if let error = store.generationError {
+                    Text(error)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                        .padding()
+                        .background(Color.red.opacity(0.8))
+                        .clipShape(Capsule())
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                                withAnimation { store.generationError = nil }
+                            }
+                        }
+                        .padding(.bottom, 20)
+                }
+            }
+            .zIndex(200)
+            
             if let insight = selectedInsight {
                 InsightDetailView(
-                    store: store, // Pass store here
+                    store: store,
                     dream: liveDream,
                     insight: insight,
                     namespace: namespace,
@@ -165,7 +184,6 @@ struct DreamDetailView: View {
                 
                 headerSection
                 
-                // 3. Core Analysis (Context Tags)
                 if let core = liveDream.core {
                     DreamContextSection(
                         core: core,
@@ -179,7 +197,6 @@ struct DreamDetailView: View {
                     .padding()
                 }
                 
-                // 4. Insight Cards
                 if let interp = liveDream.core?.interpretation {
                     insightCardRow(
                         type: .interpretation,
@@ -207,7 +224,7 @@ struct DreamDetailView: View {
         }
         .scrollIndicators(.hidden)
         .scrollDisabled(isProcessingThisDream || selectedInsight != nil)
-        .blur(radius: selectedInsight != nil ? 10 : 0) // Darken background
+        .blur(radius: selectedInsight != nil ? 10 : 0)
         .overlay {
             if isProcessingThisDream {
                 ZStack {
@@ -215,7 +232,6 @@ struct DreamDetailView: View {
                         .ignoresSafeArea()
                     
                     VStack(spacing: 40) {
-                        // Dynamic cycling icon
                         Image(systemName: analysisIcons[currentAnalysisIconIndex].name)
                             .font(.system(size: 48, weight: .semibold))
                             .foregroundStyle(analysisIcons[currentAnalysisIconIndex].color)
@@ -235,9 +251,8 @@ struct DreamDetailView: View {
                     currentAnalysisIconIndex = 0
                 }
                 .task {
-                    // Loop for animation
                     while !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 seconds
+                        try? await Task.sleep(nanoseconds: 800_000_000)
                         if !isProcessingThisDream { break }
                         
                         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
@@ -249,12 +264,9 @@ struct DreamDetailView: View {
         }
     }
     
-    // MARK: - Subviews
-    
     @ViewBuilder
     func insightCardRow(type: InsightType, text: String, isProcessing: Bool) -> some View {
         ZStack {
-            // 1. Ghost Container (Holds layout space, invisible)
             if !store.isProcessing {
                 InsightCardView(
                     type: type,
@@ -264,7 +276,6 @@ struct DreamDetailView: View {
                 .opacity(0)
             }
             
-            // 2. Interactive Card (Matched Geometry Source)
             if selectedInsight != type {
                 Button {
                     withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
@@ -288,47 +299,58 @@ struct DreamDetailView: View {
     
     @ViewBuilder
     var headerSection: some View {
-        VStack(spacing: 0) {
-            if let imageData = liveDream.generatedImageData, let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 350)
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 32))
-                    .overlay(alignment: .bottomLeading) {
-                        HStack {
-                            Image(systemName: "apple.intelligence")
-                                .symbolRenderingMode(.palette)
-                                .symbolColorRenderingMode(.gradient)
-                            Text("Dream Visualizer")
-                                .font(.caption2.bold())
-                                .tracking(1)
+        if liveDream.generatedImageData != nil || isGeneratingImage || liveDream.core?.summary != nil {
+            VStack(spacing: 0) {
+                if let imageData = liveDream.generatedImageData, let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 350)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                        .overlay(alignment: .bottomLeading) {
+                            HStack {
+                                Image(systemName: "apple.intelligence")
+                                    .symbolRenderingMode(.palette)
+                                    .symbolColorRenderingMode(.gradient)
+                                Text("Dream Visualizer")
+                                    .font(.caption2.bold())
+                                    .tracking(1)
+                            }
+                            .padding(8)
+                            .glassEffect(.regular)
+                            .padding()
                         }
-                        .padding(8)
-                        .glassEffect(.regular)
-                        .padding()
-                    }
+                } else if isGeneratingImage {
+                    GeneratingGradientView()
+                        .frame(height: 350)
+                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                        .overlay {
+                            Text("Visualizing...")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .shadow(radius: 5)
+                        }
+                }
+                
+                if let summary = liveDream.core?.summary {
+                    Text("\(Text("Summary: ").bold())\(summary)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondary)
+                        .multilineTextAlignment(.leading)
+                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-            
-            if let summary = liveDream.core?.summary {
-                Text("\(Text("Summary: ").bold())\(summary)")
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondary)
-                    .multilineTextAlignment(.leading)
-                    .padding(20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
+            .padding(.horizontal)
         }
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
-        .padding(.horizontal)
     }
     
     @ViewBuilder
     var metricsSection: some View {
         if let fatigue = liveDream.voiceFatigue {
             HStack(spacing: 24) {
-                // Vocal Fatigue Card
                 NavigationLink(destination: TrendDetailView(metric: .fatigue, store: store)) {
                     VStack(alignment: .leading, spacing: 12) {
                         Label("Vocal Fatigue", systemImage: "battery.50")
@@ -353,7 +375,6 @@ struct DreamDetailView: View {
                     .contentShape(RoundedRectangle(cornerRadius: 24))
                 }
                 
-                // Tone Card
                 if let tone = liveDream.core?.tone?.label {
                     NavigationLink(destination: TrendDetailView(metric: .tone, store: store)) {
                         VStack(alignment: .leading, spacing: 12) {
@@ -390,15 +411,13 @@ struct DreamDetailView: View {
     }
 }
 
-// MARK: - SEPARATE INSIGHT DETAIL VIEW
 struct InsightDetailView: View {
-    @ObservedObject var store: DreamStore // Added Store
+    @ObservedObject var store: DreamStore
     let dream: Dream
     let insight: DreamDetailView.InsightType
     var namespace: Namespace.ID
     @Binding var selectedInsight: DreamDetailView.InsightType?
     
-    // Internal State
     @State private var questionText: String = ""
     @State private var answerText: String = ""
     @State private var isAsking: Bool = false
@@ -410,7 +429,6 @@ struct InsightDetailView: View {
     
     var body: some View {
         ZStack {
-            // Background
             Color.black.opacity(0.6)
                 .ignoresSafeArea()
                 .onTapGesture { }
@@ -419,7 +437,6 @@ struct InsightDetailView: View {
             ScrollView {
                 GlassEffectContainer(spacing: 24) {
                     VStack(spacing: 24) {
-                        // 1. The Duplicate Card
                         InsightCardView(
                             type: insight,
                             text: formatText(rawText),
@@ -429,9 +446,8 @@ struct InsightDetailView: View {
                         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
                         .matchedGeometryEffect(id: "bg_\(insight.id)", in: namespace)
                         .glassEffectID("card", in: namespace)
-                        .onTapGesture { /* Prevent closing */ }
+                        .onTapGesture { }
                         
-                        // 2. Q&A Section
                         if showContent {
                             qnaSection
                         }
@@ -465,11 +481,9 @@ struct InsightDetailView: View {
         }
     }
     
-    // Extracted Q&A Section
     var qnaSection: some View {
         VStack(spacing: 24) {
             HStack(spacing: 12) {
-                // Input Bubble
                 TextField("Ask a question about this...", text: $questionText)
                     .font(.body)
                     .textFieldStyle(.plain)
@@ -502,7 +516,6 @@ struct InsightDetailView: View {
                 .disabled(questionText.isEmpty || isAsking)
             }
             
-            // Answer Bubble
             if !answerText.isEmpty || isAsking {
                 VStack(alignment: .leading, spacing: 24) {
                     Label("Answer", systemImage: "sparkles")
@@ -530,7 +543,6 @@ struct InsightDetailView: View {
         }
     }
     
-    // Logic
     func close() {
         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
             showContent = false
@@ -592,7 +604,6 @@ struct InsightDetailView: View {
     }
 }
 
-// MARK: - SHARED CARD COMPONENT
 struct InsightCardView: View {
     let type: DreamDetailView.InsightType
     let text: String
@@ -635,8 +646,6 @@ struct InsightCardView: View {
         .contentShape(RoundedRectangle(cornerRadius: 24))
     }
 }
-
-// MARK: - CONTEXT HELPERS
 
 struct DreamContextSection: View {
     let core: DreamCoreAnalysis
@@ -732,7 +741,6 @@ struct ContextRow: View {
     @ObservedObject var store: DreamStore
     var namespace: Namespace.ID
     
-    // Helper to get parent info
     func getParentInfo(for itemName: String) -> (name: String, type: String)? {
         guard let entity = store.getEntity(name: itemName, type: type),
               let parentID = entity.parentID else { return nil }
@@ -781,10 +789,8 @@ struct ContextRow: View {
                             
                             Button {
                                 if let parent = parentInfo {
-                                    // Open Parent details
                                     selectedEntity = DreamDetailView.EntityIdentifier(name: parent.name, type: parent.type)
                                 } else {
-                                    // Open own details
                                     selectedEntity = DreamDetailView.EntityIdentifier(name: item, type: type)
                                 }
                             } label: {

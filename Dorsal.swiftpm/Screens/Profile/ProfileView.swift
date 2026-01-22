@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 import CoreImage
+import ImagePlayground
 
 struct ProfileView: View {
     @ObservedObject var store: DreamStore
@@ -10,7 +11,9 @@ struct ProfileView: View {
     @State private var selectedCategory: String = "People"
     @State private var showEditSheet = false
     
-    @State private var showImagePlayground = false
+    @State private var isImagePlaygroundPresented = false
+    @Environment(\.supportsImagePlayground) private var supportsImagePlayground
+    
     @State private var showPhotoPicker = false
     @State private var showSettings = false
     @State private var showOnboarding = false
@@ -65,7 +68,6 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background Layer 1: Default Theme (Always visible)
                 LinearGradient(
                     colors: [Color(red: 0.05, green: 0.02, blue: 0.10), Color(red: 0.10, green: 0.05, blue: 0.20), Color(red: 0.02, green: 0.02, blue: 0.05)],
                     startPoint: .topLeading,
@@ -73,7 +75,6 @@ struct ProfileView: View {
                 )
                 .ignoresSafeArea()
                 
-                // Background Layer 2: Dynamic Gradient
                 if !gradientColors.isEmpty {
                     Group {
                         MeshGradient(
@@ -137,47 +138,64 @@ struct ProfileView: View {
                             HStack {
                                 Spacer()
                                 ZStack(alignment: .bottom) {
-                                    if let data = store.profileImageData, let uiImage = UIImage(data: data) {
-                                        Image(uiImage: uiImage)
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                            .frame(width: 120, height: 120)
-                                            .clipShape(Circle())
-                                            .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
-                                    } else {
-                                        ZStack {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.1))
+                                    Group {
+                                        if let data = store.profileImageData, let uiImage = UIImage(data: data) {
+                                            Image(uiImage: uiImage)
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
                                                 .frame(width: 120, height: 120)
-                                                .overlay(Circle().stroke(textColor.opacity(0.3), lineWidth: 1))
-                                            Image(systemName: "person.fill").font(.system(size: 50)).foregroundStyle(textColor.opacity(0.7))
+                                                .clipShape(Circle())
+                                                .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
+                                        } else {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.1))
+                                                    .frame(width: 120, height: 120)
+                                                    .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
+                                                Image(systemName: "person.fill").font(.system(size: 50)).foregroundStyle(Color.white.opacity(0.7))
+                                            }
+                                        }
+                                    }
+                                    .overlay {
+                                        if isImagePlaygroundPresented {
+                                            GeneratingGradientView()
+                                                .clipShape(Circle())
+                                                .overlay(ProgressView().tint(.white))
                                         }
                                     }
                                     
-                                    Menu {
-                                        Button { showPhotoPicker = true } label: { Label("Photo Library", systemImage: "photo") }
-                                        if store.isImageGenerationAvailable {
-                                            Button { showImagePlayground = true } label: { Label("Generate with AI", systemImage: "wand.and.stars") }
-                                        }
-                                        if store.profileImageData != nil {
-                                            Divider()
+                                    if !isImagePlaygroundPresented {
+                                        Menu {
+                                            Button { showPhotoPicker = true } label: { Label("Photo Library", systemImage: "photo") }
                                             
-                                            Button(role: .destructive) { store.profileImageData = nil } label: { Label("Remove Photo", systemImage: "trash").tint(.red) }
+                                            if supportsImagePlayground {
+                                                Button {
+                                                    isImagePlaygroundPresented = true
+                                                } label: {
+                                                    Label("Create with AI", systemImage: "apple.image.playground")
+                                                }
+                                            }
+                                            
+                                            if store.profileImageData != nil {
+                                                Divider()
+                                                
+                                                Button(role: .destructive) { store.profileImageData = nil } label: { Label("Remove Photo", systemImage: "trash").tint(.red) }
+                                            }
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "camera.fill")
+                                                Text("Edit")
+                                            }
+                                            .font(.subheadline.bold())
+                                            .foregroundStyle(.white.opacity(0.8))
+                                            .padding(.vertical, 6)
+                                            .padding(.horizontal, 12)
+                                            .background(Color(.secondarySystemBackground).opacity(0.7))
+                                            .clipShape(Capsule())
+                                            .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
                                         }
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "camera.fill")
-                                            Text("Edit")
-                                        }
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(.white.opacity(0.8))
-                                        .padding(.vertical, 6)
-                                        .padding(.horizontal, 12)
-                                        .background(Color(.secondarySystemBackground).opacity(0.7))
-                                        .clipShape(Capsule())
-                                        .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                                        .offset(y: 10)
                                     }
-                                    .offset(y: 10)
                                 }
                                 Spacer()
                             }
@@ -198,14 +216,22 @@ struct ProfileView: View {
                                 .disabled(editFirstName.isEmpty || editLastName.isEmpty)
                         }
                     }
+                    .imagePlaygroundSheet(
+                        isPresented: $isImagePlaygroundPresented,
+                        concepts: [
+                            .text("\(store.firstName) \(store.lastName)"),
+                            .text("Profile Picture"),
+                            .text("Avatar"),
+                            .text("Portrait")
+                        ]
+                    ) { url in
+                        if let data = try? Data(contentsOf: url) {
+                            withAnimation { store.profileImageData = data }
+                        }
+                    }
                 }
                 .presentationDetents([.medium, .large])
                 .photosPicker(isPresented: $showPhotoPicker, selection: $selectedItem, matching: .images)
-                .sheet(isPresented: $showImagePlayground) {
-                    ImagePlaygroundSheet(store: store, entityName: "Profile Picture", entityDescription: "A cool avatar") { data in
-                        withAnimation { store.profileImageData = data }
-                    }
-                }
             }
             .onChange(of: selectedItem) {
                 Task {
