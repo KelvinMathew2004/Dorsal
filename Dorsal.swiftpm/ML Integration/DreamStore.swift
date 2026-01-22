@@ -206,10 +206,7 @@ class DreamStore: NSObject, ObservableObject {
     private func setupObservers() {
         audioRecorder.$audioLevel
             .receive(on: RunLoop.main)
-            .sink { [weak self] level in
-                self?.audioPower = level
-                self?.objectWillChange.send()
-            }
+            .assign(to: \.audioPower, on: self)
             .store(in: &cancellables)
             
         audioRecorder.$liveTranscript
@@ -931,18 +928,28 @@ class DreamStore: NSObject, ObservableObject {
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }),
                    let summary = dreams[index].core?.summary {
                     if isImageGenerationAvailable {
-                        let manualPrompt = "\(summary). Artistic style: Dreamlike, surreal, soft lighting."
+                        // ALWAYS SANITIZE PROMPT to avoid identity issues
                         do {
-                            let data = try await generateImageFromPrompt(prompt: manualPrompt)
+                            let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: transcript)
+                            let data = try await generateImageFromPrompt(prompt: sanitizedPrompt)
                             await MainActor.run {
                                 if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
                                     dreams[idx].generatedImageData = data
                                 }
                             }
                         } catch {
+                            // If sanitization or generation fails, set error state
                             print("Image generation error: \(error)")
                             await MainActor.run {
-                                self.generationError = "Could not visualize dream. Please try again."
+                                if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
+                                    // Use the specific DreamError cases if possible
+                                    if let dreamError = error as? DreamError {
+                                        dreams[idx].analysisError = dreamError.localizedDescription
+                                    } else {
+                                        dreams[idx].analysisError = "Could not visualize dream. \(error.localizedDescription)"
+                                    }
+                                    persistDream(dreams[idx])
+                                }
                             }
                         }
                     }

@@ -75,26 +75,6 @@ struct DreamDetailView: View {
             
             contentLayer
             
-            VStack {
-                Spacer()
-                if let error = store.generationError {
-                    Text(error)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.white)
-                        .padding()
-                        .background(Color.red.opacity(0.8))
-                        .clipShape(Capsule())
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .onAppear {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                                withAnimation { store.generationError = nil }
-                            }
-                        }
-                        .padding(.bottom, 20)
-                }
-            }
-            .zIndex(200)
-            
             if let insight = selectedInsight {
                 InsightDetailView(
                     store: store,
@@ -165,6 +145,8 @@ struct DreamDetailView: View {
                     store.ignoreErrorAndKeepDream(liveDream)
                 }
                 .buttonStyle(.glassProminent)
+                .foregroundStyle(Theme.accent)
+                .tint(Theme.secondary.opacity(0.2))
             } else {
                 Button("Remove Entry", role: .destructive) {
                     store.deleteDream(liveDream)
@@ -310,8 +292,8 @@ struct DreamDetailView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 32))
                         .overlay(alignment: .bottomLeading) {
                             HStack {
-                                Image(systemName: "apple.intelligence")
-                                    .symbolRenderingMode(.palette)
+                                Image(systemName: "apple.image.playground.fill")
+                                    .symbolRenderingMode(.monochrome)
                                     .symbolColorRenderingMode(.gradient)
                                 Text("Dream Visualizer")
                                     .font(.caption2.bold())
@@ -325,12 +307,6 @@ struct DreamDetailView: View {
                     GeneratingGradientView()
                         .frame(height: 350)
                         .clipShape(RoundedRectangle(cornerRadius: 32))
-                        .overlay {
-                            Text("Visualizing...")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                                .shadow(radius: 5)
-                        }
                 }
                 
                 if let summary = liveDream.core?.summary {

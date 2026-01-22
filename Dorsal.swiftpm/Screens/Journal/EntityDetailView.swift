@@ -98,7 +98,10 @@ struct EntityDetailView: View {
                                     Circle()
                                         .fill(.white.opacity(0.1))
                                         .frame(width: 140, height: 140)
-                                        .overlay { ProgressView().tint(.white) }
+                                        .overlay {
+                                            GeneratingGradientView()
+                                                .clipShape(Circle())
+                                        }
                                 } else if let data = imageData, let uiImage = UIImage(data: data) {
                                     Image(uiImage: uiImage)
                                         .resizable()
@@ -321,8 +324,7 @@ struct EntityDetailView: View {
                             .font(.subheadline.bold())
                             .foregroundStyle(.white)
                             .padding()
-                            .background(Color.red.opacity(0.8))
-                            .clipShape(Capsule())
+                            .glassEffect(.regular.tint(Color.red.opacity(0.8)))
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                             .onAppear {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
@@ -362,7 +364,8 @@ struct EntityDetailView: View {
                 saveData()
             }
             .sheet(isPresented: $showingContactPicker) {
-                ContactPicker(selection: $resolvedContact) { contact in
+                ContactPicker { contact in
+                    self.resolvedContact = contact
                     self.contactId = contact.identifier
                     // Re-fetch to ensure keys
                     self.fetchContact()
@@ -375,7 +378,6 @@ struct EntityDetailView: View {
                     }
                     saveData()
                 }
-                .ignoresSafeArea() // Helps prevent some transition artifacts
             }
             .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhoto, matching: .images)
             .onChange(of: selectedPhoto) {
@@ -392,12 +394,15 @@ struct EntityDetailView: View {
             // MARK: - Native Image Playground Sheet
             .imagePlaygroundSheet(
                 isPresented: $showingImagePlayground,
-                concepts: [
-                    .text(name),
-                    .text(descriptionText.isEmpty ? type : descriptionText),
-                    .text("Dream context"),
-                    .text("Illustration")
-                ]
+                concepts: {
+                    var concepts: [ImagePlaygroundConcept] = [.text(name)]
+                    if !descriptionText.isEmpty {
+                        concepts.append(.text(descriptionText))
+                    } else if type == "person" || type == "place" {
+                        concepts.append(.text(type))
+                    }
+                    return concepts
+                }()
             ) { url in
                 if let data = try? Data(contentsOf: url) {
                     withAnimation(.easeInOut(duration: 0.5)) {
@@ -513,17 +518,19 @@ struct EntityDetailView: View {
         guard store.isImageGenerationAvailable else { return }
         isGenerating = true
         Task {
-            let prompt = "\(name) \(descriptionText). Artistic style: Dreamlike, surreal, soft lighting."
+            let entityContext = "Name: \(name). Type: \(type). Description: \(descriptionText)"
             
             do {
-                let data = try await store.generateImageFromPrompt(prompt: prompt)
+                let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: entityContext)
+                let data = try await store.generateImageFromPrompt(prompt: sanitizedPrompt)
+                
                 withAnimation(.easeInOut(duration: 0.5)) {
                     self.imageData = data
                 }
                 saveData()
             } catch {
                 await MainActor.run {
-                    store.generationError = "Failed to generate image. Please try again."
+                    store.generationError = "Please try again or create an image instead."
                 }
             }
             isGenerating = false
@@ -550,7 +557,6 @@ extension UIImage {
 
 // MARK: - Contact Picker Helper
 struct ContactPicker: UIViewControllerRepresentable {
-    @Binding var selection: CNContact?
     var onSelect: (CNContact) -> Void
     
     func makeUIViewController(context: Context) -> CNContactPickerViewController {
@@ -573,7 +579,6 @@ struct ContactPicker: UIViewControllerRepresentable {
         }
         
         func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) {
-            parent.selection = contact
             parent.onSelect(contact)
         }
     }

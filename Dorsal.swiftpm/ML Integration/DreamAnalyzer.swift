@@ -11,6 +11,12 @@ struct RepairVoiceFatigue: Codable, Sendable {
     var voiceFatigue: Int
 }
 
+@Generable
+struct VisualPrompt: Codable, Sendable {
+    @Guide(description: "A sanitized, artistic description for image generation. Do NOT include specific people's names or identities. Use generic terms like 'a man', 'a shadowy figure', etc. Focus on the visual atmosphere, dream logic, and setting.")
+    var prompt: String
+}
+
 @MainActor
 @Observable
 class DreamAnalyzer {
@@ -27,6 +33,23 @@ class DreamAnalyzer {
     
     func prewarmModel() {
         session.prewarm()
+    }
+    
+    // MARK: - VISUAL PROMPT GENERATION (Sanitization)
+    func generateVisualPrompt(transcript: String) async throws -> String {
+        let prompt = """
+        Create a prompt for an AI image generator based on this dream transcript: "\(transcript)".
+        
+        CRITICAL RULES:
+        1. Do NOT describe any people, men, women, children, or specific characters. The image generator will reject the prompt if it detects a person description.
+        2. Focus ENTIRELY on the setting, landscape, objects, colors, and lighting.
+        3. Describe objects literally and with their natural colors (e.g., "a yellow school bus", "a green tree"). Do NOT make it abstract or surreal unless the dream explicitly describes impossible geometry.
+        4. If a character is central, describe only their shadow or presence, or focus on the object they are interacting with.
+        5. Keep it realistic, grounded, and under 3 sentences.
+        """
+        
+        let res = try await session.respond(to: prompt, generating: VisualPrompt.self)
+        return res.content.prompt
     }
     
     // MARK: - Streaming Analysis

@@ -29,10 +29,10 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $store.selectedTab) {
-            Tab(value: 0, role: .search) {
+            Tab(value: 0) {
                 RecordView(store: store)
             } label: {
-                Label("Record", systemImage: "plus")
+                Label("Record", systemImage: "zzz")
                     .symbolColorRenderingMode(.gradient)
                     .labelStyle(iPhoneIconOnlyLabelStyle())
             }

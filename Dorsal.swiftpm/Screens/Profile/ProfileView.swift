@@ -138,29 +138,20 @@ struct ProfileView: View {
                             HStack {
                                 Spacer()
                                 ZStack(alignment: .bottom) {
-                                    Group {
-                                        if let data = store.profileImageData, let uiImage = UIImage(data: data) {
-                                            Image(uiImage: uiImage)
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
+                                    if let data = store.profileImageData, let uiImage = UIImage(data: data) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 120, height: 120)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
+                                    } else {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.white.opacity(0.1))
                                                 .frame(width: 120, height: 120)
-                                                .clipShape(Circle())
-                                                .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
-                                        } else {
-                                            ZStack {
-                                                Circle()
-                                                    .fill(Color.white.opacity(0.1))
-                                                    .frame(width: 120, height: 120)
-                                                    .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
-                                                Image(systemName: "person.fill").font(.system(size: 50)).foregroundStyle(Color.white.opacity(0.7))
-                                            }
-                                        }
-                                    }
-                                    .overlay {
-                                        if isImagePlaygroundPresented {
-                                            GeneratingGradientView()
-                                                .clipShape(Circle())
-                                                .overlay(ProgressView().tint(.white))
+                                                .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
+                                            Image(systemName: "person.fill").font(.system(size: 50)).foregroundStyle(Color.white.opacity(0.7))
                                         }
                                     }
                                     
@@ -216,18 +207,8 @@ struct ProfileView: View {
                                 .disabled(editFirstName.isEmpty || editLastName.isEmpty)
                         }
                     }
-                    .imagePlaygroundSheet(
-                        isPresented: $isImagePlaygroundPresented,
-                        concepts: [
-                            .text("\(store.firstName) \(store.lastName)"),
-                            .text("Profile Picture"),
-                            .text("Avatar"),
-                            .text("Portrait")
-                        ]
-                    ) { url in
-                        if let data = try? Data(contentsOf: url) {
-                            withAnimation { store.profileImageData = data }
-                        }
+                    .imagePlaygroundSheet(isPresented: $isImagePlaygroundPresented) { url in
+                        if let data = try? Data(contentsOf: url) { withAnimation { store.profileImageData = data } }
                     }
                 }
                 .presentationDetents([.medium, .large])

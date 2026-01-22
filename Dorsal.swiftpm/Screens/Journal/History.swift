@@ -236,8 +236,6 @@ struct DreamRow: View {
         HStack(spacing: 16) {
             if let imageData = dream.generatedImageData, let uiImage = UIImage(data: imageData) {
                 Image(uiImage: uiImage).resizable().aspectRatio(contentMode: .fill).frame(width: 50, height: 50).clipShape(RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1)))
-            } else {
-                RoundedRectangle(cornerRadius: 12).fill(Color.gray.gradient).frame(width: 50, height: 50).overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1)))
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(dream.date.formatted(date: .abbreviated, time: .shortened)).font(.caption.weight(.semibold)).foregroundStyle(store.themeAccentColor)
