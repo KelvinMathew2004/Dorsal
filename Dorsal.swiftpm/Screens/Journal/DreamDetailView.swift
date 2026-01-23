@@ -13,6 +13,8 @@ struct DreamDetailView: View {
     
     @State private var selectedInsight: InsightType?
     
+    @State private var dominantColor: Color?
+    
     @State private var currentAnalysisIconIndex = 0
     private let analysisIcons: [(name: String, color: Color)] = [
         ("sparkles.rectangle.stack", .purple),
@@ -71,7 +73,9 @@ struct DreamDetailView: View {
     
     var body: some View {
         ZStack {
-            Theme.gradientBackground.ignoresSafeArea()
+            // CHANGED: Use the extracted dominant color if available
+            Theme.gradientBackground(dominantColor.map { .custom($0) } ?? .standard)
+                .ignoresSafeArea()
             
             contentLayer
             
@@ -99,6 +103,13 @@ struct DreamDetailView: View {
                 }
             }
         }
+        // CHANGED: Calculate color on appear and when image data changes
+        .onAppear {
+            updateColor()
+        }
+        .onChange(of: liveDream.generatedImageData) {
+            updateColor()
+        }
         .alert("Delete Details?", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
                 if let entity = entityToDelete {
@@ -113,6 +124,23 @@ struct DreamDetailView: View {
             EntityDetailView(store: store, name: entity.name, type: entity.type)
                 .presentationDetents([.large])
                 .navigationTransition(.zoom(sourceID: entity.id, in: namespace))
+        }
+    }
+    
+    private func updateColor() {
+        if let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
+            DispatchQueue.global(qos: .userInitiated).async {
+                let color = uiImage.dominantColor
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 1.0)) {
+                        self.dominantColor = color
+                    }
+                }
+            }
+        } else {
+            withAnimation(.easeInOut(duration: 1.0)) {
+                self.dominantColor = nil
+            }
         }
     }
     
@@ -314,7 +342,7 @@ struct DreamDetailView: View {
                         .font(.caption)
                         .foregroundStyle(Theme.secondary)
                         .multilineTextAlignment(.leading)
-                        .padding(20)
+                        .padding(24)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

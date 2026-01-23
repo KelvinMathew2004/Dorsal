@@ -62,7 +62,8 @@ struct EntityDetailView: View {
         NavigationStack {
             ZStack {
                 // Background Layer 1: Default Theme (Always visible)
-                Theme.gradientBackground.ignoresSafeArea()
+                Theme.gradientBackground()
+                    .ignoresSafeArea()
                 
                 // Background Layer 2: Dynamic Gradient (Fades in)
                 if !gradientColors.isEmpty {

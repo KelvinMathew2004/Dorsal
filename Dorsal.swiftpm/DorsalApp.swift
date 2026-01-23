@@ -38,7 +38,7 @@ struct ContentView: View {
             }
             
             Tab(value: 1) {
-                HistoryView(store: store)
+                JournalView(store: store)
             } label: {
                 Label("Journal", systemImage: "book.pages.fill")
                     .symbolColorRenderingMode(.gradient)

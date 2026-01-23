@@ -82,7 +82,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
     
     private var lastUpdateTime: TimeInterval = 0
     
-    private let targetLocale = Locale(identifier: "en-US")
+    private let targetLocale = Locale(identifier: "en_US")
     
     override init() {
         super.init()
@@ -102,7 +102,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
     func checkAndPrepareModels() async {
         if isModelInstalling { return }
         
-        let isSupported = await SpeechTranscriber.supportedLocales.contains { $0.identifier == "en-US" }
+        let isSupported = await SpeechTranscriber.supportedLocales.contains { $0.identifier == "en_US" }
         
         guard isSupported else {
             print("SpeechTranscriber does not support en-US, will attempt fallback.")
@@ -110,7 +110,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             return
         }
         
-        let isInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == "en-US" }
+        let isInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == "en_US" }
         
         if isInstalled {
             DispatchQueue.main.async {

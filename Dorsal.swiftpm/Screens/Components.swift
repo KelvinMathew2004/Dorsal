@@ -9,10 +9,12 @@ struct ThemeOption: Identifiable, Hashable {
 }
 
 enum Theme {
-    static var bgStart: Color {
-        Theme.accent.mix(with: .black, by: 0.7)
+    enum GradientSource {
+        case standard
+        case accent
+        case custom(Color)
     }
-    
+        
     static var bgMid: Color {
         Color(red: 0.10, green: 0.05, blue: 0.20)
     }
@@ -21,9 +23,20 @@ enum Theme {
         Color(red: 0.02, green: 0.02, blue: 0.05)
     }
 
-    static var gradientBackground: LinearGradient {
-        LinearGradient(
-            colors: [bgStart, bgMid, bgEnd],
+    static func gradientBackground(_ source: GradientSource = .standard) -> LinearGradient {
+        let startColor: Color
+        
+        switch source {
+        case .standard:
+            startColor = Color(red: 0.05, green: 0.02, blue: 0.10)
+        case .accent:
+            startColor = Theme.accent.mix(with: .black, by: 0.7)
+        case .custom(let color):
+            startColor = color.mix(with: .black, by: 0.7)
+        }
+        
+        return LinearGradient(
+            colors: [startColor, bgMid, bgEnd],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )

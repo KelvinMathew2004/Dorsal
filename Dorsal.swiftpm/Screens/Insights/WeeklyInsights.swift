@@ -111,7 +111,8 @@ struct WeeklyInsightsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.gradientBackground.ignoresSafeArea()
+                Theme.gradientBackground(.accent)
+                    .ignoresSafeArea()
                 
                 // MARK: - Main Scroll Content
                 ScrollView {

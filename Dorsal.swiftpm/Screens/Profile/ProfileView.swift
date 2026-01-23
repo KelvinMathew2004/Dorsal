@@ -68,12 +68,8 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [Color(red: 0.05, green: 0.02, blue: 0.10), Color(red: 0.10, green: 0.05, blue: 0.20), Color(red: 0.02, green: 0.02, blue: 0.05)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Theme.gradientBackground()
+                    .ignoresSafeArea()
                 
                 if !gradientColors.isEmpty {
                     Group {
@@ -145,6 +141,7 @@ struct ProfileView: View {
                                             .frame(width: 120, height: 120)
                                             .clipShape(Circle())
                                             .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
+                                            .id(data)
                                     } else {
                                         ZStack {
                                             Circle()
@@ -283,6 +280,7 @@ struct ProfileView: View {
                     .clipShape(Circle())
                     .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 2))
                     .shadow(color: .black.opacity(0.3), radius: 10)
+                    .id(data)
             } else {
                 ZStack {
                     Image(systemName: "person.fill")
@@ -308,7 +306,7 @@ struct ProfileView: View {
     }
     
     private var statsRow: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 12) {
             ContinuousStatBlock(title: "Streak", value: "\(store.currentStreak)", icon: "flame.fill", color: .orange, corners: [.topLeft, .bottomLeft])
             ContinuousStatBlock(title: "Dreams", value: "\(store.dreams.count)", icon: "moon.fill", color: .purple, corners: [])
             
@@ -325,6 +323,7 @@ struct ProfileView: View {
             ContinuousStatBlock(title: "People", value: "\(peopleCount)", icon: "person.2.fill", color: .blue, corners: [.topRight, .bottomRight])
         }
         .padding(.horizontal)
+        .frame(maxWidth: 600)
     }
     
     private func categorySection(proxy: ScrollViewProxy) -> some View {
@@ -666,22 +665,43 @@ struct ChildDropDelegate: DropDelegate {
 }
 
 struct ContinuousStatBlock: View {
-    let title: String; let value: String; let icon: String; let color: Color; let corners: UIRectCorner
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    let corners: UIRectCorner
+    
     var body: some View {
-        ZStack {
-            Image(systemName: icon).font(.system(size: 50)).foregroundStyle(color.opacity(0.2))
-            VStack(spacing: 2) {
-                Text(value).font(.system(size: 24, weight: .bold, design: .rounded)).foregroundStyle(.white).minimumScaleFactor(0.8).lineLimit(1)
-                Text(title.uppercased()).font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.6)).tracking(0.5)
-            }.padding(.vertical, 24)
-        }.frame(maxWidth: .infinity).frame(height: 80).glassEffect(.clear.tint(color.opacity(0.3)), in: CustomCorner(corners: corners, radius: 20))
-    }
-}
-
-struct CustomCorner: Shape {
-    var corners: UIRectCorner; var radius: CGFloat
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
-        return Path(path.cgPath)
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(color.gradient)
+                .shadow(color: color.opacity(0.4), radius: 5, x: 0, y: 0)
+            
+            Text(value)
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 80)
+        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 24))
+        .background {
+            ZStack {
+                RadialGradient(
+                    colors: [
+                        color.opacity(0.3),
+                        color.opacity(0.1),
+                        .clear
+                    ],
+                    center: .bottom,
+                    startRadius: 0,
+                    endRadius: 100
+                )
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+        }
     }
 }

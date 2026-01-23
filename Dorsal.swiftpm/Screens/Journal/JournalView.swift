@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct HistoryView: View {
+struct JournalView: View {
     @ObservedObject var store: DreamStore
     
     @State private var showingDeleteAlert = false
@@ -16,7 +16,8 @@ struct HistoryView: View {
     var body: some View {
         NavigationStack(path: $store.navigationPath) {
             ZStack {
-                Theme.gradientBackground.ignoresSafeArea()
+                Theme.gradientBackground(.accent)
+                    .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
                     // Filter Bar

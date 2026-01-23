@@ -662,7 +662,8 @@ struct TrendDetailView: View {
     
     var body: some View {
         ZStack {
-            Theme.gradientBackground.ignoresSafeArea()
+            Theme.gradientBackground(.custom(metric.color))
+                .ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 24) {
