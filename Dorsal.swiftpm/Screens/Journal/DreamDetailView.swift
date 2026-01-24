@@ -310,31 +310,15 @@ struct DreamDetailView: View {
     @ViewBuilder
     var headerSection: some View {
         if liveDream.generatedImageData != nil || isGeneratingImage || liveDream.core?.summary != nil {
-            VStack(spacing: 0) {
+            VStack(spacing: 20) {
                 if let imageData = liveDream.generatedImageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(height: 350)
-                        .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 32))
-                        .overlay(alignment: .bottomLeading) {
-                            HStack {
-                                Image(systemName: "apple.image.playground.fill")
-                                    .symbolRenderingMode(.monochrome)
-                                    .symbolColorRenderingMode(.gradient)
-                                Text("Dream Visualizer")
-                                    .font(.caption2.bold())
-                                    .tracking(1)
-                            }
-                            .padding(8)
-                            .glassEffect(.regular)
-                            .padding()
-                        }
+                    LensView(image: uiImage)
+                        .aspectRatio(1.0, contentMode: .fit)
+                        .frame(maxWidth: 400)
                 } else if isGeneratingImage {
-                    GeneratingGradientView()
-                        .frame(height: 350)
-                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                    LensView(image: nil)
+                        .aspectRatio(1.0, contentMode: .fit)
+                        .frame(maxWidth: 400)
                 }
                 
                 if let summary = liveDream.core?.summary {
@@ -344,10 +328,11 @@ struct DreamDetailView: View {
                         .multilineTextAlignment(.leading)
                         .padding(24)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
                 }
             }
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
             .padding(.horizontal)
+            .frame(maxWidth: 500)
         }
     }
     
