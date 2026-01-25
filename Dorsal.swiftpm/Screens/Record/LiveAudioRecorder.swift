@@ -103,9 +103,8 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         if isModelInstalling { return }
         
         let isSupported = await SpeechTranscriber.supportedLocales.contains { $0.identifier == "en_US" }
-        
         guard isSupported else {
-            print("SpeechTranscriber does not support en-US, will attempt fallback.")
+            print("SpeechTranscriber does not support en-US on this device.")
             DispatchQueue.main.async { self.isModelReady = true }
             return
         }
@@ -119,33 +118,28 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             }
         } else {
             DispatchQueue.main.async {
-                self.isModelReady = false
+                self.isModelReady = true
                 self.isModelInstalling = true
             }
             
             do {
-                print("Downloading speech assets for en-US...")
+                print("Fallback active. Downloading HQ speech assets for en-US in background...")
                 let dummyTranscriber = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
                 
                 if let request = try await AssetInventory.assetInstallationRequest(supporting: [dummyTranscriber]) {
                     try await request.downloadAndInstall()
-                    print("Assets installed successfully.")
-                    
-                    DispatchQueue.main.async {
-                        self.isModelReady = true
-                        self.isModelInstalling = false
-                    }
+                    print("HQ Assets installed successfully.")
                 } else {
-                    DispatchQueue.main.async {
-                        self.isModelReady = true
-                        self.isModelInstalling = false
-                    }
+                    print("Asset request returned nil (assets might already be present).")
                 }
-            } catch {
-                print("Failed to download speech assets: \(error)")
+                
                 DispatchQueue.main.async {
                     self.isModelInstalling = false
-                    self.isModelReady = true
+                }
+            } catch {
+                print("Failed to download HQ speech assets: \(error)")
+                DispatchQueue.main.async {
+                    self.isModelInstalling = false
                 }
             }
         }
@@ -187,12 +181,6 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
     func startRecording(keywords: [String] = [], completion: @escaping @Sendable (Bool) -> Void) {
         if AVAudioApplication.shared.recordPermission != .granted {
             print("Microphone not authorized in Recorder")
-            completion(false)
-            return
-        }
-        
-        if SFSpeechRecognizer.authorizationStatus() != .authorized {
-            print("Speech Recognition not authorized in Recorder")
             completion(false)
             return
         }
@@ -321,35 +309,17 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         
         do {
             var selectedModule: any SpeechModule
-            var usedDictationFallback = false
+            var isUsingDictation = false
             
-            let isSupported = SpeechTranscriber.isAvailable
-            let isInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == "en-US" }
+            let isHQInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == "en_US" }
             
-            if isSupported && isInstalled {
-                let st = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
-                selectedModule = st
-                print("Using SpeechTranscriber for en-US")
+            if isHQInstalled {
+                print("Starting engine with HQ SpeechTranscriber")
+                selectedModule = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
             } else {
-                print("SpeechTranscriber unavailable or assets missing, falling back to DictationTranscriber")
-                let dt = DictationTranscriber(locale: targetLocale, preset: .progressiveLongDictation)
-                selectedModule = dt
-                usedDictationFallback = true
-                
-                if isSupported && !isInstalled {
-                    print("Triggering background asset download...")
-                    Task {
-                        do {
-                            let dummy = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
-                            if let req = try await AssetInventory.assetInstallationRequest(supporting: [dummy]) {
-                                try await req.downloadAndInstall()
-                                print("Background asset download complete.")
-                            }
-                        } catch {
-                            print("Background asset download failed: \(error)")
-                        }
-                    }
-                }
+                print("HQ assets missing, falling back to DictationTranscriber")
+                selectedModule = DictationTranscriber(locale: targetLocale, preset: .progressiveLongDictation)
+                isUsingDictation = true
             }
             
             let context = AnalysisContext()
@@ -370,7 +340,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                 do {
                     try await newAnalyzer.start(inputSequence: stream)
                     
-                    if usedDictationFallback {
+                    if isUsingDictation {
                         if let dt = selectedModule as? DictationTranscriber {
                             for try await result in dt.results {
                                 let text = String(result.text.characters)

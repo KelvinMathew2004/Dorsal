@@ -102,7 +102,6 @@ class DreamStore: NSObject, ObservableObject {
     @Published var showPermissionAlert: Bool = false
     
     @Published var hasMicAccess: Bool = false
-    @Published var hasSpeechAccess: Bool = false
     
     @Published var hasNotificationAccess: Bool = false
     @AppStorage("reminderTime") var reminderTime: Double = 0
@@ -111,7 +110,7 @@ class DreamStore: NSObject, ObservableObject {
     private var currentAnalysisTask: Task<Void, Never>?
     
     var isOnboardingComplete: Bool {
-        hasMicAccess && hasSpeechAccess && UserDefaults.standard.bool(forKey: "isOnboardingFullyComplete")
+        UserDefaults.standard.bool(forKey: "isOnboardingFullyComplete")
     }
     
     func completeOnboarding() {
@@ -241,9 +240,6 @@ class DreamStore: NSObject, ObservableObject {
     func checkPermissions() {
         let micStatus = AVAudioApplication.shared.recordPermission
         self.hasMicAccess = (micStatus == .granted)
-        
-        let speechStatus = SFSpeechRecognizer.authorizationStatus()
-        self.hasSpeechAccess = (speechStatus == .authorized)
     }
     
     func requestMicrophoneAccess() {
@@ -259,24 +255,6 @@ class DreamStore: NSObject, ObservableObject {
             openSettings()
         case .granted:
             self.hasMicAccess = true
-        @unknown default:
-            break
-        }
-    }
-    
-    func requestSpeechAccess() {
-        let status = SFSpeechRecognizer.authorizationStatus()
-        switch status {
-        case .notDetermined:
-            SFSpeechRecognizer.requestAuthorization { newStatus in
-                Task { @MainActor [weak self] in
-                    self?.hasSpeechAccess = (newStatus == .authorized)
-                }
-            }
-        case .denied, .restricted:
-            openSettings()
-        case .authorized:
-            self.hasSpeechAccess = true
         @unknown default:
             break
         }
@@ -780,6 +758,11 @@ class DreamStore: NSObject, ObservableObject {
     }
 
     func startRecording() {
+        if !hasMicAccess {
+            showPermissionAlert = true
+            return
+        }
+
         currentTranscript = ""
         answeredQuestions = []
         isQuestionSatisfied = false

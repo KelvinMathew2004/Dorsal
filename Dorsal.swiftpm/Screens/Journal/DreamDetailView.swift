@@ -15,6 +15,16 @@ struct DreamDetailView: View {
     
     @State private var gradientColors: [Color] = []
     
+    var textColor: Color {
+        let baseColor = gradientColors.first ?? .purple
+        return baseColor.mix(with: .white, by: 0.7)
+    }
+    
+    var secondaryColor: Color {
+        let baseColor = gradientColors.first ?? .purple
+        return baseColor.mix(with: .white, by: 0.8).opacity(0.8)
+    }
+    
     @State private var currentAnalysisIconIndex = 0
     private let analysisIcons: [(name: String, color: Color)] = [
         ("sparkles.rectangle.stack", .purple),
@@ -73,11 +83,9 @@ struct DreamDetailView: View {
     
     var body: some View {
         ZStack {
-            // Background Layer 1: Default Theme (Always visible)
             Theme.gradientBackground()
                 .ignoresSafeArea()
             
-            // Background Layer 2: Dynamic Mesh Gradient (Only if we have colors)
             if !gradientColors.isEmpty {
                 Group {
                     MeshGradient(
@@ -106,6 +114,7 @@ struct DreamDetailView: View {
                     dream: liveDream,
                     insight: insight,
                     namespace: namespace,
+                    secondary: secondaryColor,
                     selectedInsight: $selectedInsight
                 )
                 .zIndex(100)
@@ -120,12 +129,12 @@ struct DreamDetailView: View {
                         store.regenerateDream(liveDream)
                     } label: {
                         Image(systemName: "arrow.clockwise")
+                            .foregroundStyle(.white)
                     }
                 }
             }
         }
         .onAppear {
-            // IMMEDIATE SYNCHRONOUS LOAD to prevent shadow popping
             if let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
                 let color = uiImage.dominantColor
                 self.gradientColors = [color, color.opacity(0.8), color.opacity(0.6)]
@@ -250,7 +259,7 @@ struct DreamDetailView: View {
                 
                 metricsSection
                 
-                DreamTranscriptSection(transcript: liveDream.rawTranscript)
+                DreamTranscriptSection(transcript: liveDream.rawTranscript, secondary: secondaryColor)
             }
             .padding(.top)
             .padding(.bottom, 50)
@@ -306,7 +315,8 @@ struct DreamDetailView: View {
                 InsightCardView(
                     type: type,
                     text: text,
-                    animates: false
+                    animates: false,
+                    secondary: secondaryColor
                 )
                 .opacity(0)
             }
@@ -320,7 +330,8 @@ struct DreamDetailView: View {
                     InsightCardView(
                         type: type,
                         text: text,
-                        animates: isProcessing
+                        animates: isProcessing,
+                        secondary: secondaryColor
                     )
                     .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
                     .matchedGeometryEffect(id: "bg_\(type.id)", in: namespace)
@@ -342,15 +353,13 @@ struct DreamDetailView: View {
             return nil
         }()
         
-        // Show if we have an image OR if we are generating one, OR if we at least have a summary (placeholder context)
-        if image != nil || isGeneratingImage || liveDream.core?.summary != nil {
+        // Only show header content if we have an image, are generating one (AND supported), or have a summary
+        if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) || liveDream.core?.summary != nil {
             VStack(spacing: 20) {
-                // We use a single LensView and pass nil/image to it.
-                // This preserves the identity of the view so animations don't reset when image loads.
-                if image != nil || isGeneratingImage {
+                // Only show Lens if we have an image OR if generation is actually supported
+                if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) {
                     LensView(
                         image: image,
-                        // Pass the first gradient color (dominant) as the shadow color, or default to black
                         shadowColor: gradientColors.first ?? .black
                     )
                     .aspectRatio(1.0, contentMode: .fit)
@@ -360,7 +369,7 @@ struct DreamDetailView: View {
                 if let summary = liveDream.core?.summary {
                     Text("\(Text("Summary: ").bold())\(summary)")
                         .font(.caption)
-                        .foregroundStyle(Theme.secondary)
+                        .foregroundStyle(secondaryColor)
                         .multilineTextAlignment(.leading)
                         .padding(24)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -394,7 +403,7 @@ struct DreamDetailView: View {
                     .overlay(alignment: .trailing) {
                         Image(systemName: "chevron.right")
                             .font(.body.bold())
-                            .foregroundStyle(Theme.secondary)
+                            .foregroundStyle(secondaryColor)
                             .padding(.trailing, 20)
                     }
                     .contentShape(RoundedRectangle(cornerRadius: 24))
@@ -414,7 +423,7 @@ struct DreamDetailView: View {
                             if let conf = liveDream.core?.tone?.confidence {
                                 Text("\(conf)% Confidence")
                                     .font(.caption)
-                                    .foregroundStyle(Theme.secondary)
+                                    .foregroundStyle(secondaryColor)
                             }
                         }
                         .padding(20)
@@ -423,7 +432,7 @@ struct DreamDetailView: View {
                         .overlay(alignment: .trailing) {
                             Image(systemName: "chevron.right")
                                 .font(.body.bold())
-                                .foregroundStyle(Theme.secondary)
+                                .foregroundStyle(secondaryColor)
                                 .padding(.trailing, 20)
                         }
                         .contentShape(RoundedRectangle(cornerRadius: 24))
@@ -441,6 +450,7 @@ struct InsightDetailView: View {
     let dream: Dream
     let insight: DreamDetailView.InsightType
     var namespace: Namespace.ID
+    var secondary: Color
     @Binding var selectedInsight: DreamDetailView.InsightType?
     
     @State private var questionText: String = ""
@@ -466,7 +476,8 @@ struct InsightDetailView: View {
                             type: insight,
                             text: formatText(rawText),
                             animates: false,
-                            isExpanded: true
+                            isExpanded: true,
+                            secondary: secondary
                         )
                         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
                         .matchedGeometryEffect(id: "bg_\(insight.id)", in: namespace)
@@ -634,6 +645,7 @@ struct InsightCardView: View {
     let text: String
     let animates: Bool
     var isExpanded: Bool = false
+    var secondary: Color
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -649,7 +661,7 @@ struct InsightCardView: View {
                 if !isExpanded {
                     Image(systemName: "questionmark.bubble")
                         .font(.body)
-                        .foregroundStyle(Theme.secondary)
+                        .foregroundStyle(secondary)
                 }
             }
             
@@ -860,8 +872,10 @@ struct ContextRow: View {
 
 struct DreamTranscriptSection: View {
     let transcript: String
+    var secondary: Color
+    
     var body: some View {
-        TranscriptCard(title: "Transcript", icon: "quote.opening", color: Theme.secondary) {
+        TranscriptCard(title: "Transcript", icon: "quote.opening", color: secondary) {
             Text(transcript)
                 .font(.callout.monospaced())
                 .frame(maxWidth: .infinity, alignment: .leading)

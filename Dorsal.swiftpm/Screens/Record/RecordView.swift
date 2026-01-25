@@ -253,6 +253,16 @@ struct RecordView: View {
             } message: {
                 Text("Please wait for the current dream analysis to complete before starting a new recording.")
             }
+            .alert("Microphone Access Required", isPresented: $store.showPermissionAlert) {
+                Button("Open Settings", role: .none) {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Please allow access to your microphone in Settings to record your dreams.")
+            }
             .onChange(of: store.selectedTab) {
                 if store.selectedTab == 0 {
                     store.navigationPath = NavigationPath()
@@ -272,7 +282,7 @@ struct RecordView: View {
             return
         }
         
-        if !store.isSpeechModelReady || store.isSpeechModelInstalling {
+        if !store.isSpeechModelReady {
             showInstallationAlert = true
             return
         }

@@ -716,25 +716,28 @@ struct TrendDetailView: View {
     var toneSection: some View {
         VStack(spacing: 24) {
             HStack {
-                Button { moveWeek(by: -1) } label: {
-                    Image(systemName: "chevron.left")
-                        .foregroundStyle(.white.opacity(0.8))
-                        .fontWeight(.bold)
+                HStack {
+                    Button { moveWeek(by: -1) } label: {
+                        Image(systemName: "chevron.left")
+                            .foregroundStyle(.white.opacity(0.8))
+                            .fontWeight(.bold)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(metric.color.opacity(0.7))
+                    Spacer()
+                    Text("\(toneWeekStart.formatted(.dateTime.month().day())) - \(toneWeekEnd.formatted(.dateTime.month().day()))")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Button { moveWeek(by: 1) } label: {
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.white.opacity(0.8))
+                            .fontWeight(.bold)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(metric.color.opacity(0.7))
                 }
-                .buttonStyle(.glassProminent)
-                .tint(metric.color.opacity(0.7))
-                Spacer()
-                Text("\(toneWeekStart.formatted(.dateTime.month().day())) - \(toneWeekEnd.formatted(.dateTime.month().day()))")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                Spacer()
-                Button { moveWeek(by: 1) } label: {
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.white.opacity(0.8))
-                        .fontWeight(.bold)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(metric.color.opacity(0.7))
+                .frame(maxWidth: 400)
                 Spacer()
                 Menu {
                     ForEach(availableYears, id: \.self) { year in

@@ -324,26 +324,16 @@ struct PermissionsView: View {
                             store.requestMicrophoneAccess()
                         }
                     )
-                    
-                    PermissionRow(
-                        title: "Speech Recognition",
-                        icon: "text.bubble.fill",
-                        isGranted: store.hasSpeechAccess,
-                        action: {
-                            store.requestSpeechAccess()
-                        }
-                    )
                 }
                 .padding(.horizontal, 24)
                 
-                // Continue Button
-                if store.hasMicAccess && store.hasSpeechAccess {
+                if store.hasMicAccess {
                     OnboardingActionButton(title: "Continue", action: onNext)
                 } else {
-                     Text("Please enable permissions to continue")
+                     Text("Please enable permission to continue")
                         .font(.caption)
-                        .foregroundStyle(OnboardingStep.permissions.textColor) // Updated
-                        .padding(.bottom, 40) // Standardized bottom padding
+                        .foregroundStyle(OnboardingStep.permissions.textColor)
+                        .padding(.bottom, 40)
                 }
             }
         }
@@ -602,7 +592,6 @@ struct OnboardingProgressView: View {
             Connector(isActive: currentStep == .permissions || currentStep == .notifications || currentStep == .allSet)
                 .zIndex(0)
             
-            // Step 2: Permissions
             StepIcon(
                 icon: "mic.fill",
                 isActive: currentStep == .permissions,
