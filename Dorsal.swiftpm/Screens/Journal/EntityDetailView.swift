@@ -129,7 +129,7 @@ struct EntityDetailView: View {
                                             Button { showingImagePlayground = true } label: { Label("Create with AI", systemImage: "apple.image.playground").tint(textColor) }
                                         }
                                         
-                                        if store.isImageGenerationAvailable {
+                                        if store.isImageGenerationAvailable && type != "person" {
                                             Button { generateAutoImage() } label: { Label("Generate with AI", systemImage: "sparkles").tint(textColor) }
                                         }
                                         

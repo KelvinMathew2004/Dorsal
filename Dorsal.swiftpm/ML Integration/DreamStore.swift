@@ -548,22 +548,16 @@ class DreamStore: NSObject, ObservableObject {
     func checkImageGenerationSupport() async {
         do {
             _ = try await ImageCreator()
-            self.isImageGenerationAvailable = true
+            await MainActor.run { self.isImageGenerationAvailable = true }
         } catch {
             print("Image generation not supported: \(error)")
-            self.isImageGenerationAvailable = false
+            await MainActor.run { self.isImageGenerationAvailable = false }
         }
     }
     
-    func generateImageFromPrompt(prompt: String) async throws -> Data {
+    func generateImageFromPrompt(prompt: String, places: [String] = [], emotions: [String] = []) async throws -> Data {
         guard isImageGenerationAvailable else { throw DreamError.imageUnavailable }
-        let creator = try await ImageCreator()
-        let selectedStyle: ImagePlaygroundStyle = creator.availableStyles.contains(.animation) ? .animation : (creator.availableStyles.first ?? .animation)
-        
-        for try await image in creator.images(for: [.text(prompt)], style: selectedStyle, limit: 1) {
-            if let data = UIImage(cgImage: image.cgImage).pngData() { return data }
-        }
-        throw DreamError.imageGenerationFailed
+        return try await ImageGenerationService.shared.generate(prompt: prompt, places: places, emotions: emotions)
     }
     
     private func resolveAliases(for names: Set<String>, type: String) -> Set<String> {
@@ -928,21 +922,24 @@ class DreamStore: NSObject, ObservableObject {
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }),
                    let summary = dreams[index].core?.summary {
                     if isImageGenerationAvailable {
-                        // ALWAYS SANITIZE PROMPT to avoid identity issues
                         do {
                             let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: transcript)
-                            let data = try await generateImageFromPrompt(prompt: sanitizedPrompt)
+                            
+                            // UPDATED: Extract metadata for fallback (places + emotions)
+                            let places = dreams[index].core?.places ?? []
+                            let emotions = dreams[index].core?.emotions ?? []
+                            
+                            let data = try await generateImageFromPrompt(prompt: sanitizedPrompt, places: places, emotions: emotions)
+                            
                             await MainActor.run {
                                 if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
                                     dreams[idx].generatedImageData = data
                                 }
                             }
                         } catch {
-                            // If sanitization or generation fails, set error state
                             print("Image generation error: \(error)")
                             await MainActor.run {
                                 if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
-                                    // Use the specific DreamError cases if possible
                                     if let dreamError = error as? DreamError {
                                         dreams[idx].analysisError = dreamError.localizedDescription
                                     } else {
