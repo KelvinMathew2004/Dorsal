@@ -125,7 +125,11 @@ struct DreamDetailView: View {
             }
         }
         .onAppear {
-            updateColor()
+            // IMMEDIATE SYNCHRONOUS LOAD to prevent shadow popping
+            if let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
+                let color = uiImage.dominantColor
+                self.gradientColors = [color, color.opacity(0.8), color.opacity(0.6)]
+            }
         }
         .onChange(of: liveDream.generatedImageData) {
             updateColor()
@@ -328,18 +332,29 @@ struct DreamDetailView: View {
         .padding(.horizontal)
     }
     
+    // MARK: - FIXED HEADER SECTION
     @ViewBuilder
     var headerSection: some View {
-        if liveDream.generatedImageData != nil || isGeneratingImage || liveDream.core?.summary != nil {
+        let image: UIImage? = {
+            if let data = liveDream.generatedImageData {
+                return UIImage(data: data)
+            }
+            return nil
+        }()
+        
+        // Show if we have an image OR if we are generating one, OR if we at least have a summary (placeholder context)
+        if image != nil || isGeneratingImage || liveDream.core?.summary != nil {
             VStack(spacing: 20) {
-                if let imageData = liveDream.generatedImageData, let uiImage = UIImage(data: imageData) {
-                    LensView(image: uiImage)
-                        .aspectRatio(1.0, contentMode: .fit)
-                        .frame(maxWidth: 400)
-                } else if isGeneratingImage {
-                    LensView(image: nil)
-                        .aspectRatio(1.0, contentMode: .fit)
-                        .frame(maxWidth: 400)
+                // We use a single LensView and pass nil/image to it.
+                // This preserves the identity of the view so animations don't reset when image loads.
+                if image != nil || isGeneratingImage {
+                    LensView(
+                        image: image,
+                        // Pass the first gradient color (dominant) as the shadow color, or default to black
+                        shadowColor: gradientColors.first ?? .black
+                    )
+                    .aspectRatio(1.0, contentMode: .fit)
+                    .frame(maxWidth: 400)
                 }
                 
                 if let summary = liveDream.core?.summary {
@@ -349,7 +364,7 @@ struct DreamDetailView: View {
                         .multilineTextAlignment(.leading)
                         .padding(24)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
+                        .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 32))
                 }
             }
             .padding(.horizontal)

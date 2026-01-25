@@ -2,61 +2,98 @@ import SwiftUI
 import MetalKit
 
 /// A view that applies a "Bubble Lens" effect.
-/// By default, it is static (paused) to save battery.
-/// When tapped or when the image changes, it runs the Metal shader loop for a few seconds.
+/// - When `image` is nil (Generating): It runs a continuous, efficient Metal loop.
+/// - When `image` is present (Static): It pauses to save battery, waking up only for brief animation bursts on tap or change.
 struct LensView: View {
     let image: UIImage?
+    var shadowColor: Color = .black
     
     @State private var time: Float = 0
+    // Removed seed randomization on change to prevent "jumping" effect
     @State private var seed: Float = Float.random(in: 0...100)
     
-    // Controls whether the Metal loop is running
-    @State private var isAnimating: Bool = false
+    // Controls the temporary burst animation (for tap/load effects)
+    @State private var isBurstAnimating: Bool = false
     
-    // Used to restart the animation task if tapped while already running
-    @State private var animationTrigger: Int = 0
+    // Used to restart the burst task
+    @State private var burstTrigger: Int = 0
+    
+    // Computed helper
+    var isGenerating: Bool {
+        image == nil
+    }
     
     var body: some View {
         LensMetalView(
             image: image,
+            shadowColor: shadowColor,
             time: time,
             seed: seed,
-            paused: !isAnimating
+            paused: !(isGenerating || isBurstAnimating) // Run if generating OR bursting
         )
-        // This Task replaces the Timer. It only runs when triggered.
-        .task(id: animationTrigger) {
-            guard isAnimating else { return }
+        // This task manages the animation loop logic
+        // It restarts if we switch modes (Generating <-> Static) or if a burst is triggered
+        .task(id: isGenerating ? "generating" : "burst-\(burstTrigger)") {
+            // MODE 1: Generating (Infinite Loop, constant speed)
+            if isGenerating {
+                while !Task.isCancelled {
+                    // Slow breathing speed
+                    time += 0.008
+                    try? await Task.sleep(nanoseconds: 16_000_000)
+                }
+                return
+            }
             
-            let startTime = Date()
+            // MODE 2: Burst Animation (Decaying Speed)
+            // Triggered when image loads or on tap
+            guard isBurstAnimating else { return }
             
-            // Run loop for 2 seconds
-            while Date().timeIntervalSince(startTime) < 2.0 {
+            // CONFIGURATION: Breathing Effect
+            // Start very slow (0.008) and decay very slowly (0.992)
+            var velocity: Float = 0.008
+            let friction: Float = 0.992
+            let stopThreshold: Float = 0.0001
+            
+            // Run until velocity is negligible
+            while velocity > stopThreshold {
                 if Task.isCancelled { return }
                 
-                // Update time (~60fps)
-                time += 0.016
+                time += velocity
+                velocity *= friction
                 
-                // Sleep for ~16ms to throttle CPU usage
                 try? await Task.sleep(nanoseconds: 16_000_000)
             }
             
-            // Stop animation after loop finishes
+            // Clean up state after burst finishes
             if !Task.isCancelled {
-                isAnimating = false
+                withAnimation {
+                    isBurstAnimating = false
+                }
             }
         }
         .onChange(of: image) { _ in
-            seed = Float.random(in: 0...100)
-            triggerAnimation()
+            // If we transitioned to a valid image, trigger a "Spin Down" burst
+            if image != nil {
+                triggerBurst()
+            }
+        }
+        .onAppear {
+            // Trigger burst on initial load if image exists (Open View)
+            if image != nil {
+                triggerBurst()
+            }
         }
         .onTapGesture {
-            triggerAnimation()
+            triggerBurst()
         }
     }
     
-    func triggerAnimation() {
-        isAnimating = true
-        animationTrigger += 1
+    func triggerBurst() {
+        // If we are generating, we are already animating, so no need to trigger a burst
+        guard !isGenerating else { return }
+        
+        isBurstAnimating = true
+        burstTrigger += 1
     }
 }
 
@@ -64,6 +101,7 @@ struct LensView: View {
 
 struct LensMetalView: UIViewRepresentable {
     let image: UIImage?
+    let shadowColor: Color
     let time: Float
     let seed: Float
     let paused: Bool
@@ -98,7 +136,7 @@ struct LensMetalView: UIViewRepresentable {
             }
         }
         
-        context.coordinator.updateState(time: time, seed: seed)
+        context.coordinator.updateState(time: time, seed: seed, shadowColor: shadowColor)
         
         // Toggle the render loop
         uiView.isPaused = paused
@@ -121,6 +159,7 @@ struct LensMetalView: UIViewRepresentable {
         
         var currentTime: Float = 0
         var currentSeed: Float = 0
+        var currentShadowRGB: SIMD3<Float> = SIMD3(0, 0, 0)
         var isGenerating: Float = 0
         
         let shaderSource = """
@@ -147,7 +186,8 @@ struct LensMetalView: UIViewRepresentable {
                                       constant float& time [[buffer(0)]],
                                       constant float2& resolution [[buffer(1)]],
                                       constant float& isGenerating [[buffer(2)]],
-                                      constant float& seed [[buffer(3)]]) {
+                                      constant float& seed [[buffer(3)]],
+                                      constant float3& shadowColor [[buffer(4)]]) {
             
             constexpr sampler s(address::clamp_to_edge, filter::linear);
             
@@ -170,8 +210,10 @@ struct LensMetalView: UIViewRepresentable {
             
             float perturbation = 0.015 * sin(angle * freq1 + seed + shapeTime) + 
                                  0.010 * cos(angle * freq2 + seed * 2.0 - shapeTime);
-                                 
-            float r = 0.44 + perturbation; 
+            
+            // INCREASED RADIUS to reduce cropping
+            // Base radius 0.47 + perturbation -> Max ~0.495 (nearly touches edge of 0.5)
+            float r = 0.47 + perturbation; 
             
             if (dist < r) {
                 float normDist = dist / r;
@@ -203,9 +245,15 @@ struct LensMetalView: UIViewRepresentable {
                     float shiftStrength = 0.015 * pow(normDist, 2.0);
                     float2 shift = normalize(d) * shiftStrength;
                     
-                    float rCh = texture.sample(s, uv - shift).r;
-                    float gCh = texture.sample(s, uv).g;
-                    float bCh = texture.sample(s, uv + shift).b;
+                    // SCALE TEXTURE TO FIT (Slight Zoom Out)
+                    // 1.05 scales the image down slightly so edges fit comfortably in the larger bubble
+                    float textureScale = 1.05;
+                    float2 centeredUV = uv - 0.5;
+                    float2 textureUV = centeredUV * textureScale + 0.5;
+                    
+                    float rCh = texture.sample(s, textureUV - shift).r;
+                    float gCh = texture.sample(s, textureUV).g;
+                    float bCh = texture.sample(s, textureUV + shift).b;
                     
                     baseColor = float4(rCh, gCh, bCh, 1.0);
                 }
@@ -218,7 +266,16 @@ struct LensMetalView: UIViewRepresentable {
                 float3 finalColor = baseColor.rgb;
                 finalColor += rainbow * rimPower * 0.6;
                 
-                float alpha = smoothstep(r, r - 0.02, dist);
+                // VIGNETTE: Tint edges with shadowColor
+                // vignetteFactor: 1.0 at center, 0.0 at edge (r)
+                // The range [1.0, 0.75] controls the thickness of the inner shadow
+                float vignetteFactor = smoothstep(1.0, 0.75, normDist);
+                
+                // Mix: when factor is 0 (edge), show shadowColor. When 1 (center), show finalColor.
+                finalColor = mix(shadowColor, finalColor, vignetteFactor);
+                
+                // EDGE ALPHA: Wider smoothstep range = thicker soft edge
+                float alpha = smoothstep(r, r - 0.05, dist);
                 
                 return float4(finalColor, alpha);
                 
@@ -273,9 +330,18 @@ struct LensMetalView: UIViewRepresentable {
             }
         }
         
-        func updateState(time: Float, seed: Float) {
+        func updateState(time: Float, seed: Float, shadowColor: Color) {
             self.currentTime = time
             self.currentSeed = seed
+            
+            // Convert Color to RGB Float
+            let uiColor = UIColor(shadowColor)
+            var r: CGFloat = 0
+            var g: CGFloat = 0
+            var b: CGFloat = 0
+            var a: CGFloat = 0
+            uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+            self.currentShadowRGB = SIMD3(Float(r), Float(g), Float(b))
         }
         
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
@@ -304,6 +370,10 @@ struct LensMetalView: UIViewRepresentable {
             
             var seedUniform = currentSeed
             encoder.setFragmentBytes(&seedUniform, length: MemoryLayout<Float>.stride, index: 3)
+            
+            // Pass Shadow Color
+            var shadowUniform = currentShadowRGB
+            encoder.setFragmentBytes(&shadowUniform, length: MemoryLayout<SIMD3<Float>>.stride, index: 4)
             
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             encoder.endEncoding()

@@ -21,10 +21,10 @@ struct VisualPrompt: Codable, Sendable {
 @Observable
 class DreamAnalyzer {
     static let shared = DreamAnalyzer()
-    private let session: LanguageModelSession
     
-    init() {
-        self.session = LanguageModelSession(instructions: """
+    // Helper to ensure consistent instructions across all sessions
+    private func makeSession() -> LanguageModelSession {
+        return LanguageModelSession(instructions: """
             You are a compassionate, insightful Dream Psychologist.
             Analyze dreams with empathy. Identify key symbols, emotions, and themes.
             You MUST respond in U.S. English.
@@ -32,11 +32,14 @@ class DreamAnalyzer {
     }
     
     func prewarmModel() {
+        let session = makeSession()
         session.prewarm()
     }
     
     // MARK: - VISUAL PROMPT GENERATION (Sanitization)
     func generateVisualPrompt(transcript: String) async throws -> String {
+        let session = makeSession()
+        
         let prompt = """
         Create a prompt for an AI image generator based on this dream transcript: "\(transcript)".
         
@@ -60,6 +63,8 @@ class DreamAnalyzer {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
+                    let session = self.makeSession()
+                    
                     let stream = session.streamResponse(
                         to: prompt,
                         generating: DreamCoreAnalysis.self,
@@ -156,6 +161,7 @@ class DreamAnalyzer {
     // MARK: - FALLBACK: TEXT-BASED FATIGUE
     // This is the replacement function you requested
     func estimateFallbackFatigue(transcript: String) async -> Int {
+        let session = makeSession()
         do {
             let res = try await session.respond(
                 to: "Estimate a voice fatigue score (0-100) based purely on the exhaustion level described in this text: \"\(transcript)\"",
@@ -235,6 +241,8 @@ class DreamAnalyzer {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
+                    let session = self.makeSession()
+                    
                     let stream = session.streamResponse(
                         to: prompt,
                         generating: DreamExtraAnalysis.self,
@@ -257,22 +265,27 @@ class DreamAnalyzer {
         
         do {
             if updated.title == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Generate a short title (4 words max) for: \"\(transcript)\"", generating: RepairTitle.self)
                 updated.title = res.content.title
             }
             if updated.summary == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Summarize this dream in 1-2 sentences: \"\(transcript)\"", generating: RepairSummary.self)
                 updated.summary = res.content.summary
             }
             if updated.interpretation == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Provide a psychological interpretation for: \"\(transcript)\"", generating: RepairInterpretation.self)
                 updated.interpretation = res.content.interpretation
             }
             if updated.actionableAdvice == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Provide actionable advice for: \"\(transcript)\"", generating: RepairAdvice.self)
                 updated.actionableAdvice = res.content.actionableAdvice
             }
             if updated.tone == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Determine the tone of this dream: \"\(transcript)\"", generating: RepairTone.self)
                 updated.tone = res.content.tone
             }
@@ -287,26 +300,32 @@ class DreamAnalyzer {
         
         do {
             if updated.sentimentScore == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Determine sentiment score (0-100) for: \"\(transcript)\"", generating: RepairSentiment.self)
                 updated.sentimentScore = res.content.sentimentScore
             }
             if updated.anxietyLevel == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Determine anxiety level (0-100) for: \"\(transcript)\"", generating: RepairAnxiety.self)
                 updated.anxietyLevel = res.content.anxietyLevel
             }
             if updated.isNightmare == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Is this a nightmare? \"\(transcript)\"", generating: RepairNightmare.self)
                 updated.isNightmare = res.content.isNightmare
             }
             if updated.lucidityScore == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Determine lucidity score (0-100) for: \"\(transcript)\"", generating: RepairLucidity.self)
                 updated.lucidityScore = res.content.lucidityScore
             }
             if updated.vividnessScore == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Determine vividness score (0-100) for: \"\(transcript)\"", generating: RepairVividness.self)
                 updated.vividnessScore = res.content.vividnessScore
             }
             if updated.coherenceScore == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Determine coherence score (0-100) for: \"\(transcript)\"", generating: RepairCoherence.self)
                 updated.coherenceScore = res.content.coherenceScore
             }
@@ -318,20 +337,25 @@ class DreamAnalyzer {
 
     func ensureWeeklyInsights(current: WeeklyInsightResult, context: String) async -> WeeklyInsightResult {
         var updated = current
+        
         do {
             if updated.periodOverview == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Generate a period overview for these dreams:\n\(context)", generating: RepairPeriodOverview.self)
                 updated.periodOverview = res.content.periodOverview
             }
             if updated.dominantTheme == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Identify the dominant theme for these dreams:\n\(context)", generating: RepairDominantTheme.self)
                 updated.dominantTheme = res.content.dominantTheme
             }
             if updated.mentalHealthTrend == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Analyze the mental health trend for these dreams:\n\(context)", generating: RepairMentalHealthTrend.self)
                 updated.mentalHealthTrend = res.content.mentalHealthTrend
             }
             if updated.strategicAdvice == nil {
+                let session = makeSession()
                 let res = try await session.respond(to: "Provide strategic advice based on these dreams:\n\(context)", generating: RepairStrategicAdvice.self)
                 updated.strategicAdvice = res.content.strategicAdvice
             }
@@ -359,6 +383,8 @@ class DreamAnalyzer {
         
         let prompt = "Review these dream summaries and generate a holistic insight report:\n\(dreamSummaries)"
         
+        let session = makeSession()
+        
         var response = try await session.respond(
             to: prompt,
             generating: WeeklyInsightResult.self,
@@ -371,6 +397,8 @@ class DreamAnalyzer {
     }
         
     func DreamQuestion(transcript: String, analysis: String, question: String) async throws -> String {
+        let session = makeSession()
+        
         let prompt = """
         Use the provided transcript and analysis context to answer the user's question in short paragraphs and concise pointers.
         
@@ -389,6 +417,8 @@ class DreamAnalyzer {
     }
     
     func DreamsQuestion(summaries: String, analysis: String, question: String) async throws -> String {
+        let session = makeSession() // New session
+        
         let prompt = """
         Answer the User Question by synthesizing this information. Connect the specific dream events (from the summaries) to the broader trends (from the analysis) where relevant. Keep the response concise (under 150 words) unless the question requires deep detail.
         
@@ -411,6 +441,8 @@ class DreamAnalyzer {
     // MARK: - Trend Analysis & Coaching
     
     func GenerateCoachingTip(metric: String, description: String, statsContext: String, trendStatus: String) async throws -> String {
+        let session = makeSession()
+        
         let prompt = """
         You are a sleep coach analyzing the user's "\(metric)" trend.
         
@@ -433,6 +465,8 @@ class DreamAnalyzer {
     }
     
     func TrendQuestion(metric: String, statsContext: String, trendStatus: String, question: String) async throws -> String {
+        let session = makeSession()
+        
         let prompt = """
         Context:
         Metric: \(metric)

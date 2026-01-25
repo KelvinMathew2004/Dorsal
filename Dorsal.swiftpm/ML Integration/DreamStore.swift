@@ -558,7 +558,7 @@ class DreamStore: NSObject, ObservableObject {
     func generateImageFromPrompt(prompt: String) async throws -> Data {
         guard isImageGenerationAvailable else { throw DreamError.imageUnavailable }
         let creator = try await ImageCreator()
-        let selectedStyle: ImagePlaygroundStyle = creator.availableStyles.contains(.illustration) ? .illustration : (creator.availableStyles.first ?? .illustration)
+        let selectedStyle: ImagePlaygroundStyle = creator.availableStyles.contains(.animation) ? .animation : (creator.availableStyles.first ?? .animation)
         
         for try await image in creator.images(for: [.text(prompt)], style: selectedStyle, limit: 1) {
             if let data = UIImage(cgImage: image.cgImage).pngData() { return data }
