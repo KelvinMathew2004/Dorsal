@@ -230,7 +230,7 @@ struct RemovablePill: View {
 }
 
 struct DreamRow: View {
-    @ObservedObject var store: DreamStore
+    let store: DreamStore
     let dream: Dream
     
     var body: some View {

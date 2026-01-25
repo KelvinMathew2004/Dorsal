@@ -76,14 +76,13 @@ struct EntityDetailView: View {
                                 [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
                             ],
                             colors: [
-                                gradientColors[0], gradientColors[1], gradientColors[2],
-                                gradientColors[2], gradientColors[0], gradientColors[1],
-                                gradientColors[1], gradientColors[2], gradientColors[0]
+                                gradientColors[0].mix(with: .black, by: 0.6), gradientColors[1].mix(with: .black, by: 0.6), gradientColors[2].mix(with: .black, by: 0.6),
+                                gradientColors[2].mix(with: .black, by: 0.6), gradientColors[0].mix(with: .black, by: 0.6), gradientColors[1].mix(with: .black, by: 0.6),
+                                gradientColors[1].mix(with: .black, by: 0.6), gradientColors[2].mix(with: .black, by: 0.6), gradientColors[0].mix(with: .black, by: 0.6)
                             ]
                         )
                     }
                     .ignoresSafeArea()
-                    .overlay(Color.black.opacity(0.6))
                     .transition(.opacity)
                 }
                 
@@ -399,7 +398,7 @@ struct EntityDetailView: View {
                     var concepts: [ImagePlaygroundConcept] = [.text(name)]
                     if !descriptionText.isEmpty {
                         concepts.append(.text(descriptionText))
-                    } else if type == "person" || type == "place" {
+                    } else if type == "place" {
                         concepts.append(.text(type))
                     }
                     return concepts

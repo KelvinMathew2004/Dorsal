@@ -1,33 +1,62 @@
 import SwiftUI
 import MetalKit
 
-/// A view that applies a static "Bubble Lens" effect with chromatic aberration and iridescence.
-/// If an image is provided, it applies the effect to the image.
-/// If image is nil, it generates a dynamic gradient inside the lens (for loading states).
+/// A view that applies a "Bubble Lens" effect.
+/// By default, it is static (paused) to save battery.
+/// When tapped or when the image changes, it runs the Metal shader loop for a few seconds.
 struct LensView: View {
     let image: UIImage?
     
     @State private var time: Float = 0
-    
-    // Generates a random seed for the bubble shape.
-    // Initialized randomly, and updated whenever the image changes.
     @State private var seed: Float = Float.random(in: 0...100)
     
-    let timer = Timer.publish(every: 1/60, on: .main, in: .common).autoconnect()
+    // Controls whether the Metal loop is running
+    @State private var isAnimating: Bool = false
+    
+    // Used to restart the animation task if tapped while already running
+    @State private var animationTrigger: Int = 0
     
     var body: some View {
         LensMetalView(
             image: image,
             time: time,
-            seed: seed
+            seed: seed,
+            paused: !isAnimating
         )
-        .onReceive(timer) { _ in
-            time += 0.016
+        // This Task replaces the Timer. It only runs when triggered.
+        .task(id: animationTrigger) {
+            guard isAnimating else { return }
+            
+            let startTime = Date()
+            
+            // Run loop for 2 seconds
+            while Date().timeIntervalSince(startTime) < 2.0 {
+                if Task.isCancelled { return }
+                
+                // Update time (~60fps)
+                time += 0.016
+                
+                // Sleep for ~16ms to throttle CPU usage
+                try? await Task.sleep(nanoseconds: 16_000_000)
+            }
+            
+            // Stop animation after loop finishes
+            if !Task.isCancelled {
+                isAnimating = false
+            }
         }
         .onChange(of: image) { _ in
-            // Generate a new unique shape when the content changes
             seed = Float.random(in: 0...100)
+            triggerAnimation()
         }
+        .onTapGesture {
+            triggerAnimation()
+        }
+    }
+    
+    func triggerAnimation() {
+        isAnimating = true
+        animationTrigger += 1
     }
 }
 
@@ -37,6 +66,7 @@ struct LensMetalView: UIViewRepresentable {
     let image: UIImage?
     let time: Float
     let seed: Float
+    let paused: Bool
     
     func makeUIView(context: Context) -> MTKView {
         let mtkView = MTKView()
@@ -44,15 +74,16 @@ struct LensMetalView: UIViewRepresentable {
         mtkView.delegate = context.coordinator
         mtkView.backgroundColor = .clear
         mtkView.enableSetNeedsDisplay = true
-        mtkView.isPaused = false
+        
+        // Start paused
+        mtkView.isPaused = paused
+        
         mtkView.framebufferOnly = false
         mtkView.autoResizeDrawable = true
         mtkView.contentMode = .scaleAspectFit
         
-        // Initialize Pipeline ONCE
         context.coordinator.configurePipeline(for: mtkView)
         
-        // Set initial image
         if let device = mtkView.device {
             context.coordinator.updateTexture(image: image, device: device)
         }
@@ -61,13 +92,21 @@ struct LensMetalView: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: MTKView, context: Context) {
-        // Only update texture if image instance changed
         if context.coordinator.currentImage !== image {
             if let device = uiView.device {
                 context.coordinator.updateTexture(image: image, device: device)
             }
         }
+        
         context.coordinator.updateState(time: time, seed: seed)
+        
+        // Toggle the render loop
+        uiView.isPaused = paused
+        
+        // CRITICAL: Force one last redraw when pausing so it doesn't freeze on an empty frame
+        if paused {
+            uiView.setNeedsDisplay()
+        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -123,33 +162,31 @@ struct LensMetalView: UIViewRepresentable {
             float angle = atan2(d.y, d.x);
             float dist = length(d);
             
-            // FIX OUTLINE GLITCHES:
-            // Ensure frequencies are Integers so sin(angle) connects seamlessly at -PI/PI
-            float freq1 = 3.0; // Integer
-            float freq2 = 5.0; // Integer
+            float freq1 = 3.0; 
+            float freq2 = 5.0; 
             
-            // Perturbation with seed-based phase shift, but integer frequency
-            float perturbation = 0.015 * sin(angle * freq1 + seed) + 
-                                 0.010 * cos(angle * freq2 + seed * 2.0);
+            // FAST Animation Speed
+            float shapeTime = time * 2.0; 
+            
+            float perturbation = 0.015 * sin(angle * freq1 + seed + shapeTime) + 
+                                 0.010 * cos(angle * freq2 + seed * 2.0 - shapeTime);
                                  
             float r = 0.44 + perturbation; 
             
             if (dist < r) {
                 float normDist = dist / r;
                 
-                // --- 2. Surface Normal Calculation ---
-                // Model as sphere for lighting
+                // Sphere Normal
                 float z = sqrt(max(0.0, 1.0 - normDist * normDist));
                 float3 normal = normalize(float3(d.x, -d.y, z * 0.6));
                 
-                // Light setup
                 float3 viewDir = float3(0.0, 0.0, 1.0);
 
-                // --- 3. Base Color with Chromatic Aberration ---
+                // Base Color
                 float4 baseColor;
                 
                 if (isGenerating > 0.5) {
-                    // Procedural Gradient (Liquidy)
+                    // Procedural Gradient
                     float3 c1 = float3(1.0, 0.6, 0.0);
                     float3 c2 = float3(0.6, 0.2, 0.9);
                     float3 c3 = float3(0.0, 0.4, 1.0);
@@ -162,10 +199,8 @@ struct LensMetalView: UIViewRepresentable {
                     col = mix(col, c1, n3 * 0.5);
                     baseColor = float4(col, 1.0);
                 } else {
-                    // CHROMATIC ABERRATION:
-                    // Separate channels based on radial distance/normal
-                    // This creates the refractive fringe effect
-                    float shiftStrength = 0.015 * pow(normDist, 2.0); // Stronger at edges
+                    // Chromatic Aberration
+                    float shiftStrength = 0.015 * pow(normDist, 2.0);
                     float2 shift = normalize(d) * shiftStrength;
                     
                     float rCh = texture.sample(s, uv - shift).r;
@@ -175,25 +210,14 @@ struct LensMetalView: UIViewRepresentable {
                     baseColor = float4(rCh, gCh, bCh, 1.0);
                 }
                 
-                // --- 4. BUBBLE LIGHTING & IRIDESCENCE ---
-                
-                // Fresnel Rim Light
+                // Lighting & Iridescence
                 float fresnelTerm = 1.0 - max(0.0, dot(normal, viewDir));
                 float rimPower = pow(fresnelTerm, 2.5);
-                
-                // Iridescence (Thin Film Interference)
-                // Generate a rainbow gradient based on the fresnel angle (Cosine Palette)
                 float3 rainbow = 0.5 + 0.5 * cos(6.28318 * (float3(1.0, 1.0, 1.0) * fresnelTerm + float3(0.0, 0.33, 0.67)));
                 
-                // --- 5. Composite ---
                 float3 finalColor = baseColor.rgb;
-                
-                // Add Iridescent Rim
                 finalColor += rainbow * rimPower * 0.6;
                 
-                // REMOVED: Specular Highlight (The white reflection)
-                
-                // --- 6. Anti-aliasing ---
                 float alpha = smoothstep(r, r - 0.02, dist);
                 
                 return float4(finalColor, alpha);
@@ -204,7 +228,6 @@ struct LensMetalView: UIViewRepresentable {
         }
         """
         
-        // 1. New function to configure pipeline ONCE
         func configurePipeline(for view: MTKView) {
             guard let device = view.device else { return }
             commandQueue = device.makeCommandQueue()
@@ -230,7 +253,6 @@ struct LensMetalView: UIViewRepresentable {
             }
         }
         
-        // 2. New function to update only the texture/image data
         func updateTexture(image: UIImage?, device: MTLDevice) {
             self.currentImage = image
             

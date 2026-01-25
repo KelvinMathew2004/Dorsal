@@ -13,7 +13,7 @@ struct DreamDetailView: View {
     
     @State private var selectedInsight: InsightType?
     
-    @State private var dominantColor: Color?
+    @State private var gradientColors: [Color] = []
     
     @State private var currentAnalysisIconIndex = 0
     private let analysisIcons: [(name: String, color: Color)] = [
@@ -73,9 +73,30 @@ struct DreamDetailView: View {
     
     var body: some View {
         ZStack {
-            // CHANGED: Use the extracted dominant color if available
-            Theme.gradientBackground(dominantColor.map { .custom($0) } ?? .standard)
+            // Background Layer 1: Default Theme (Always visible)
+            Theme.gradientBackground()
                 .ignoresSafeArea()
+            
+            // Background Layer 2: Dynamic Mesh Gradient (Only if we have colors)
+            if !gradientColors.isEmpty {
+                Group {
+                    MeshGradient(
+                        width: 3, height: 3,
+                        points: [
+                            [0.0, 0.0], [0.5, 0.0], [1.0, 0.0],
+                            [0.0, 0.5], [0.5, 0.5], [1.0, 0.5],
+                            [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
+                        ],
+                        colors: [
+                            gradientColors[0].mix(with: .black, by: 0.6), gradientColors[1].mix(with: .black, by: 0.6), gradientColors[2].mix(with: .black, by: 0.6),
+                            gradientColors[2].mix(with: .black, by: 0.6), gradientColors[0].mix(with: .black, by: 0.6), gradientColors[1].mix(with: .black, by: 0.6),
+                            gradientColors[1].mix(with: .black, by: 0.6), gradientColors[2].mix(with: .black, by: 0.6), gradientColors[0].mix(with: .black, by: 0.6)
+                        ]
+                    )
+                }
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
             
             contentLayer
             
@@ -103,7 +124,6 @@ struct DreamDetailView: View {
                 }
             }
         }
-        // CHANGED: Calculate color on appear and when image data changes
         .onAppear {
             updateColor()
         }
@@ -132,14 +152,15 @@ struct DreamDetailView: View {
             DispatchQueue.global(qos: .userInitiated).async {
                 let color = uiImage.dominantColor
                 DispatchQueue.main.async {
+                    let newColors = [color, color.opacity(0.8), color.opacity(0.6)]
                     withAnimation(.easeInOut(duration: 1.0)) {
-                        self.dominantColor = color
+                        self.gradientColors = newColors
                     }
                 }
             }
         } else {
             withAnimation(.easeInOut(duration: 1.0)) {
-                self.dominantColor = nil
+                self.gradientColors = []
             }
         }
     }
