@@ -8,46 +8,39 @@ import PackageDescription
 import AppleProductTypes
 
 let package = Package(
-    name: "Dorsal",
+    name: "test",
     platforms: [
         .iOS("26.0")
     ],
     products: [
         .iOSApplication(
-            name: "Dorsal",
+            name: "test",
             targets: ["AppModule"],
-            bundleIdentifier: "cpp.Dorsal",
+            bundleIdentifier: "cpp.test",
             teamIdentifier: "879HFN9R93",
             displayVersion: "1.0",
             bundleVersion: "1",
-            appIcon: .asset("AppIcon"),
-            accentColor: .presetColor(.yellow),
+            appIcon: .placeholder(icon: .sandwich),
+            accentColor: .presetColor(.mint),
             supportedDeviceFamilies: [
                 .pad,
                 .phone
             ],
             supportedInterfaceOrientations: [
                 .portrait,
-                .landscapeRight(.when(deviceFamilies: [.pad])),
-                .landscapeLeft(.when(deviceFamilies: [.pad])),
+                .landscapeRight,
+                .landscapeLeft,
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
             ],
             capabilities: [
-                .microphone(purposeString: "We need your microphone to record dreams"),
-                .photoLibrary(purposeString: "We need your photo library to upload your photo."),
-                .contacts(purposeString: "We need your contacts to link people."),
-                .photoLibraryAdd(purposeString: "To save your dream visualization.")
-            ],
-            appCategory: .healthcareFitness
+                .photoLibrary(purposeString: "Unknown Usage Description")
+            ]
         )
     ],
     targets: [
         .executableTarget(
             name: "AppModule",
-            path: ".",
-            resources: [
-                .copy("VocalFatigueModel.mlmodelc")
-            ]
+            path: "."
         )
     ],
     swiftLanguageVersions: [.version("6")]

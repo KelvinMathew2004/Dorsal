@@ -1,4 +1,7 @@
 import SwiftUI
+import Vision
+import CoreMotion
+import Photos
 
 struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
@@ -14,6 +17,9 @@ struct DreamDetailView: View {
     @State private var selectedInsight: InsightType?
     
     @State private var gradientColors: [Color] = []
+    
+    @State private var isShowingParallax = false
+    @State private var showSaveSuccess = false
     
     var textColor: Color {
         let baseColor = gradientColors.first ?? .purple
@@ -119,11 +125,51 @@ struct DreamDetailView: View {
                 )
                 .zIndex(100)
             }
+            
+            if isShowingParallax, let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
+                ParallaxImageView(
+                    image: uiImage,
+                    namespace: namespace,
+                    id: "dreamImage"
+                ) {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                        isShowingParallax = false
+                    }
+                }
+                .zIndex(200)
+                .transition(.opacity)
+            }
+            
+            // Success Toast
+            if showSaveSuccess {
+                VStack {
+                    Spacer()
+                    Label("Saved to Photos", systemImage: "checkmark.circle.fill")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                        .padding()
+                        .background(.thinMaterial, in: Capsule())
+                        .padding(.bottom, 60)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .zIndex(300)
+            }
         }
         .navigationTitle(liveDream.core?.title ?? liveDream.date.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                // Save Button
+                if !store.isProcessing && liveDream.generatedImageData != nil {
+                    Button {
+                        saveImageToGallery()
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                            .foregroundStyle(.white)
+                    }
+                }
+                
+                // Regenerate Button
                 if !store.isProcessing && selectedInsight == nil {
                     Button {
                         store.regenerateDream(liveDream)
@@ -157,6 +203,22 @@ struct DreamDetailView: View {
             EntityDetailView(store: store, name: entity.name, type: entity.type)
                 .presentationDetents([.large])
                 .navigationTransition(.zoom(sourceID: entity.id, in: namespace))
+        }
+    }
+    
+    private func saveImageToGallery() {
+        guard let data = liveDream.generatedImageData, let image = UIImage(data: data) else { return }
+        
+        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        
+        withAnimation {
+            showSaveSuccess = true
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation {
+                showSaveSuccess = false
+            }
         }
     }
     
@@ -353,14 +415,31 @@ struct DreamDetailView: View {
             return nil
         }()
         
-        // Only show header content if we have an image, are generating one (AND supported), or have a summary
         if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) || liveDream.core?.summary != nil {
             VStack(spacing: 20) {
-                // Only show Lens if we have an image OR if generation is actually supported
-                if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) {
+                if let uiImage = image {
                     LensView(
-                        image: image,
-                        shadowColor: gradientColors.first ?? .black
+                        image: uiImage,
+                        shadowColor: gradientColors.first ?? .black,
+                        onTap: {
+                            // Delay for animation "Burst"
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                                    isShowingParallax = true
+                                }
+                            }
+                        }
+                    )
+                    .matchedGeometryEffect(id: "dreamImage", in: namespace)
+                    .aspectRatio(1.0, contentMode: .fit)
+                    .frame(maxWidth: 400)
+                    .contentShape(Rectangle()) // Ensures tap area is correct
+                    .opacity(isShowingParallax ? 0 : 1)
+                    
+                } else if isGeneratingImage && store.isImageGenerationAvailable {
+                     LensView(
+                        image: nil,
+                        shadowColor: .black
                     )
                     .aspectRatio(1.0, contentMode: .fit)
                     .frame(maxWidth: 400)
@@ -444,6 +523,8 @@ struct DreamDetailView: View {
         }
     }
 }
+
+// REST OF THE FILE REMAINS UNCHANGED (InsightDetailView, InsightCardView, DreamContextSection, etc.)
 
 struct InsightDetailView: View {
     @ObservedObject var store: DreamStore
