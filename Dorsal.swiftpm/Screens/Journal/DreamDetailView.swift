@@ -1,4 +1,5 @@
 import SwiftUI
+import Photos
 
 struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
@@ -14,6 +15,8 @@ struct DreamDetailView: View {
     @State private var selectedInsight: InsightType?
     
     @State private var gradientColors: [Color] = []
+    
+    @State private var showSaveSuccess = false
     
     var textColor: Color {
         let baseColor = gradientColors.first ?? .purple
@@ -119,11 +122,33 @@ struct DreamDetailView: View {
                 )
                 .zIndex(100)
             }
+            if showSaveSuccess {
+                VStack {
+                    Spacer()
+                    Label("Saved to Photos", systemImage: "checkmark.circle.fill")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                        .padding()
+                        .glassEffect(.clear.tint(Color.green.opacity(0.2)))
+                        .padding(.bottom, 60)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .zIndex(300)
+            }
         }
         .navigationTitle(liveDream.core?.title ?? liveDream.date.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if !store.isProcessing && liveDream.generatedImageData != nil && selectedInsight == nil {
+                    Button {
+                        saveImageToGallery()
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                            .foregroundStyle(.white)
+                    }
+                }
+                
                 if !store.isProcessing && selectedInsight == nil {
                     Button {
                         store.regenerateDream(liveDream)
@@ -157,6 +182,22 @@ struct DreamDetailView: View {
             EntityDetailView(store: store, name: entity.name, type: entity.type)
                 .presentationDetents([.large])
                 .navigationTransition(.zoom(sourceID: entity.id, in: namespace))
+        }
+    }
+    
+    private func saveImageToGallery() {
+        guard let data = liveDream.generatedImageData, let image = UIImage(data: data) else { return }
+        
+        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        
+        withAnimation {
+            showSaveSuccess = true
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation {
+                showSaveSuccess = false
+            }
         }
     }
     

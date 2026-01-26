@@ -316,7 +316,6 @@ struct EntityDetailView: View {
                 }
                 .scrollIndicators(.hidden)
                 
-                // MARK: - TOAST OVERLAY
                 VStack {
                     Spacer()
                     if let error = store.generationError {
@@ -324,7 +323,7 @@ struct EntityDetailView: View {
                             .font(.subheadline.bold())
                             .foregroundStyle(.white)
                             .padding()
-                            .glassEffect(.regular.tint(Color.red.opacity(0.8)))
+                            .glassEffect(.clear.tint(Color.red.opacity(0.2)))
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                             .onAppear {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) {

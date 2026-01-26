@@ -33,9 +33,10 @@ let package = Package(
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
             ],
             capabilities: [
-                .microphone(purposeString: "We need your microphone to record dreams"),
+                .microphone(purposeString: "We need your microphone to record dreams."),
                 .photoLibrary(purposeString: "We need your photo library to upload your photo."),
-                .contacts(purposeString: "We need your contacts to link people.")
+                .contacts(purposeString: "We need your contacts to link people."),
+                .photoLibraryAdd(purposeString: "To save your dream's visual representation.")
             ],
             appCategory: .healthcareFitness
         )
