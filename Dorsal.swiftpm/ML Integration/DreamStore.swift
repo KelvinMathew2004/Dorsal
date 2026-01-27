@@ -131,10 +131,7 @@ class DreamStore: NSObject, ObservableObject {
     @Published var isRecording: Bool = false
     @Published var isPaused: Bool = false
     @Published var audioPower: Float = 0.0
-    
-    @Published var isSpeechModelReady: Bool = false
-    @Published var isSpeechModelInstalling: Bool = false
-    
+        
     private let audioRecorder = LiveAudioRecorder()
     private var cancellables = Set<AnyCancellable>()
     
@@ -224,16 +221,6 @@ class DreamStore: NSObject, ObservableObject {
         audioRecorder.$isPaused
             .receive(on: RunLoop.main)
             .assign(to: \.isPaused, on: self)
-            .store(in: &cancellables)
-        
-        audioRecorder.$isModelReady
-            .receive(on: RunLoop.main)
-            .assign(to: \.isSpeechModelReady, on: self)
-            .store(in: &cancellables)
-            
-        audioRecorder.$isModelInstalling
-            .receive(on: RunLoop.main)
-            .assign(to: \.isSpeechModelInstalling, on: self)
             .store(in: &cancellables)
     }
     

@@ -56,14 +56,17 @@ private class BufferConverter {
 }
 
 class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
+    enum TranscriptionError: Error {
+        case localeNotSupported
+        case failedToSetupRecognitionStream
+    }
+
     @Published var isRecording = false
     @Published var isPaused = false
     @Published var duration: TimeInterval = 0
     @Published var audioLevel: Float = 0
     @Published var liveTranscript: String = ""
-    
-    @Published var isModelReady = false
-    @Published var isModelInstalling = false
+    private var finalizedText: String = ""
     
     private let audioEngine = AVAudioEngine()
     private var audioFile: AVAudioFile?
@@ -99,51 +102,40 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         }
     }
     
+    // MARK: - Model Preparation (Background Only)
+    
     func checkAndPrepareModels() async {
-        if isModelInstalling { return }
+        let transcriber = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
         
-        let isSupported = await SpeechTranscriber.supportedLocales.contains { $0.identifier == "en_US" }
-        guard isSupported else {
-            print("SpeechTranscriber does not support en-US on this device.")
-            DispatchQueue.main.async { self.isModelReady = true }
-            return
-        }
-        
-        let isInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == "en_US" }
-        
-        if isInstalled {
-            DispatchQueue.main.async {
-                self.isModelReady = true
-                self.isModelInstalling = false
+        do {
+            if await installed(locale: targetLocale) {
+            } else {
+                print("LiveAudioRecorder: Starting background download for SpeechTranscriber assets...")
+                try await downloadIfNeeded(for: transcriber)
             }
-        } else {
-            DispatchQueue.main.async {
-                self.isModelReady = true
-                self.isModelInstalling = true
-            }
-            
-            do {
-                print("Fallback active. Downloading HQ speech assets for en-US in background...")
-                let dummyTranscriber = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
-                
-                if let request = try await AssetInventory.assetInstallationRequest(supporting: [dummyTranscriber]) {
-                    try await request.downloadAndInstall()
-                    print("HQ Assets installed successfully.")
-                } else {
-                    print("Asset request returned nil (assets might already be present).")
-                }
-                
-                DispatchQueue.main.async {
-                    self.isModelInstalling = false
-                }
-            } catch {
-                print("Failed to download HQ speech assets: \(error)")
-                DispatchQueue.main.async {
-                    self.isModelInstalling = false
-                }
-            }
+        } catch {
+            print("LiveAudioRecorder: Background asset check failed (non-fatal): \(error)")
         }
     }
+    
+    func supported(locale: Locale) async -> Bool {
+        let supported = await SpeechTranscriber.supportedLocales
+        return supported.map { $0.identifier(.bcp47) }.contains(locale.identifier(.bcp47))
+    }
+
+    func installed(locale: Locale) async -> Bool {
+        let installed = await Set(SpeechTranscriber.installedLocales)
+        return installed.map { $0.identifier(.bcp47) }.contains(locale.identifier(.bcp47))
+    }
+
+    func downloadIfNeeded(for module: SpeechTranscriber) async throws {
+        if let downloader = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
+            try await downloader.downloadAndInstall()
+            print("LiveAudioRecorder: Speech assets installed successfully.")
+        }
+    }
+    
+    // MARK: - Audio Handling
     
     private func setupInterruptionObserver() {
         NotificationCenter.default.addObserver(
@@ -281,6 +273,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         
         DispatchQueue.main.async {
             self.liveTranscript = ""
+            self.finalizedText = ""
             self.duration = 0
             self.accumulatedTime = 0
             self.audioLevel = 0
@@ -311,13 +304,13 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             var selectedModule: any SpeechModule
             var isUsingDictation = false
             
-            let isHQInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == "en_US" }
+            let isHQInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == targetLocale.identifier }
             
             if isHQInstalled {
                 print("Starting engine with HQ SpeechTranscriber")
                 selectedModule = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
             } else {
-                print("HQ assets missing, falling back to DictationTranscriber")
+                print("HQ assets missing (or not supported), falling back to DictationTranscriber")
                 selectedModule = DictationTranscriber(locale: targetLocale, preset: .progressiveLongDictation)
                 isUsingDictation = true
             }
@@ -327,8 +320,14 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                 context.contextualStrings = [.general: keywords]
             }
             
-            let newAnalyzer = SpeechAnalyzer(modules: [selectedModule])
+            let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .processLifetime)
+            
+            let newAnalyzer = SpeechAnalyzer(modules: [selectedModule], options: options)
             try await newAnalyzer.setContext(context)
+            
+            print("Preheating analyzer...")
+            try await newAnalyzer.prepareToAnalyze(in: recordingFormat)
+            
             self.analyzer = newAnalyzer
             
             let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
@@ -351,7 +350,16 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                         if let st = selectedModule as? SpeechTranscriber {
                             for try await result in st.results {
                                 let text = String(result.text.characters)
-                                await MainActor.run { self.liveTranscript = text }
+                                let isFinal = result.isFinal
+                                
+                                await MainActor.run {
+                                    if isFinal {
+                                        self.finalizedText += (self.finalizedText.isEmpty ? "" : " ") + text
+                                        self.liveTranscript = self.finalizedText
+                                    } else {
+                                        self.liveTranscript = (self.finalizedText.isEmpty ? "" : self.finalizedText + " ") + text
+                                    }
+                                }
                             }
                         }
                     }

@@ -11,7 +11,6 @@ struct RecordView: View {
     @State private var showAvailabilityAlert = false
     @State private var availabilityMessage = ""
     
-    @State private var showInstallationAlert = false
     @State private var showProcessingAlert = false
     
     private var greetingData: (text: String, icon: String) {
@@ -239,15 +238,6 @@ struct RecordView: View {
             } message: {
                 Text(availabilityMessage)
             }
-            .alert("Speech Model Updating", isPresented: $showInstallationAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                if store.isSpeechModelInstalling {
-                    Text("The high-quality English (US) speech model is currently downloading. Please wait a moment.")
-                } else {
-                    Text("Checking speech model availability...")
-                }
-            }
             .alert("Processing in Background", isPresented: $showProcessingAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
@@ -279,11 +269,6 @@ struct RecordView: View {
         
         if store.isRecording {
             store.stopRecording(save: true)
-            return
-        }
-        
-        if !store.isSpeechModelReady {
-            showInstallationAlert = true
             return
         }
         
