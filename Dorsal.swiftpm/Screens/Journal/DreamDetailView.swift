@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import PhotosUI
 
 struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
@@ -15,8 +16,11 @@ struct DreamDetailView: View {
     @State private var selectedInsight: InsightType?
     
     @State private var gradientColors: [Color] = []
-    
     @State private var showSaveSuccess = false
+    
+    @State private var photosPickerItem: PhotosPickerItem?
+    
+    @State private var isHeaderVisible: Bool = true
     
     var textColor: Color {
         let baseColor = gradientColors.first ?? .purple
@@ -83,9 +87,9 @@ struct DreamDetailView: View {
     var isAnalyzingFatigue: Bool {
         store.isAnalyzingFatigue && liveDream.id == store.currentDreamID
     }
-    
+        
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             Theme.gradientBackground()
                 .ignoresSafeArea()
             
@@ -107,6 +111,34 @@ struct DreamDetailView: View {
                 }
                 .ignoresSafeArea()
                 .transition(.opacity)
+            }
+            
+            // Hero Image Background Layer (Sticky)
+            if let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
+                GeometryReader { geo in
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: geo.size.width, alignment: .top)
+                        .backgroundExtensionEffect()
+                        .safeAreaInset(edge: .bottom) {
+                            Color.clear.frame(height: 150)
+                        }
+                        .mask(alignment: .top) {
+                            VStack(spacing: 0) {
+                                Rectangle().fill(.black)
+                                LinearGradient(
+                                    colors: [.black, .clear],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                                .frame(height: 150)
+                            }
+                        }
+                        .opacity(isHeaderVisible ? 0.05 : 0.1)
+                        .animation(.easeInOut(duration: 1), value: isHeaderVisible)
+                }
+                .ignoresSafeArea(edges: .top)
             }
             
             contentLayer
@@ -140,6 +172,11 @@ struct DreamDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                PhotosPicker(selection: $photosPickerItem, matching: .images) {
+                    Image(systemName: "photo.badge.plus")
+                        .foregroundStyle(.white)
+                }
+                
                 if !store.isProcessing && liveDream.generatedImageData != nil && selectedInsight == nil {
                     Button {
                         saveImageToGallery()
@@ -156,6 +193,13 @@ struct DreamDetailView: View {
                         Image(systemName: "arrow.clockwise")
                             .foregroundStyle(.white)
                     }
+                }
+            }
+        }
+        .onChange(of: photosPickerItem) {
+            Task {
+                if let data = try? await photosPickerItem?.loadTransferable(type: Data.self) {
+                    updateDreamImage(with: data)
                 }
             }
         }
@@ -182,6 +226,14 @@ struct DreamDetailView: View {
             EntityDetailView(store: store, name: entity.name, type: entity.type)
                 .presentationDetents([.large])
                 .navigationTransition(.zoom(sourceID: entity.id, in: namespace))
+        }
+    }
+    
+    private func updateDreamImage(with data: Data) {
+        if let index = store.dreams.firstIndex(where: { $0.id == liveDream.id }) {
+            withAnimation {
+                store.dreams[index].generatedImageData = data
+            }
         }
     }
     
@@ -261,7 +313,7 @@ struct DreamDetailView: View {
         }
         .transition(.opacity)
     }
-    
+
     @ViewBuilder
     var mainScrollView: some View {
         ScrollView {
@@ -394,10 +446,8 @@ struct DreamDetailView: View {
             return nil
         }()
         
-        // Only show header content if we have an image, are generating one (AND supported), or have a summary
         if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) || liveDream.core?.summary != nil {
             VStack(spacing: 20) {
-                // Only show Lens if we have an image OR if generation is actually supported
                 if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) {
                     LensView(
                         image: image,
@@ -405,6 +455,11 @@ struct DreamDetailView: View {
                     )
                     .aspectRatio(1.0, contentMode: .fit)
                     .frame(maxWidth: 400)
+                    .onScrollVisibilityChange(threshold: 0.1) { visible in
+                        withAnimation {
+                            isHeaderVisible = visible
+                        }
+                    }
                 }
                 
                 if let summary = liveDream.core?.summary {
