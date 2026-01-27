@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import PhotosUI
 
 struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
@@ -14,17 +15,18 @@ struct DreamDetailView: View {
     
     @State private var selectedInsight: InsightType?
     
-    @State private var gradientColors: [Color] = []
-    
+    @State private var dominantColor: Color?
     @State private var showSaveSuccess = false
     
+    @State private var photosPickerItem: PhotosPickerItem?
+    
     var textColor: Color {
-        let baseColor = gradientColors.first ?? .purple
+        let baseColor = dominantColor ?? .purple
         return baseColor.mix(with: .white, by: 0.7)
     }
     
     var secondaryColor: Color {
-        let baseColor = gradientColors.first ?? .purple
+        let baseColor = dominantColor ?? .purple
         return baseColor.mix(with: .white, by: 0.8).opacity(0.8)
     }
     
@@ -85,28 +87,28 @@ struct DreamDetailView: View {
     }
     
     var body: some View {
-        ZStack {
-            Theme.gradientBackground()
-                .ignoresSafeArea()
+        ZStack(alignment: .top) {
+            Group {
+                if let color = dominantColor {
+                    color.mix(with: .black, by: 0.6)
+                } else {
+                    Theme.gradientBackground()
+                }
+            }
+            .ignoresSafeArea()
+            .transition(.opacity)
             
-            if !gradientColors.isEmpty {
-                Group {
-                    MeshGradient(
-                        width: 3, height: 3,
-                        points: [
-                            [0.0, 0.0], [0.5, 0.0], [1.0, 0.0],
-                            [0.0, 0.5], [0.5, 0.5], [1.0, 0.5],
-                            [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
-                        ],
-                        colors: [
-                            gradientColors[0].mix(with: .black, by: 0.6), gradientColors[1].mix(with: .black, by: 0.6), gradientColors[2].mix(with: .black, by: 0.6),
-                            gradientColors[2].mix(with: .black, by: 0.6), gradientColors[0].mix(with: .black, by: 0.6), gradientColors[1].mix(with: .black, by: 0.6),
-                            gradientColors[1].mix(with: .black, by: 0.6), gradientColors[2].mix(with: .black, by: 0.6), gradientColors[0].mix(with: .black, by: 0.6)
-                        ]
-                    )
+            if let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
+                GeometryReader { geo in
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                        .blur(radius: 30)
+                        .opacity(0.2)
                 }
                 .ignoresSafeArea()
-                .transition(.opacity)
             }
             
             contentLayer
@@ -140,6 +142,11 @@ struct DreamDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                PhotosPicker(selection: $photosPickerItem, matching: .images) {
+                    Image(systemName: "photo.badge.plus")
+                        .foregroundStyle(.white)
+                }
+                
                 if !store.isProcessing && liveDream.generatedImageData != nil && selectedInsight == nil {
                     Button {
                         saveImageToGallery()
@@ -159,10 +166,16 @@ struct DreamDetailView: View {
                 }
             }
         }
+        .onChange(of: photosPickerItem) {
+            Task {
+                if let data = try? await photosPickerItem?.loadTransferable(type: Data.self) {
+                    updateDreamImage(with: data)
+                }
+            }
+        }
         .onAppear {
             if let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
-                let color = uiImage.dominantColor
-                self.gradientColors = [color, color.opacity(0.8), color.opacity(0.6)]
+                self.dominantColor = uiImage.dominantColor
             }
         }
         .onChange(of: liveDream.generatedImageData) {
@@ -182,6 +195,16 @@ struct DreamDetailView: View {
             EntityDetailView(store: store, name: entity.name, type: entity.type)
                 .presentationDetents([.large])
                 .navigationTransition(.zoom(sourceID: entity.id, in: namespace))
+        }
+    }
+    
+    private func updateDreamImage(with data: Data) {
+        if let index = store.dreams.firstIndex(where: { $0.id == liveDream.id }) {
+            withAnimation {
+                store.dreams[index].generatedImageData = data
+            }
+            // Explicitly call persistDream to save the new image to the database
+            store.persistDream(store.dreams[index])
         }
     }
     
@@ -206,15 +229,14 @@ struct DreamDetailView: View {
             DispatchQueue.global(qos: .userInitiated).async {
                 let color = uiImage.dominantColor
                 DispatchQueue.main.async {
-                    let newColors = [color, color.opacity(0.8), color.opacity(0.6)]
                     withAnimation(.easeInOut(duration: 1.0)) {
-                        self.gradientColors = newColors
+                        self.dominantColor = color
                     }
                 }
             }
         } else {
             withAnimation(.easeInOut(duration: 1.0)) {
-                self.gradientColors = []
+                self.dominantColor = nil
             }
         }
     }
@@ -261,7 +283,7 @@ struct DreamDetailView: View {
         }
         .transition(.opacity)
     }
-    
+
     @ViewBuilder
     var mainScrollView: some View {
         ScrollView {
@@ -394,14 +416,12 @@ struct DreamDetailView: View {
             return nil
         }()
         
-        // Only show header content if we have an image, are generating one (AND supported), or have a summary
         if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) || liveDream.core?.summary != nil {
             VStack(spacing: 20) {
-                // Only show Lens if we have an image OR if generation is actually supported
                 if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) {
                     LensView(
                         image: image,
-                        shadowColor: gradientColors.first ?? .black
+                        shadowColor: dominantColor ?? .black
                     )
                     .aspectRatio(1.0, contentMode: .fit)
                     .frame(maxWidth: 400)
@@ -833,7 +853,7 @@ struct ContextRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: icon)
-                .font(.caption.bold())
+                .font(.footnote.bold())
                 .foregroundStyle(color)
                 .symbolRenderingMode(.palette)
                 .symbolColorRenderingMode(.gradient)
@@ -849,7 +869,7 @@ struct ContextRow: View {
                                 activeEntity = DreamDetailView.EntityIdentifier(name: item, type: type)
                             }
                         } label: {
-                            Text(item.capitalized).font(.caption.bold())
+                            Text(item.capitalized).font(.footnote.bold())
                         }
                         .buttonStyle(.glassProminent)
                         .tint(color.opacity(0.2))
