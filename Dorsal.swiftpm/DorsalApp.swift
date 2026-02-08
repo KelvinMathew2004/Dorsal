@@ -1,10 +1,15 @@
 import SwiftUI
 import SwiftData
+import AppIntents
 
 @main
 struct DorsalApp: App {
-    @StateObject private var store = DreamStore()
+    @StateObject private var store = DreamStore.shared
     
+    init() {
+        DorsalShortcuts.updateAppShortcutParameters()
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {

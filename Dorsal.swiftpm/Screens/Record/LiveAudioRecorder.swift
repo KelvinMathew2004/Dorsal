@@ -2,6 +2,10 @@ import SwiftUI
 import AVFoundation
 import Speech
 
+#if canImport(ActivityKit)
+import ActivityKit
+#endif
+
 private final class ConversionState: @unchecked Sendable {
     var isProcessed = false
 }
@@ -239,6 +243,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                     }
                     self.startTime = nil
                     self.audioLevel = 0
+                    DreamRecordingActivityManager.update(isPaused: true)
                 }
             }
         }
@@ -256,6 +261,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                     self.isPaused = false
                     self.startTime = Date()
                     self.startTimer()
+                    DreamRecordingActivityManager.update(isPaused: false)
                 }
             } catch {
                 print("Error resuming engine: \(error)")
@@ -294,6 +300,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             self.audioLevel = 0
             self.duration = 0
             self.accumulatedTime = 0
+            DreamRecordingActivityManager.stop()
         }
         
         return recordingURL
@@ -417,6 +424,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                 self.isPaused = false
                 self.startTime = Date()
                 self.startTimer()
+                DreamRecordingActivityManager.start()
                 completion(true)
             }
             

@@ -19,6 +19,8 @@ struct DreamFilter: Equatable {
 
 @MainActor
 class DreamStore: NSObject, ObservableObject {
+    static let shared = DreamStore()
+
     @Published var dreams: [Dream] = []
     @Published var currentDreamID: UUID?
     
@@ -764,6 +766,38 @@ class DreamStore: NSObject, ObservableObject {
                 withAnimation { self.isRecording = true; self.isPaused = false }
             }
         }
+    }
+
+    enum RecordingStartStatus {
+        case started
+        case alreadyRecording
+        case busy
+        case noMicPermission
+    }
+
+    func startRecordingFromIntent() -> RecordingStartStatus {
+        checkPermissions()
+        if isProcessing { return .busy }
+        if isRecording { return .alreadyRecording }
+        if !hasMicAccess { return .noMicPermission }
+
+        selectedTab = 0
+        startRecording()
+        return .started
+    }
+
+    func openDestination(_ destination: DorsalDestination) {
+        switch destination {
+        case .record:
+            selectedTab = 0
+        case .journal:
+            selectedTab = 1
+        case .insights:
+            selectedTab = 2
+        case .profile:
+            selectedTab = 3
+        }
+        navigationPath = NavigationPath()
     }
     
     func pauseRecording() {
