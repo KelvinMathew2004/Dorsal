@@ -73,6 +73,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
     private var recordingURL: URL?
     
     private var analyzer: SpeechAnalyzer?
+    private var currentAnalyzerFormat: AVAudioFormat?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private var analysisTask: Task<Void, Never>?
     private let bufferConverter = BufferConverter()
@@ -113,8 +114,44 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                 print("LiveAudioRecorder: Starting background download for SpeechTranscriber assets...")
                 try await downloadIfNeeded(for: transcriber)
             }
+            
+            await prepareAnalyzer()
+            
         } catch {
             print("LiveAudioRecorder: Background asset check failed (non-fatal): \(error)")
+        }
+    }
+    
+    private func getSelectedModule() async -> any SpeechModule {
+        let isHQInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == targetLocale.identifier }
+        
+        if isHQInstalled {
+            print("🔊 Using High-Quality SpeechTranscriber")
+            return SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
+        } else {
+            print("⚠️ Using Fallback DictationTranscriber")
+            return DictationTranscriber(locale: targetLocale, preset: .progressiveLongDictation)
+        }
+    }
+    
+    private func prepareAnalyzer() async {
+        let selectedModule = await getSelectedModule()
+        guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [selectedModule]) else {
+            print("LiveAudioRecorder: Skipping preheat; no best available format determined without engine.")
+            return
+        }
+        
+        let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .processLifetime)
+        let newAnalyzer = SpeechAnalyzer(modules: [selectedModule], options: options)
+        
+        do {
+            print("LiveAudioRecorder: Preheating analyzer initially...")
+            try await newAnalyzer.prepareToAnalyze(in: format)
+            
+            self.analyzer = newAnalyzer
+            self.currentAnalyzerFormat = format
+        } catch {
+            print("LiveAudioRecorder: Failed to preheat analyzer: \(error)")
         }
     }
     
@@ -237,10 +274,15 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         inputContinuation = nil
         
         let _ = Task { [weak self] in
-            try? await self?.analyzer?.finalizeAndFinishThroughEndOfInput()
+            if let analyzer = self?.analyzer {
+                do {
+                    try await analyzer.finalizeAndFinishThroughEndOfInput()
+                } catch {
+                    print("Analyzer finish ignored (likely already finished or cancelled): \(error)")
+                }
+            }
             self?.analysisTask?.cancel()
             self?.analysisTask = nil
-            self?.analyzer = nil
         }
         
         audioFile = nil
@@ -269,7 +311,6 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         }
         
         analysisTask?.cancel()
-        analyzer = nil
         
         DispatchQueue.main.async {
             self.liveTranscript = ""
@@ -301,53 +342,47 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         }
         
         do {
-            var selectedModule: any SpeechModule
-            var isUsingDictation = false
+            if self.analyzer == nil {
+                print("LiveAudioRecorder: Analyzer was not preheated or missing. Creating now...")
+                let selectedModule = await getSelectedModule()
+                let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [selectedModule]) ?? recordingFormat
+                self.currentAnalyzerFormat = format
+                
+                let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .processLifetime)
+                let newAnalyzer = SpeechAnalyzer(modules: [selectedModule], options: options)
+                
+                try? await newAnalyzer.prepareToAnalyze(in: format)
+                
+                self.analyzer = newAnalyzer
+            }
             
-            let isHQInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == targetLocale.identifier }
-            
-            if isHQInstalled {
-                print("Starting engine with HQ SpeechTranscriber")
-                selectedModule = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
-            } else {
-                print("HQ assets missing (or not supported), falling back to DictationTranscriber")
-                selectedModule = DictationTranscriber(locale: targetLocale, preset: .progressiveLongDictation)
-                isUsingDictation = true
+            guard let analyzer = self.analyzer, let analyzerFormat = self.currentAnalyzerFormat else {
+                print("Error: Analyzer failed to initialize.")
+                DispatchQueue.main.async { completion(false) }
+                return
             }
             
             let context = AnalysisContext()
             if !keywords.isEmpty {
                 context.contextualStrings = [.general: keywords]
             }
-            
-            let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .processLifetime)
-            
-            let newAnalyzer = SpeechAnalyzer(modules: [selectedModule], options: options)
-            try await newAnalyzer.setContext(context)
-            
-            print("Preheating analyzer...")
-            try await newAnalyzer.prepareToAnalyze(in: recordingFormat)
-            
-            self.analyzer = newAnalyzer
+            try await analyzer.setContext(context)
             
             let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
             self.inputContinuation = continuation
             
-            let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [selectedModule]) ?? recordingFormat
-            
             self.analysisTask = Task {
                 do {
-                    try await newAnalyzer.start(inputSequence: stream)
+                    try await analyzer.start(inputSequence: stream)
                     
-                    if isUsingDictation {
-                        if let dt = selectedModule as? DictationTranscriber {
+                    let modules = await analyzer.modules
+                    if let module = modules.first {
+                        if let dt = module as? DictationTranscriber {
                             for try await result in dt.results {
                                 let text = String(result.text.characters)
                                 await MainActor.run { self.liveTranscript = text }
                             }
-                        }
-                    } else {
-                        if let st = selectedModule as? SpeechTranscriber {
+                        } else if let st = module as? SpeechTranscriber {
                             for try await result in st.results {
                                 let text = String(result.text.characters)
                                 let isFinal = result.isFinal

@@ -41,16 +41,17 @@ class DreamAnalyzer {
         let session = makeSession()
         
         let prompt = """
-        Create a prompt for an AI image generator based on this dream transcript: "\(transcript)".
-        
+        Create a descriptive image prompt based on the visual setting of this dream transcript: "\(transcript)".
+
         CRITICAL RULES:
-        1. Do NOT describe any people, men, women, children, or specific characters. The image generator will reject the prompt if it detects a person description.
-        2. Focus ENTIRELY on the setting, landscape, objects, colors, and lighting.
-        3. Describe objects literally and with their natural colors (e.g., "a yellow school bus", "a green tree"). Do NOT make it abstract or surreal unless the dream explicitly describes impossible geometry.
-        4. If a character is central, describe only their shadow or presence, or focus on the object they are interacting with.
-        5. Keep it realistic, grounded, and under 3 sentences.
+        1. NO HUMANS: The image must contain NO people, men, women, children, faces, or silhouettes.
+        2. SETTING FIRST: Focus primarily on the location, lighting, atmosphere, and inanimate objects.
+        3. NO SWIRLS: The composition must be stable and grounded. Do NOT include swirling patterns, spirals, or vortex distortions. Colors can be unrealistic if it makes the image more appealing.
+        4. GROUNDED: Describe the scene literally.
+        5. SAFETY: Ensure the description is calm and Safe For Work.
+        6. LENGTH: Keep it under 3 sentences.
         """
-        
+    
         let res = try await session.respond(to: prompt, generating: VisualPrompt.self)
         return res.content.prompt
     }

@@ -18,11 +18,9 @@ struct DreamDetailView: View {
     @State private var dominantColor: Color?
     @State private var showSaveSuccess = false
     
-    @State private var photosPickerItem: PhotosPickerItem?
-    
     var textColor: Color {
-        let baseColor = dominantColor ?? .purple
-        return baseColor.mix(with: .white, by: 0.7)
+        let baseColor = dominantColor ?? Color(red: 0.10, green: 0.05, blue: 0.20)
+        return baseColor.mix(with: .white, by: 0.9)
     }
     
     var secondaryColor: Color {
@@ -124,6 +122,7 @@ struct DreamDetailView: View {
                 )
                 .zIndex(100)
             }
+            
             if showSaveSuccess {
                 VStack {
                     Spacer()
@@ -142,34 +141,36 @@ struct DreamDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                PhotosPicker(selection: $photosPickerItem, matching: .images) {
-                    Image(systemName: "photo.badge.plus")
-                        .foregroundStyle(.white)
-                }
-                
-                if !store.isProcessing && liveDream.generatedImageData != nil && selectedInsight == nil {
-                    Button {
-                        saveImageToGallery()
-                    } label: {
-                        Image(systemName: "square.and.arrow.down")
-                            .foregroundStyle(.white)
-                    }
-                }
-                
                 if !store.isProcessing && selectedInsight == nil {
-                    Button {
-                        store.regenerateDream(liveDream)
+                    Menu {
+                        if liveDream.generatedImageData != nil {
+                            Button {
+                                saveImageToGallery()
+                            } label: {
+                                Label("Save Image", systemImage: "square.and.arrow.down")
+                                    .tint(textColor)
+                            }
+                        }
+                        
+                        if store.isImageGenerationAvailable {
+                            Button {
+                                store.regenerateDreamImage(liveDream)
+                            } label: {
+                                Label("Regenerate Image", systemImage: "sparkles")
+                                    .tint(textColor)
+                            }
+                        }
+                        
+                        Button {
+                            store.regenerateDream(liveDream)
+                        } label: {
+                            Label("Regenerate Analysis", systemImage: "arrow.clockwise")
+                                .tint(textColor)
+                        }
                     } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundStyle(.white)
+                        Image(systemName: "ellipsis")
+                            .foregroundStyle(textColor)
                     }
-                }
-            }
-        }
-        .onChange(of: photosPickerItem) {
-            Task {
-                if let data = try? await photosPickerItem?.loadTransferable(type: Data.self) {
-                    updateDreamImage(with: data)
                 }
             }
         }
@@ -195,16 +196,6 @@ struct DreamDetailView: View {
             EntityDetailView(store: store, name: entity.name, type: entity.type)
                 .presentationDetents([.large])
                 .navigationTransition(.zoom(sourceID: entity.id, in: namespace))
-        }
-    }
-    
-    private func updateDreamImage(with data: Data) {
-        if let index = store.dreams.firstIndex(where: { $0.id == liveDream.id }) {
-            withAnimation {
-                store.dreams[index].generatedImageData = data
-            }
-            // Explicitly call persistDream to save the new image to the database
-            store.persistDream(store.dreams[index])
         }
     }
     
@@ -421,7 +412,7 @@ struct DreamDetailView: View {
                 if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) {
                     LensView(
                         image: image,
-                        shadowColor: dominantColor ?? .black
+                        shadowColor: dominantColor ?? Color(red: 0.05, green: 0.02, blue: 0.10)
                     )
                     .aspectRatio(1.0, contentMode: .fit)
                     .frame(maxWidth: 400)

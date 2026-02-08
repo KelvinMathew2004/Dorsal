@@ -832,6 +832,63 @@ class DreamStore: NSObject, ObservableObject {
         runAnalysis(for: dream.id, transcript: dream.rawTranscript, audioURL: nil, existingFatigue: existingFatigue)
     }
     
+    func regenerateDreamImage(_ dream: Dream) {
+        guard !isProcessing, isImageGenerationAvailable else { return }
+        guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
+        
+        currentAnalysisTask?.cancel()
+        
+        isProcessing = true
+        currentDreamID = dream.id
+        
+        // Capture existing image data for rollback
+        let previousImageData = dreams[index].generatedImageData
+        
+        // Clear existing image so the loading/gradient state appears
+        dreams[index].generatedImageData = nil
+        persistDream(dreams[index])
+        
+        let transcript = dream.rawTranscript
+        
+        currentAnalysisTask = Task {
+            do {
+                let core = dreams[index].core
+                
+                // Generate prompt
+                let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: transcript)
+                
+                let places = core?.places ?? []
+                let emotions = core?.emotions ?? []
+                
+                let data = try await generateImageFromPrompt(prompt: sanitizedPrompt, places: places, emotions: emotions)
+                
+                await MainActor.run {
+                    if let idx = self.dreams.firstIndex(where: { $0.id == dream.id }) {
+                        self.dreams[idx].generatedImageData = data
+                        self.persistDream(self.dreams[idx])
+                    }
+                    self.isProcessing = false
+                }
+            } catch {
+                print("Image regeneration error: \(error)")
+                await MainActor.run {
+                    if let idx = self.dreams.firstIndex(where: { $0.id == dream.id }) {
+                        // Restore previous image on failure
+                        self.dreams[idx].generatedImageData = previousImageData
+                        
+                        if let dreamError = error as? DreamError {
+                            self.dreams[idx].analysisError = dreamError.localizedDescription
+                        } else {
+                            self.dreams[idx].analysisError = "Could not regenerate image. \(error.localizedDescription)"
+                        }
+                        self.persistDream(self.dreams[idx])
+                    }
+                    self.isProcessing = false
+                }
+            }
+        }
+    }
+    
     private func runAnalysis(for dreamID: UUID, transcript: String, audioURL: URL?, existingFatigue: Int?) {
         currentAnalysisTask = Task {
             do {

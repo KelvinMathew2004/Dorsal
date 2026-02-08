@@ -28,6 +28,7 @@ actor ImageGenerationService {
         }
         
         do {
+            print("🎨 Generating with prompt:", prompt)
             return try await performGeneration(prompt: prompt)
         } catch {
             var fallbackPrompt = ""
