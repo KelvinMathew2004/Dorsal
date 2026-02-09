@@ -275,7 +275,7 @@ class DreamStore: NSObject, ObservableObject {
                 }
             } else if status == .notDetermined {
                 do {
-                    let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                    let granted = try await center.requestAuthorization(options: [.alert, .sound, .timeSensitive])
                     await MainActor.run {
                         self.hasNotificationAccess = granted
                         if granted && self.isReminderEnabled {
