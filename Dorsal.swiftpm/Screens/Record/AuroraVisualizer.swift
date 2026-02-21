@@ -3,6 +3,7 @@ import MetalKit
 #if canImport(UIKit)
 import UIKit
 #endif
+import QuartzCore
 
 // MARK: - SWIFTUI VIEW
 struct AuroraVisualizer: View {
@@ -184,9 +185,9 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
     var commandQueue: MTLCommandQueue!
     var pipelineState: MTLRenderPipelineState!
     
-    var startTime: Date = Date()
+    var startTime: CFTimeInterval = CACurrentMediaTime()
     var pausedTimeAccumulator: TimeInterval = 0
-    var lastDrawTime: Date = Date()
+    var lastDrawTime: CFTimeInterval = CACurrentMediaTime()
     
     var isPaused: Bool = false
     var isRecording: Bool = false
@@ -236,25 +237,29 @@ class AuroraCoordinator: NSObject, MTKViewDelegate {
     func draw(in view: MTKView) {
         guard let drawable = view.currentDrawable,
               let desc = view.currentRenderPassDescriptor,
-              let pipeline = pipelineState else { return }
+              let pipeline = pipelineState else {
+            return
+        }
         
-        currentPower += (targetPower - currentPower) * 0.1
-        currentColor = mix(currentColor, targetColor, t: 0.05)
+        let now = CACurrentMediaTime()
+        let deltaTimeRaw = Float(now - lastDrawTime)
+        let deltaTime = min(max(deltaTimeRaw, 1.0 / 120.0), 1.0 / 30.0)
+
+        let powerSmoothing = min(1.0, deltaTime * 8.0)
+        currentPower += (targetPower - currentPower) * powerSmoothing
+        currentColor = mix(currentColor, targetColor, t: min(1.0, deltaTime * 4.0))
         
         let commandBuffer = commandQueue.makeCommandBuffer()!
         let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: desc)!
         
         encoder.setRenderPipelineState(pipeline)
         
-        let now = Date()
-        let deltaTime = Float(now.timeIntervalSince(lastDrawTime))
-        
         if isPaused {
             pausedTimeAccumulator += Double(deltaTime)
         }
         
         let speedFactor: Float = 0.5
-        let time = Float(now.timeIntervalSince(startTime) - pausedTimeAccumulator) * speedFactor
+        let time = Float(now - startTime - pausedTimeAccumulator) * speedFactor
         
         lastDrawTime = now
         

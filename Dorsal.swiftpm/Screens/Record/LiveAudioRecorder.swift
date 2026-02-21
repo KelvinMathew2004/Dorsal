@@ -1,6 +1,7 @@
 import SwiftUI
-import AVFoundation
+@preconcurrency import AVFoundation
 import Speech
+import UIKit
 
 private final class ConversionState: @unchecked Sendable {
     var isProcessed = false

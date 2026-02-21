@@ -115,8 +115,9 @@ struct RecordView: View {
                                     .multilineTextAlignment(.center)
                             }
                             .padding(24)
-                            .frame(maxWidth: .infinity)
+                            .frame(maxWidth: 520)
                             .glassEffect(.clear.tint(Color.black.opacity(0.5)), in: RoundedRectangle(cornerRadius: 24))
+                            .frame(maxWidth: .infinity)
                             .padding(.horizontal, 30)
                             .transition(.scale.combined(with: .opacity))
                         } else {
@@ -347,11 +348,12 @@ private struct QuestionCard: View {
             }
         }
         .padding(24)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: 520)
         .glassEffect(
-            .clear.tint(isSatisfied ? Color.green.opacity(0.15) : Color.black.opacity(0.5)),
+            .clear.tint(isSatisfied ? Color.green.opacity(0.15) : Color.black.opacity(0.7)),
             in: RoundedRectangle(cornerRadius: 24)
         )
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 30)
         .offset(y: isSatisfied ? -20 : 0)
         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isSatisfied)
