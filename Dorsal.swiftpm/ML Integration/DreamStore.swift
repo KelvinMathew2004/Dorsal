@@ -47,6 +47,10 @@ class DreamStore: NSObject, ObservableObject {
     @AppStorage("isComplexVisualizerEnabled") var isComplexVisualizerEnabled: Bool = true {
         didSet { objectWillChange.send() }
     }
+
+    @AppStorage("isDemoModeEnabled") var isDemoModeEnabled: Bool = true {
+        didSet { objectWillChange.send() }
+    }
     
     @AppStorage("profileColorComponents") var profileColorComponents: String = ""
 
@@ -133,7 +137,9 @@ class DreamStore: NSObject, ObservableObject {
     @Published var audioPower: Float = 0.0
         
     private let audioRecorder = LiveAudioRecorder()
+    private let demoResourceName = "DemoDream"
     private var cancellables = Set<AnyCancellable>()
+    private var demoWorkItem: DispatchWorkItem?
     
     @Published var activeQuestion: ChecklistItem?
     @Published var isQuestionSatisfied: Bool = false
@@ -193,6 +199,11 @@ class DreamStore: NSObject, ObservableObject {
         checkPermissions()
         checkNotificationStatus()
         setupObservers()
+        audioRecorder.onDemoFinished = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.stopRecording(save: true)
+            }
+        }
         
         Task {
             await checkImageGenerationSupport()
@@ -758,19 +769,38 @@ class DreamStore: NSObject, ObservableObject {
     }
 
     func startRecording() {
-        if !hasMicAccess {
-            showPermissionAlert = true
-            return
-        }
-
         currentTranscript = ""
         answeredQuestions = []
         isQuestionSatisfied = false
         recommendationCache = [:]
         activeQuestion = questions.first
-        
+
         let keywords = questions.flatMap { $0.keywords }
-        
+
+        if isDemoModeEnabled {
+            // Hardcode demo duration to 15 seconds to automatically stop
+            demoWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let self = self, self.isRecording else { return }
+                self.stopRecording(save: true)
+            }
+            demoWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 16.0, execute: workItem)
+            
+            audioRecorder.startDemoRecording(resourceName: demoResourceName, keywords: keywords) { [weak self] success in
+                Task { @MainActor [weak self] in
+                    guard let self = self, success else { return }
+                    withAnimation { self.isRecording = true; self.isPaused = false }
+                }
+            }
+            return
+        }
+
+        if !hasMicAccess {
+            showPermissionAlert = true
+            return
+        }
+
         audioRecorder.startRecording(keywords: keywords) { [weak self] success in
             Task { @MainActor [weak self] in
                 guard let self = self, success else { return }
@@ -790,15 +820,30 @@ class DreamStore: NSObject, ObservableObject {
     }
         
     func stopRecording(save: Bool) {
+        guard isRecording else { return } // Protects against race conditions (e.g., hitting Cancel precisely when demo auto-finishes)
+        
+        demoWorkItem?.cancel() // Clear the timer
+        
         guard let url = audioRecorder.stopRecording() else {
             withAnimation { isRecording = false; isPaused = false }
             return
         }
         withAnimation { isRecording = false; isPaused = false }
         
-        if save && !currentTranscript.isEmpty {
-            processDream(transcript: currentTranscript, audioURL: url)
+        var finalTranscript = currentTranscript
+        
+        // Guarantee successful demo navigation with a high-quality dream that answers all questions
+        if save && isDemoModeEnabled {
+            finalTranscript = "I just woke up and I'm trying to piece together this crazy dream. I was back inside my childhood home, but it was somehow located in the middle of a dense, glowing forest. My mom was there with me, and we were just talking, but then my friend walked in and suddenly turned into a giant, fluffy bear. I felt really scared and confused at first, but then I was just incredibly happy and calm. The whole thing felt like it lasted for about an hour. It was so vivid. I'm pretty sure this triggered because yesterday I watched a movie about wildlife."
         }
+        
+        if save && !finalTranscript.isEmpty {
+            // Delay slightly to allow the recording UI to close fully, preventing Navigation/Loading race conditions
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.processDream(transcript: finalTranscript, audioURL: url)
+            }
+        }
+        
         if !save { currentTranscript = "" }
     }
 

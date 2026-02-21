@@ -218,7 +218,24 @@ struct RecordView: View {
             .navigationTitle("Record")
             .navigationBarTitleColor(Theme.accent)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem() {
+                    Button {
+                        withAnimation {
+                            store.isDemoModeEnabled.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: store.isDemoModeEnabled ? "play.circle.fill" : "play.circle")
+                            Text(store.isDemoModeEnabled ? "Demo Active" : "Demo Mode")
+                        }
+                    }
+                    .disabled(store.isRecording)
+                    .contentTransition(.symbolEffect(.replace))
+                }
+                
+                ToolbarSpacer()
+
+                ToolbarItem() {
                     if !store.isRecording {
                         Button {
                             withAnimation {
