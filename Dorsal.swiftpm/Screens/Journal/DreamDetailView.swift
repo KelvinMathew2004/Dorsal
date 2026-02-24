@@ -437,56 +437,64 @@ struct DreamDetailView: View {
     var metricsSection: some View {
         if let fatigue = liveDream.voiceFatigue {
             HStack(spacing: 24) {
+                
+                // MARK: - Vocal Fatigue Card (ZStack)
                 NavigationLink(destination: TrendDetailView(metric: .fatigue, store: store)) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("Vocal Fatigue", systemImage: "battery.50")
-                            .font(.headline)
-                            .foregroundStyle(.red)
+                    ZStack(alignment: .trailing) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Vocal Fatigue", systemImage: "battery.50")
+                                .font(.headline)
+                                .foregroundStyle(.red)
+                            
+                            Spacer()
+                            
+                            Text("\(fatigue)%").font(.title3.bold()).foregroundStyle(.white)
+                            
+                            ProgressBarView(value: Double(fatigue), total: 100, color: .red)
+                        }
+                        .padding(20)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                         
-                        Spacer()
-                        
-                        Text("\(fatigue)%").font(.title3.bold()).foregroundStyle(.white)
-                        
-                        ProgressBarView(value: Double(fatigue), total: 100, color: .red)
-                    }
-                    .padding(20)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
-                    .overlay(alignment: .trailing) {
                         Image(systemName: "chevron.right")
                             .font(.body.bold())
                             .foregroundStyle(secondaryColor)
                             .padding(.trailing, 20)
                     }
+                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
                     .contentShape(RoundedRectangle(cornerRadius: 24))
                 }
                 
+                // MARK: - Tone Card (HStack)
                 if let tone = liveDream.core?.tone?.label {
                     NavigationLink(destination: TrendDetailView(metric: .tone, store: store)) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Label("Tone", systemImage: "waveform")
-                                .font(.headline)
-                                .foregroundStyle(.orange)
-                            
-                            Spacer()
-                            
-                            Text(tone.capitalized).font(.title3.bold()).foregroundStyle(.white)
-                            
-                            if let conf = liveDream.core?.tone?.confidence {
-                                Text("\(conf)% Confidence")
-                                    .font(.caption)
-                                    .foregroundStyle(secondaryColor)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("Tone", systemImage: "waveform")
+                                    .font(.headline)
+                                    .foregroundStyle(.orange)
+                                
+                                Spacer()
+                                
+                                Text(tone.capitalized)
+                                    .font(.title3.bold())
+                                    .foregroundStyle(.white)
+                                    .multilineTextAlignment(.leading) // Forces wrapped text to align left
+                                    .minimumScaleFactor(0.5)
+                                
+                                if let conf = liveDream.core?.tone?.confidence {
+                                    Text("\(conf)% Confidence")
+                                        .font(.caption)
+                                        .foregroundStyle(secondaryColor)
+                                }
                             }
-                        }
-                        .padding(20)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
-                        .overlay(alignment: .trailing) {
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                            
                             Image(systemName: "chevron.right")
                                 .font(.body.bold())
                                 .foregroundStyle(secondaryColor)
-                                .padding(.trailing, 20)
                         }
+                        .padding(20)
+                        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
                         .contentShape(RoundedRectangle(cornerRadius: 24))
                     }
                 }

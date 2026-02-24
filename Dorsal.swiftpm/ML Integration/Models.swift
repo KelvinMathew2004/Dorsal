@@ -103,7 +103,7 @@ struct DreamExtraAnalysis: Codable, Sendable, Hashable {
 
 @Generable
 struct ToneAnalysis: Codable, Sendable, Hashable {
-    @Guide(description: "Tone label. Single word.")
+    @Guide(description: "Tone label. One word only.")
     var label: String?
     
     @Guide(description: "Confidence score for tone detection.", .range(0...100))

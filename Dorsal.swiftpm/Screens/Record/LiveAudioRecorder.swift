@@ -381,7 +381,16 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                         if let dt = module as? DictationTranscriber {
                             for try await result in dt.results {
                                 let text = String(result.text.characters)
-                                await MainActor.run { self.liveTranscript = text }
+                                let isFinal = result.isFinal
+                                
+                                await MainActor.run {
+                                    if isFinal {
+                                        self.finalizedText += (self.finalizedText.isEmpty ? "" : " ") + text
+                                        self.liveTranscript = self.finalizedText
+                                    } else {
+                                        self.liveTranscript = (self.finalizedText.isEmpty ? "" : self.finalizedText + " ") + text
+                                    }
+                                }
                             }
                         } else if let st = module as? SpeechTranscriber {
                             for try await result in st.results {
