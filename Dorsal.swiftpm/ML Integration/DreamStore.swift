@@ -600,13 +600,26 @@ class DreamStore: NSObject, ObservableObject {
     
     func getRecommendations(for item: ChecklistItem) -> [String] {
         if let cached = recommendationCache[item.id] { return cached }
+        
         let recs: [String] = switch item.contextType {
-            case "person": ["My Mom", "A Friend", "Stranger"] + Array(Set(dreams.flatMap { $0.core?.people ?? [] })).prefix(3)
-            case "place": ["Home", "School", "Work"] + Array(Set(dreams.flatMap { $0.core?.places ?? [] })).prefix(3)
-            case "emotion": ["Scared", "Happy", "Confused"] + Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })).prefix(3)
-            default: []
+        case "person":
+            Array(Set(dreams.flatMap { $0.core?.people ?? [] })) + ["My Mom", "A Friend", "Stranger"]
+        case "place":
+            Array(Set(dreams.flatMap { $0.core?.places ?? [] })) + ["Home", "School", "Work"]
+        case "emotion":
+            Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })) + ["Scared", "Happy", "Confused"]
+        case "duration":
+            ["A few minutes", "An hour", "Felt like forever"]
+        case "context":
+            ["Watched a movie", "Work", "A conversation"]
+        default:
+            []
         }
-        let final = Array(Set(recs))
+        
+        // Remove duplicates case-insensitively while preserving the original array order
+        var seen = Set<String>()
+        let final = recs.filter { seen.insert($0.lowercased()).inserted }
+        
         recommendationCache[item.id] = final
         return final
     }
