@@ -139,7 +139,6 @@ class DreamStore: NSObject, ObservableObject {
     private let audioRecorder = LiveAudioRecorder()
     private let demoResourceName = "DemoDream"
     private var cancellables = Set<AnyCancellable>()
-    private var demoWorkItem: DispatchWorkItem?
     
     @Published var activeQuestion: ChecklistItem?
     @Published var isQuestionSatisfied: Bool = false
@@ -778,15 +777,6 @@ class DreamStore: NSObject, ObservableObject {
         let keywords = questions.flatMap { $0.keywords }
 
         if isDemoModeEnabled {
-            // Hardcode demo duration to 15 seconds to automatically stop
-            demoWorkItem?.cancel()
-            let workItem = DispatchWorkItem { [weak self] in
-                guard let self = self, self.isRecording else { return }
-                self.stopRecording(save: true)
-            }
-            demoWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 16.0, execute: workItem)
-            
             audioRecorder.startDemoRecording(resourceName: demoResourceName, keywords: keywords) { [weak self] success in
                 Task { @MainActor [weak self] in
                     guard let self = self, success else { return }
@@ -820,10 +810,7 @@ class DreamStore: NSObject, ObservableObject {
     }
         
     func stopRecording(save: Bool) {
-        guard isRecording else { return } // Protects against race conditions (e.g., hitting Cancel precisely when demo auto-finishes)
-        
-        demoWorkItem?.cancel() // Clear the timer
-        
+        guard isRecording else { return }
         guard let url = audioRecorder.stopRecording() else {
             withAnimation { isRecording = false; isPaused = false }
             return
@@ -838,10 +825,7 @@ class DreamStore: NSObject, ObservableObject {
         }
         
         if save && !finalTranscript.isEmpty {
-            // Delay slightly to allow the recording UI to close fully, preventing Navigation/Loading race conditions
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.processDream(transcript: finalTranscript, audioURL: url)
-            }
+            processDream(transcript: finalTranscript, audioURL: url)
         }
         
         if !save { currentTranscript = "" }

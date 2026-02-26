@@ -374,14 +374,9 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
 
             let demoFile = try AVAudioFile(forReading: demoURL)
             let fileFormat = demoFile.processingFormat
-            
-            // Speed up demo playback seamlessly
-            let playbackRate: Float = 1.5
 
             let player = try AVAudioPlayer(contentsOf: demoURL)
             player.volume = demoPlaybackVolume
-            player.enableRate = true
-            player.rate = playbackRate
             player.prepareToPlay()
             player.play()
             self.demoPlayer = player
@@ -452,6 +447,9 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                             }
                         }
                     }
+                    
+                } catch is CancellationError {
+                    // Ignore expected cancellation
                 } catch {
                     print("Speech Analysis Error: \(error)")
                 }
@@ -478,9 +476,8 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                         framesRead += AVAudioFramePosition(buffer.frameLength)
                         self.handleDemoBuffer(buffer: buffer, targetFormat: analyzerFormat)
 
-                        // Adjust buffer feeding sleep matching the speed up rate
                         let seconds = Double(buffer.frameLength) / fileFormat.sampleRate
-                        try await Task.sleep(nanoseconds: UInt64((seconds / Double(playbackRate)) * 1_000_000_000))
+                        try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                     }
 
                     if Task.isCancelled { return }
@@ -488,6 +485,8 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                     if !Task.isCancelled {
                         await MainActor.run { self.onDemoFinished?() }
                     }
+                } catch is CancellationError {
+                    // Ignore expected cancellation
                 } catch {
                     print("Demo playback failed: \(error)")
                     if !Task.isCancelled {
@@ -678,11 +677,11 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                 sum += sample * sample
             }
             let rms = sqrt(sum / Float(frameLength))
+            
             let normalized = min(max(rms * 10.0, 0), 1.0)
-            let scaled = normalized * demoPlaybackVolume
 
             Task { @MainActor in
-                self.audioLevel = scaled
+                self.audioLevel = normalized
             }
         }
     }
