@@ -94,7 +94,7 @@ private struct NativeWaterView: View {
             .scaleEffect(y: -1) // Flip vertically
             .offset(y: screenSize.height * 0.4) // Re-align horizon
             .blur(radius: 2.0)
-            .opacity(isRecording ? 0.8 : 0.5)
+            .opacity(isRecording ? 0.3 : 0.1)
             .mask(
                 // FADE IN MASK
                 LinearGradient(

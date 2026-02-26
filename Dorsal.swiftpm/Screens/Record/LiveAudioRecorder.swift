@@ -22,7 +22,7 @@ private class BufferConverter {
             return buffer
         }
         
-        if converter == nil || converter?.outputFormat != format {
+        if converter == nil || converter?.outputFormat != format || converter?.inputFormat != inputFormat {
             converter = AVAudioConverter(from: inputFormat, to: format)
             converter?.primeMethod = .none
         }
@@ -268,6 +268,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
         if audioEngine.isRunning {
             audioEngine.stop()
         }
+        audioEngine.reset() // Clear any stale hardware states
         let inputNode = audioEngine.inputNode
         inputNode.removeTap(onBus: 0)
         
@@ -279,11 +280,12 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                 do {
                     try await analyzer.finalizeAndFinishThroughEndOfInput()
                 } catch {
-                    print("Analyzer finish ignored (likely already finished or cancelled): \(error)")
+                    // Ignore - Expected if task was cancelled or finished
                 }
             }
             self?.analysisTask?.cancel()
             self?.analysisTask = nil
+            self?.analyzer = nil
         }
         
         audioFile = nil
@@ -409,6 +411,8 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                         }
                     }
                     
+                } catch is CancellationError {
+                    // Ignore expected cancellation
                 } catch {
                     print("Speech Analysis Error: \(error)")
                 }
