@@ -1,5 +1,18 @@
 import SwiftUI
 import FoundationModels
+import TipKit
+
+struct DemoModeTip: Tip {
+    var title: Text {
+        Text("Demo Mode")
+    }
+    var message: Text? {
+        Text("Uses short pre-recorded audio and fixed transcription. Tap to turn off, for real audio recording and transcription.")
+    }
+    var image: Image? {
+        Image(systemName: "play.circle")
+    }
+}
 
 struct RecordView: View {
     @ObservedObject var store: DreamStore
@@ -223,6 +236,7 @@ struct RecordView: View {
                         withAnimation {
                             store.isDemoModeEnabled.toggle()
                         }
+                        DemoModeTip().invalidate(reason: .actionPerformed)
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: store.isDemoModeEnabled ? "play.circle.fill" : "play.circle")
@@ -231,6 +245,7 @@ struct RecordView: View {
                     }
                     .disabled(store.isRecording)
                     .contentTransition(.symbolEffect(.replace))
+                    .popoverTip(DemoModeTip(), arrowEdge: .top)
                 }
                 
                 ToolbarSpacer()

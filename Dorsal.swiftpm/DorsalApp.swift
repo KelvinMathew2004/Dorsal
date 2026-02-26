@@ -1,9 +1,17 @@
 import SwiftUI
 import SwiftData
+import TipKit
 
 @main
 struct DorsalApp: App {
     @StateObject private var store = DreamStore()
+    
+    init() {
+        try? Tips.configure([
+            .displayFrequency(.immediate),
+            .datastoreLocation(.applicationDefault)
+        ])
+    }
     
     var body: some Scene {
         WindowGroup {
