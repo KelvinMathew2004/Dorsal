@@ -1038,12 +1038,47 @@ class DreamStore: NSObject, ObservableObject {
     
     func persistDream(_ dream: Dream) {
         guard let context = modelContext else { return }
-        let id = dream.id
-        do {
-            try context.delete(model: SavedDream.self, where: #Predicate { $0.id == id })
-        } catch { print("Delete error: \(error)") }
-        let saved = SavedDream(from: dream)
-        context.insert(saved)
+        let dreamID = dream.id
+        
+        let descriptor = FetchDescriptor<SavedDream>(predicate: #Predicate { $0.id == dreamID })
+        let saved: SavedDream
+        
+        if let existing = try? context.fetch(descriptor).first {
+            saved = existing
+        } else {
+            saved = SavedDream(id: dreamID)
+            context.insert(saved)
+        }
+        
+        // Map properties manually
+        saved.date = dream.date
+        saved.rawText = dream.rawTranscript
+        saved.generatedImageData = dream.generatedImageData
+        saved.isBookmarked = dream.isBookmarked
+        saved.voiceFatigue = dream.voiceFatigue ?? 0
+        
+        if let core = dream.core {
+            saved.title = core.title ?? ""
+            saved.summary = core.summary ?? ""
+            saved.people = core.people ?? []
+            saved.places = core.places ?? []
+            saved.emotions = core.emotions ?? []
+            saved.symbols = core.symbols ?? []
+            saved.interpretation = core.interpretation ?? ""
+            saved.actionableAdvice = core.actionableAdvice ?? ""
+            saved.toneLabel = core.tone?.label ?? ""
+            saved.toneConfidence = core.tone?.confidence ?? 0
+        }
+        
+        if let extras = dream.extras {
+            saved.sentimentScore = extras.sentimentScore ?? 50
+            saved.isNightmare = extras.isNightmare ?? false
+            saved.lucidityScore = extras.lucidityScore ?? 0
+            saved.vividnessScore = extras.vividnessScore ?? 0
+            saved.coherenceScore = extras.coherenceScore ?? 0
+            saved.anxietyLevel = extras.anxietyLevel ?? 0
+        }
+        
         try? context.save()
     }
     
