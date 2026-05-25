@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>To save your dream&apos;s visual representation.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>We need your contacts to link people.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need your photo library to upload your photo.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We need your microphone to record dreams.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+</dict>
+</plist>
