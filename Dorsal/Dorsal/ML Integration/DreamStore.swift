@@ -202,7 +202,9 @@ class DreamStore: NSObject, ObservableObject {
     private func setupObservers() {
         audioRecorder.$audioLevel
             .receive(on: RunLoop.main)
-            .assign(to: \.audioPower, on: self)
+            .sink { [weak self] level in
+                self?.audioPower = level
+            }
             .store(in: &cancellables)
             
         audioRecorder.$liveTranscript
@@ -215,12 +217,16 @@ class DreamStore: NSObject, ObservableObject {
             
         audioRecorder.objectWillChange
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
             .store(in: &cancellables)
             
         audioRecorder.$isPaused
             .receive(on: RunLoop.main)
-            .assign(to: \.isPaused, on: self)
+            .sink { [weak self] paused in
+                self?.isPaused = paused
+            }
             .store(in: &cancellables)
     }
     
@@ -275,7 +281,7 @@ class DreamStore: NSObject, ObservableObject {
                 }
             } else if status == .notDetermined {
                 do {
-                    let granted = try await center.requestAuthorization(options: [.alert, .sound, .timeSensitive])
+                    let granted = try await center.requestAuthorization(options: [.alert, .sound])
                     await MainActor.run {
                         self.hasNotificationAccess = granted
                         if granted && self.isReminderEnabled {
@@ -324,7 +330,7 @@ class DreamStore: NSObject, ObservableObject {
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
         let request = UNNotificationRequest(identifier: "dailyDreamReminder", content: content, trigger: trigger)
         
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["dailyDreamReminder"])
         UNUserNotificationCenter.current().add(request)
     }
     
@@ -960,7 +966,7 @@ class DreamStore: NSObject, ObservableObject {
                 }
                 
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }),
-                   let summary = dreams[index].core?.summary {
+                   let _ = dreams[index].core?.summary {
                     if isImageGenerationAvailable {
                         do {
                             let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: transcript)
