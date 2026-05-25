@@ -226,7 +226,7 @@ struct ThemeWheelSelector: View {
     
     // Joystick State
     @State private var dragDirection: Int = 0
-    @State private var timer = Timer.publish(every: 0.3, on: .main, in: .common).autoconnect()
+    @State private var scrollTask: Task<Void, Never>? = nil
     
     var body: some View {
         GeometryReader { geo in
@@ -305,24 +305,13 @@ struct ThemeWheelSelector: View {
             .frame(width: geo.size.width, height: geo.size.height)
         }
         .frame(height: 120)
-        
-        // Timer Receiver
-        .onReceive(timer) { _ in
-            guard dragDirection != 0 else { return }
-            // This just updates local 'scrollPosition'
-            // It does NOT touch 'currentThemeID' yet!
-            if dragDirection == 1 {
-                scrollToPrevious(isAuto: true)
-            } else {
-                scrollToNext(isAuto: true)
-            }
-        }
-        
         .onAppear {
-            self.timer.upstream.connect().cancel()
             if scrollPosition == nil {
                 scrollPosition = "10-\(currentThemeID)"
             }
+        }
+        .onDisappear {
+            scrollTask?.cancel()
         }
     }
     
@@ -340,16 +329,33 @@ struct ThemeWheelSelector: View {
     }
     
     private func startTimer() {
-        self.timer.upstream.connect().cancel()
-        self.timer = Timer.publish(every: 0.3, on: .main, in: .common).autoconnect()
+        scrollTask?.cancel()
         
-        // Fire once immediately
-        if dragDirection == 1 { scrollToPrevious(isAuto: true) }
-        else if dragDirection == -1 { scrollToNext(isAuto: true) }
+        scrollTask = Task {
+            // Fire once immediately
+            if dragDirection == 1 { scrollToPrevious(isAuto: true) }
+            else if dragDirection == -1 { scrollToNext(isAuto: true) }
+            
+            // Continue firing on an interval
+            while !Task.isCancelled {
+                // Wait for 0.3 seconds
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                
+                // Check if task was cancelled during sleep
+                if Task.isCancelled { break }
+                
+                if dragDirection == 1 {
+                    scrollToPrevious(isAuto: true)
+                } else if dragDirection == -1 {
+                    scrollToNext(isAuto: true)
+                }
+            }
+        }
     }
     
     private func stopTimer() {
-        self.timer.upstream.connect().cancel()
+        scrollTask?.cancel()
+        scrollTask = nil
         
         // 2. CRITICAL FIX: Only update the store when the user LETS GO
         if let pos = scrollPosition {
