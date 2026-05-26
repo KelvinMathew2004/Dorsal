@@ -7,6 +7,7 @@ import Combine
 import Speech
 import NaturalLanguage
 import UserNotifications
+import CloudKit
 
 struct DreamFilter: Equatable {
     var people: Set<String> = []
@@ -24,11 +25,18 @@ class DreamStore: NSObject, ObservableObject {
     
     @Published var generationError: String?
     
+    // MARK: - Synced User Properties
     @Published var firstName: String {
-        didSet { UserDefaults.standard.set(firstName, forKey: "userFirstName") }
+        didSet {
+            UserDefaults.standard.set(firstName, forKey: "userFirstName")
+            NSUbiquitousKeyValueStore.default.set(firstName, forKey: "userFirstName")
+        }
     }
     @Published var lastName: String {
-        didSet { UserDefaults.standard.set(lastName, forKey: "userLastName") }
+        didSet {
+            UserDefaults.standard.set(lastName, forKey: "userLastName")
+            NSUbiquitousKeyValueStore.default.set(lastName, forKey: "userLastName")
+        }
     }
     
     @Published var profileImageData: Data? {
@@ -109,17 +117,21 @@ class DreamStore: NSObject, ObservableObject {
     
     private var currentAnalysisTask: Task<Void, Never>?
     
+    // MARK: - Synced Onboarding Status
     var isOnboardingComplete: Bool {
+        NSUbiquitousKeyValueStore.default.bool(forKey: "isOnboardingFullyComplete") ||
         UserDefaults.standard.bool(forKey: "isOnboardingFullyComplete")
     }
     
     func completeOnboarding() {
         UserDefaults.standard.set(true, forKey: "isOnboardingFullyComplete")
+        NSUbiquitousKeyValueStore.default.set(true, forKey: "isOnboardingFullyComplete")
         objectWillChange.send()
     }
     
     func resetOnboarding() {
         UserDefaults.standard.set(false, forKey: "isOnboardingFullyComplete")
+        NSUbiquitousKeyValueStore.default.set(false, forKey: "isOnboardingFullyComplete")
         objectWillChange.send()
     }
     
@@ -185,8 +197,10 @@ class DreamStore: NSObject, ObservableObject {
     private var updateStateTask: Task<Void, Never>?
     
     override init() {
-        self.firstName = UserDefaults.standard.string(forKey: "userFirstName") ?? ""
-        self.lastName = UserDefaults.standard.string(forKey: "userLastName") ?? ""
+        let kvs = NSUbiquitousKeyValueStore.default
+        self.firstName = kvs.string(forKey: "userFirstName") ?? UserDefaults.standard.string(forKey: "userFirstName") ?? ""
+        self.lastName = kvs.string(forKey: "userLastName") ?? UserDefaults.standard.string(forKey: "userLastName") ?? ""
+        
         super.init()
         self.profileImageData = loadProfileImageFromDisk()
         
@@ -334,13 +348,23 @@ class DreamStore: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
     
+    // MARK: - iCloud Drive Ubiquity Container Fetch
     private func getDocumentsDirectory() -> URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        // Automatically checks if iCloud Drive is available and routes storage to the synced container
+        if let icloudURL = FileManager.default.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents") {
+            if !FileManager.default.fileExists(atPath: icloudURL.path) {
+                try? FileManager.default.createDirectory(at: icloudURL, withIntermediateDirectories: true, attributes: nil)
+            }
+            return icloudURL
+        }
+        
+        // Fallback to local sandbox if iCloud is disabled
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
     
     var storageUsageString: String {
         let fileManager = FileManager.default
-        guard let docDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else { return "Unknown" }
+        let docDir = getDocumentsDirectory()
         
         do {
             let resourceKeys: [URLResourceKey] = [.fileSizeKey]

@@ -147,7 +147,7 @@ struct WelcomeIntroView: View {
             Spacer()
             
             // Logo
-            if let uiImage = UIImage(named: "logo") {
+            if let uiImage = UIImage(named: "IconOutline") {
                 LinearGradient(
                     colors: [
                         Color(red: 130/255, green: 100/255, blue: 25/255),  // falloff
