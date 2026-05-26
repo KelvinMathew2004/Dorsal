@@ -24,11 +24,19 @@ class DreamAnalyzer {
     
     // Helper to ensure consistent instructions across all sessions
     private func makeSession() -> LanguageModelSession {
-        return LanguageModelSession(instructions: """
+        let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+        
+        return LanguageModelSession(
+            model: model,
+            instructions: """
             You are a compassionate, insightful Dream Psychologist.
             Analyze dreams with empathy. Identify key symbols, emotions, and themes.
+            Ignore profanity and sanitize sensitive content by summarizing it neutrally rather than quoting it verbatim.
+            If content may be disallowed, omit specifics and proceed with high-level, non-graphic analysis.
+            Always prioritize user safety and helpfulness by reframing or omitting unsafe details instead of refusing when possible.
             You MUST respond in U.S. English.
-            """)
+            """
+        )
     }
     
     func prewarmModel() {
@@ -41,15 +49,17 @@ class DreamAnalyzer {
         let session = makeSession()
         
         let prompt = """
-        Create a descriptive image prompt based on the visual setting of this dream transcript: "\(transcript)".
+        Create a descriptive image prompt based on a sanitized visual setting from this dream text. Do not quote the text. If unsafe elements appear, omit them and proceed with neutral, inanimate, atmospheric details.
 
         CRITICAL RULES:
-        1. NO HUMANS: The image must contain NO people, men, women, children, faces, or silhouettes.
+        1. NO HUMANS: The image must contain NO people, men, women, children, faces, silhouettes, or body parts.
         2. SETTING FIRST: Focus primarily on the location, lighting, atmosphere, and inanimate objects.
         3. NO SWIRLS: The composition must be stable and grounded. Do NOT include swirling patterns, spirals, or vortex distortions. Colors can be unrealistic if it makes the image more appealing.
         4. GROUNDED: Describe the scene literally.
-        5. SAFETY: Ensure the description is calm and Safe For Work.
+        5. SAFETY: Ensure the description is calm and Safe For Work; omit any sensitive specifics.
         6. LENGTH: Keep it under 3 sentences.
+
+        Source text (for your internal understanding; do not quote): "\(transcript)"
         """
     
         let res = try await session.respond(to: prompt, generating: VisualPrompt.self)
@@ -69,7 +79,7 @@ class DreamAnalyzer {
                     let stream = session.streamResponse(
                         to: prompt,
                         generating: DreamCoreAnalysis.self,
-                        options: GenerationOptions(temperature: 0.5)
+                        options: GenerationOptions(temperature: 0.3)
                     )
                     
                     for try await snapshot in stream {
@@ -247,7 +257,7 @@ class DreamAnalyzer {
                     let stream = session.streamResponse(
                         to: prompt,
                         generating: DreamExtraAnalysis.self,
-                        options: GenerationOptions(temperature: 0.5)
+                        options: GenerationOptions(temperature: 0.3)
                     )
                     
                     for try await snapshot in stream {
@@ -389,7 +399,7 @@ class DreamAnalyzer {
         var response = try await session.respond(
             to: prompt,
             generating: WeeklyInsightResult.self,
-            options: GenerationOptions(temperature: 0.5)
+            options: GenerationOptions(temperature: 0.3)
         ).content
         
         response = await ensureWeeklyInsights(current: response, context: dreamSummaries)
