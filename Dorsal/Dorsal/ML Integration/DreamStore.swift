@@ -8,6 +8,7 @@ import Speech
 import NaturalLanguage
 import UserNotifications
 import CloudKit
+import PhotosUI
 
 struct DreamFilter: Equatable {
     var people: Set<String> = []
@@ -49,7 +50,11 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     @AppStorage("themeID") var currentThemeID: String = "gold" {
-        didSet { objectWillChange.send() }
+        didSet {
+            // Push to iCloud whenever the user changes the theme
+            NSUbiquitousKeyValueStore.default.set(currentThemeID, forKey: "themeID")
+            objectWillChange.send()
+        }
     }
     
     @AppStorage("isComplexVisualizerEnabled") var isComplexVisualizerEnabled: Bool = true {
@@ -108,6 +113,7 @@ class DreamStore: NSObject, ObservableObject {
     
     @Published var permissionError: String?
     @Published var showPermissionAlert: Bool = false
+    @Published var showNotificationAlert: Bool = false
     
     @Published var hasMicAccess: Bool = false
     
@@ -119,19 +125,16 @@ class DreamStore: NSObject, ObservableObject {
     
     // MARK: - Synced Onboarding Status
     var isOnboardingComplete: Bool {
-        NSUbiquitousKeyValueStore.default.bool(forKey: "isOnboardingFullyComplete") ||
         UserDefaults.standard.bool(forKey: "isOnboardingFullyComplete")
     }
     
     func completeOnboarding() {
         UserDefaults.standard.set(true, forKey: "isOnboardingFullyComplete")
-        NSUbiquitousKeyValueStore.default.set(true, forKey: "isOnboardingFullyComplete")
         objectWillChange.send()
     }
     
     func resetOnboarding() {
         UserDefaults.standard.set(false, forKey: "isOnboardingFullyComplete")
-        NSUbiquitousKeyValueStore.default.set(false, forKey: "isOnboardingFullyComplete")
         objectWillChange.send()
     }
     
@@ -202,6 +205,10 @@ class DreamStore: NSObject, ObservableObject {
         self.lastName = kvs.string(forKey: "userLastName") ?? UserDefaults.standard.string(forKey: "userLastName") ?? ""
         
         super.init()
+        
+        // Initial Theme Pull
+        self.currentThemeID = kvs.string(forKey: "themeID") ?? UserDefaults.standard.string(forKey: "themeID") ?? "gold"
+
         self.profileImageData = loadProfileImageFromDisk()
         
         checkPermissions()
@@ -210,6 +217,42 @@ class DreamStore: NSObject, ObservableObject {
         
         Task {
             await checkImageGenerationSupport()
+        }
+        
+        // Listen for iCloud Key-Value changes (Name, Theme)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(iCloudDataDidChange),
+            name: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: kvs
+        )
+        kvs.synchronize()
+        
+        // Listen for App returning to foreground
+        NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+            // Re-check permissions when returning from iOS Settings
+            self?.checkPermissions()
+            self?.checkNotificationStatus()
+            
+            // Check if iCloud Drive updated the profile image
+            if let newData = self?.loadProfileImageFromDisk(), newData != self?.profileImageData {
+                self?.profileImageData = newData
+            }
+        }
+    }
+    
+    @objc private func iCloudDataDidChange(notification: Notification) {
+        let kvs = NSUbiquitousKeyValueStore.default
+        Task { @MainActor in
+            let newFirst = kvs.string(forKey: "userFirstName") ?? ""
+            if !newFirst.isEmpty && self.firstName != newFirst { self.firstName = newFirst }
+            
+            let newLast = kvs.string(forKey: "userLastName") ?? ""
+            if !newLast.isEmpty && self.lastName != newLast { self.lastName = newLast }
+            
+            // Sync theme changes pulled from iCloud
+            let newTheme = kvs.string(forKey: "themeID") ?? "gold"
+            if self.currentThemeID != newTheme { self.currentThemeID = newTheme }
         }
     }
     
@@ -277,8 +320,14 @@ class DreamStore: NSObject, ObservableObject {
         let center = UNUserNotificationCenter.current()
         Task {
             let settings = await center.notificationSettings()
+            let status = settings.authorizationStatus
             await MainActor.run {
-                self.hasNotificationAccess = (settings.authorizationStatus == .authorized)
+                self.hasNotificationAccess = (status == .authorized)
+                
+                // Trigger native popup on launch if onboarding was skipped via iCloud sync
+                if status == .notDetermined && self.isOnboardingComplete {
+                    self.requestNotificationAccess()
+                }
             }
         }
     }
@@ -291,7 +340,8 @@ class DreamStore: NSObject, ObservableObject {
             
             if status == .denied {
                 await MainActor.run {
-                    self.openSettings()
+                    self.showNotificationAlert = true
+                    self.isReminderEnabled = false // Revert toggle if denied
                 }
             } else if status == .notDetermined {
                 do {
@@ -300,6 +350,8 @@ class DreamStore: NSObject, ObservableObject {
                         self.hasNotificationAccess = granted
                         if granted && self.isReminderEnabled {
                             self.scheduleDailyReminder()
+                        } else if !granted {
+                            self.isReminderEnabled = false // Revert toggle if denied during native prompt
                         }
                     }
                 } catch {
@@ -321,6 +373,11 @@ class DreamStore: NSObject, ObservableObject {
                     Task { @MainActor in self.scheduleDailyReminder() }
                 } else if settings.authorizationStatus == .notDetermined {
                     Task { @MainActor in self.requestNotificationAccess() }
+                } else {
+                    Task { @MainActor in
+                        self.showNotificationAlert = true
+                        self.isReminderEnabled = false
+                    }
                 }
             }
         } else {
@@ -389,7 +446,7 @@ class DreamStore: NSObject, ObservableObject {
     private func saveProfileImageToDisk(data: Data?) {
         let url = getDocumentsDirectory().appendingPathComponent("profile_image.png")
         if let data = data {
-            try? data.write(to: url)
+            try? data.write(to: url, options: .atomic)
         } else {
             try? FileManager.default.removeItem(at: url)
         }
@@ -400,6 +457,7 @@ class DreamStore: NSObject, ObservableObject {
         return try? Data(contentsOf: url)
     }
     
+    // MARK: - SwiftData CloudKit Fetching
     func setContext(_ context: ModelContext) {
         self.modelContext = context
         fetchAllData()
@@ -788,6 +846,23 @@ class DreamStore: NSObject, ObservableObject {
     }
 
     func startRecording() {
+        let status = AVAudioApplication.shared.recordPermission
+        
+        // Handle case where user never granted/denied permission yet (skipping onboarding)
+        if status == .undetermined {
+            AVAudioApplication.requestRecordPermission { [weak self] granted in
+                Task { @MainActor in
+                    self?.hasMicAccess = granted
+                    if granted {
+                        self?.startRecording()
+                    } else {
+                        self?.showPermissionAlert = true
+                    }
+                }
+            }
+            return
+        }
+
         if !hasMicAccess {
             showPermissionAlert = true
             return

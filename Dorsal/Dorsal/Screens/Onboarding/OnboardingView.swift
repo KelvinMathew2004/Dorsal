@@ -97,6 +97,16 @@ struct OnboardingView: View {
                 .id(currentStep)
             }
         }
+        .alert("Notifications Disabled", isPresented: $store.showNotificationAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+        } message: {
+            Text("Please enable notifications in Settings to receive daily reminders.")
+        }
     }
     
     // MARK: - WARP LOGIC

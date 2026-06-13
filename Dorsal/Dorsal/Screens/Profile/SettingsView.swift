@@ -6,9 +6,6 @@ struct SettingsView: View {
     @Binding var showOnboarding: Bool
     @Environment(\.dismiss) var dismiss
     
-    // Alert State for Permissions
-    @State private var showSettingsAlert = false
-    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -35,7 +32,7 @@ struct SettingsView: View {
                     Button(role: .confirm) { dismiss() }
                 }
             }
-            .alert("Notifications Disabled", isPresented: $showSettingsAlert) {
+            .alert("Notifications Disabled", isPresented: $store.showNotificationAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Open Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -121,7 +118,7 @@ struct SettingsView: View {
             VStack(spacing: 16) {
                 Toggle(isOn: Binding(
                     get: { store.isReminderEnabled },
-                    set: { newValue in checkPermissionAndToggle(newValue) }
+                    set: { store.toggleReminder(enabled: $0) }
                 )) {
                     Text("Daily Reminder")
                         .foregroundStyle(.white)
@@ -184,35 +181,6 @@ struct SettingsView: View {
             }
             .padding()
             .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
-        }
-    }
-    
-    // MARK: - LOGIC
-    
-    private func checkPermissionAndToggle(_ newValue: Bool) {
-        if !newValue {
-            store.toggleReminder(enabled: false)
-        } else {
-            UNUserNotificationCenter.current().getNotificationSettings { settings in
-                let status = settings.authorizationStatus
-                DispatchQueue.main.async {
-                    switch status {
-                    case .authorized, .provisional:
-                        store.toggleReminder(enabled: true)
-                    case .denied:
-                        showSettingsAlert = true
-                    case .notDetermined:
-                        store.requestNotificationAccess()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            if store.hasNotificationAccess {
-                                store.toggleReminder(enabled: true)
-                            }
-                        }
-                    default:
-                        break
-                    }
-                }
-            }
         }
     }
 }

@@ -116,15 +116,14 @@ enum Theme {
         )
     ]
 
-    // MARK: Colors - Dynamic based on UserDefaults
-    
+    // MARK: Colors - Dynamic based on UserDefaults AND iCloud Storage
     static var accent: Color {
-        let id = UserDefaults.standard.string(forKey: "themeID") ?? "gold"
+        let id = NSUbiquitousKeyValueStore.default.string(forKey: "themeID") ?? UserDefaults.standard.string(forKey: "themeID") ?? "gold"
         return availableThemes.first(where: { $0.id == id })?.accent ?? availableThemes[0].accent
     }
     
     static var secondary: Color {
-        let id = UserDefaults.standard.string(forKey: "themeID") ?? "gold"
+        let id = NSUbiquitousKeyValueStore.default.string(forKey: "themeID") ?? UserDefaults.standard.string(forKey: "themeID") ?? "gold"
         return availableThemes.first(where: { $0.id == id })?.secondary ?? availableThemes[0].secondary
     }
 }
