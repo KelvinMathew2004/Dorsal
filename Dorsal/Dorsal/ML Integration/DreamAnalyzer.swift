@@ -17,9 +17,7 @@ struct VisualPrompt: Codable, Sendable {
     var prompt: String
 }
 
-@MainActor
-@Observable
-class DreamAnalyzer {
+actor DreamAnalyzer {
     static let shared = DreamAnalyzer()
     
     // Helper to ensure consistent instructions across all sessions
@@ -79,7 +77,7 @@ class DreamAnalyzer {
                     let stream = session.streamResponse(
                         to: prompt,
                         generating: DreamCoreAnalysis.self,
-                        options: GenerationOptions(temperature: 0.3)
+                        options: GenerationOptions(temperature: 0.7)
                     )
                     
                     for try await snapshot in stream {
@@ -143,28 +141,30 @@ class DreamAnalyzer {
         return try await withCheckedThrowingContinuation { continuation in
             delegate.continuation = continuation
             
-            do {
-                // MANUAL LOADING: Load the compiled .mlmodelc directly from the bundle
-                guard let modelURL = Bundle.main.url(forResource: "VocalFatigueModel", withExtension: "mlmodelc") else {
-                    throw NSError(domain: "DreamAnalyzer", code: 404, userInfo: [NSLocalizedDescriptionKey: "VocalFatigueModel.mlmodelc not found in bundle. Make sure it is added to your project resources."])
+            Task.detached(priority: .userInitiated) {
+                do {
+                    // MANUAL LOADING: Load the compiled .mlmodelc directly from the bundle
+                    guard let modelURL = Bundle.main.url(forResource: "VocalFatigueModel", withExtension: "mlmodelc") else {
+                        throw NSError(domain: "DreamAnalyzer", code: 404, userInfo: [NSLocalizedDescriptionKey: "VocalFatigueModel.mlmodelc not found in bundle. Make sure it is added to your project resources."])
+                    }
+                    
+                    let config = MLModelConfiguration()
+                    let model = try MLModel(contentsOf: modelURL, configuration: config)
+                    
+                    let request = try SNClassifySoundRequest(mlModel: model)
+                    // request.overlapFactor defaults to 0.5, meaning windows overlap by 50%
+                    // This is good for smoothing out the average.
+                    
+                    let analyzer = try SNAudioFileAnalyzer(url: audioURL)
+                    
+                    try analyzer.add(request, withObserver: delegate)
+                    
+                    // Run analysis.
+                    try analyzer.analyze()
+                    
+                } catch {
+                    continuation.resume(throwing: error)
                 }
-                
-                let config = MLModelConfiguration()
-                let model = try MLModel(contentsOf: modelURL, configuration: config)
-                
-                let request = try SNClassifySoundRequest(mlModel: model)
-                // request.overlapFactor defaults to 0.5, meaning windows overlap by 50%
-                // This is good for smoothing out the average.
-                
-                let analyzer = try SNAudioFileAnalyzer(url: audioURL)
-                
-                try analyzer.add(request, withObserver: delegate)
-                
-                // Run analysis.
-                try analyzer.analyze()
-                
-            } catch {
-                continuation.resume(throwing: error)
             }
         }
     }
@@ -187,7 +187,7 @@ class DreamAnalyzer {
     
     // MARK: - Internal Helper Class (Non-Isolated)
     // Handles accumulation and averaging of scores
-    private class FatigueDelegate: NSObject, SNResultsObserving {
+    private final class FatigueDelegate: NSObject, SNResultsObserving, @unchecked Sendable {
         var continuation: CheckedContinuation<Int, Error>?
         var scores: [Double] = [] // Store confidence scores for every window
         
@@ -257,7 +257,7 @@ class DreamAnalyzer {
                     let stream = session.streamResponse(
                         to: prompt,
                         generating: DreamExtraAnalysis.self,
-                        options: GenerationOptions(temperature: 0.3)
+                        options: GenerationOptions(temperature: 0.7)
                     )
                     
                     for try await snapshot in stream {
@@ -399,7 +399,7 @@ class DreamAnalyzer {
         var response = try await session.respond(
             to: prompt,
             generating: WeeklyInsightResult.self,
-            options: GenerationOptions(temperature: 0.3)
+            options: GenerationOptions(temperature: 0.7)
         ).content
         
         response = await ensureWeeklyInsights(current: response, context: dreamSummaries)

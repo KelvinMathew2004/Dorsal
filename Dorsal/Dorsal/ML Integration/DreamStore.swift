@@ -730,42 +730,45 @@ class DreamStore: NSObject, ObservableObject {
             guard !unansweredQuestions.isEmpty else { return }
             
             let transcriptLower = transcriptSnapshot.lowercased()
+            let embeddingRef = self.embedding
             
-            let tagger = NLTagger(tagSchemes: [.tokenType])
-            let words = transcriptSnapshot.split(separator: " ")
-            let recentText = words.suffix(15).joined(separator: " ")
-            tagger.string = recentText
-            
-            for question in unansweredQuestions {
-                var isSatisfied = false
+            Task.detached(priority: .userInitiated) { [weak self] in
+                let tagger = NLTagger(tagSchemes: [.tokenType])
+                let words = transcriptSnapshot.split(separator: " ")
+                let recentText = words.suffix(15).joined(separator: " ")
+                tagger.string = recentText
                 
-                if question.keywords.contains(where: { transcriptLower.contains($0.lowercased()) }) {
-                    isSatisfied = true
-                }
-                else if let embedding = self.embedding {
-                    tagger.enumerateTags(in: recentText.startIndex..<recentText.endIndex, unit: .word, scheme: .tokenType, options: [.omitPunctuation, .omitWhitespace]) { _, tokenRange in
-                        let word = String(recentText[tokenRange]).lowercased()
-                        if word.count < 3 { return true }
-                        
-                        for concept in question.semanticConcepts {
-                            let distance = embedding.distance(between: word, and: concept)
-                            if distance < 0.65 {
-                                isSatisfied = true; return false
-                            }
-                        }
-                        for keyword in question.keywords {
-                            let distance = embedding.distance(between: word, and: keyword)
-                            if distance < 0.4 {
-                                isSatisfied = true; return false
-                            }
-                        }
-                        return true
+                for question in unansweredQuestions {
+                    var isSatisfied = false
+                    
+                    if question.keywords.contains(where: { transcriptLower.contains($0.lowercased()) }) {
+                        isSatisfied = true
                     }
-                }
-                
-                if isSatisfied {
-                    await MainActor.run {
-                        self.handleSatisfiedQuestion(questionID: question.id)
+                    else if let embedding = embeddingRef {
+                        tagger.enumerateTags(in: recentText.startIndex..<recentText.endIndex, unit: .word, scheme: .tokenType, options: [.omitPunctuation, .omitWhitespace]) { _, tokenRange in
+                            let word = String(recentText[tokenRange]).lowercased()
+                            if word.count < 3 { return true }
+                            
+                            for concept in question.semanticConcepts {
+                                let distance = embedding.distance(between: word, and: concept)
+                                if distance < 0.65 {
+                                    isSatisfied = true; return false
+                                }
+                            }
+                            for keyword in question.keywords {
+                                let distance = embedding.distance(between: word, and: keyword)
+                                if distance < 0.4 {
+                                    isSatisfied = true; return false
+                                }
+                            }
+                            return true
+                        }
+                    }
+                    
+                    if isSatisfied {
+                        await MainActor.run {
+                            self?.handleSatisfiedQuestion(questionID: question.id)
+                        }
                     }
                 }
             }
@@ -1010,7 +1013,7 @@ class DreamStore: NSObject, ObservableObject {
     private func runAnalysis(for dreamID: UUID, transcript: String, audioURL: URL?, existingFatigue: Int?) {
         currentAnalysisTask = Task {
             do {
-                for try await partialCore in DreamAnalyzer.shared.streamCore(transcript: transcript, userName: self.firstName) {
+                for try await partialCore in await DreamAnalyzer.shared.streamCore(transcript: transcript, userName: self.firstName) {
                     if Task.isCancelled { return }
                     
                     if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
@@ -1097,7 +1100,7 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
-                for try await partialExtra in DreamAnalyzer.shared.streamExtras(transcript: transcript) {
+                for try await partialExtra in await DreamAnalyzer.shared.streamExtras(transcript: transcript) {
                     if Task.isCancelled { return }
                     
                     if let index = dreams.firstIndex(where: { $0.id == dreamID }) {

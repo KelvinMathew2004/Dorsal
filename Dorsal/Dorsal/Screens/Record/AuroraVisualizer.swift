@@ -151,7 +151,10 @@ struct MetalAuroraView: UIViewRepresentable {
         view.framebufferOnly = true
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-        view.preferredFramesPerSecond = 60
+        view.preferredFramesPerSecond = 30
+        #if canImport(UIKit)
+        view.contentScaleFactor = 1.0
+        #endif
         view.isPaused = !isRecording
         view.enableSetNeedsDisplay = false
         view.layer.isOpaque = false

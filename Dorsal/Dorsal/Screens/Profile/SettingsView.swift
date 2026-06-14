@@ -83,7 +83,7 @@ struct SettingsView: View {
                 Text("Dorsal")
                     .font(.title2.bold())
                     .foregroundStyle(.white)
-                Text("v1.0.0 (Beta)")
+                Text("v1.0.0")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
