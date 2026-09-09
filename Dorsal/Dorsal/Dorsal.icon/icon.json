@@ -1,6 +1,12 @@
 {
+  "features" : [
+    "refractivity"
+  ],
   "fill" : {
-    "automatic-gradient" : "display-p3:0.18431,0.00000,0.46667,1.00000"
+    "linear-gradient" : [
+      "display-p3:0.29468,0.02785,0.70969,1.00000",
+      "display-p3:0.18431,0.00000,0.46667,1.00000"
+    ]
   },
   "groups" : [
     {
@@ -9,6 +15,15 @@
       "hidden" : false,
       "layers" : [
         {
+          "blend-mode-specializations" : [
+            {
+              "value" : "normal"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "normal"
+            }
+          ],
           "fill-specializations" : [
             {
               "value" : {
@@ -20,11 +35,21 @@
               "value" : {
                 "automatic-gradient" : "srgb:1.00000,0.79216,0.00000,1.00000"
               }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "system-light"
+            }
+          ],
+          "glass-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : true
             }
           ],
           "hidden" : false,
           "image-name" : "Gemini_Generated_Image_49c3ok49c3ok49c3-Photoroom.png",
-          "name" : "Gemini_Generated_Image_49c3ok49c3ok49c3-Photoroom",
+          "name" : "Maze",
           "position" : {
             "scale" : 1.2,
             "translation-in-points" : [
@@ -36,7 +61,7 @@
       ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 1
+        "opacity" : 0.6
       },
       "specular" : true,
       "translucency" : {
@@ -46,118 +71,30 @@
     },
     {
       "blend-mode" : "normal",
-      "blur-material" : null,
+      "blur-material" : 0.5,
       "hidden" : false,
       "layers" : [
         {
           "blend-mode" : "normal",
           "fill" : {
-            "automatic-gradient" : "srgb:0.58188,0.21569,1.00000,1.00000"
-          },
-          "hidden" : false,
-          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 5.png",
-          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 5",
-          "opacity-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : 0.5
-            },
-            {
-              "appearance" : "tinted",
-              "value" : 0.5
+            "linear-gradient" : [
+              "display-p3:0.61718,0.21604,0.64174,1.00000",
+              "srgb:0.57919,0.12801,0.57269,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.29603579202186653,
+                "y" : 0.5879632286918841
+              },
+              "stop" : {
+                "x" : 0.7752197983255863,
+                "y" : 0.23682855860774227
+              }
             }
-          ],
-          "position" : {
-            "scale" : 8,
-            "translation-in-points" : [
-              -43.86572653306757,
-              254
-            ]
-          }
-        },
-        {
-          "fill" : {
-            "automatic-gradient" : "srgb:1.00000,0.18574,0.57340,1.00000"
-          },
-          "hidden" : false,
-          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 6.png",
-          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 6",
-          "opacity-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : 0.5
-            },
-            {
-              "appearance" : "tinted",
-              "value" : 0.5
-            }
-          ],
-          "position" : {
-            "scale" : 10,
-            "translation-in-points" : [
-              143.6908193275981,
-              190.04245077913902
-            ]
-          }
-        },
-        {
-          "fill" : {
-            "automatic-gradient" : "srgb:1.00000,0.25279,1.00000,1.00000"
-          },
-          "hidden" : false,
-          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy.png",
-          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy",
-          "opacity-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : 0.5
-            },
-            {
-              "appearance" : "tinted",
-              "value" : 0.5
-            }
-          ],
-          "position" : {
-            "scale" : 10,
-            "translation-in-points" : [
-              -142.2092579328346,
-              213.33235655333692
-            ]
-          }
-        },
-        {
-          "fill" : {
-            "automatic-gradient" : "srgb:0.58188,0.21569,1.00000,1.00000"
-          },
-          "hidden" : false,
-          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview.png",
-          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview",
-          "opacity-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : 0.5
-            },
-            {
-              "appearance" : "tinted",
-              "value" : 0.5
-            }
-          ],
-          "position" : {
-            "scale" : 9,
-            "translation-in-points" : [
-              111.19081932759809,
-              31.19581676678922
-            ]
-          }
-        },
-        {
-          "blend-mode" : "normal",
-          "fill" : {
-            "automatic-gradient" : "srgb:0.57919,0.12801,0.57269,1.00000"
           },
           "hidden" : false,
           "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 4.png",
-          "name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 4",
+          "name" : "Cloud 1",
           "opacity-specializations" : [
             {
               "appearance" : "dark",
@@ -172,7 +109,160 @@
             "scale" : 8,
             "translation-in-points" : [
               364.1342734669324,
-              -337.4538426656668
+              -318.7066704724772
+            ]
+          }
+        },
+        {
+          "blend-mode" : "normal",
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.60943,0.27912,1.07801,1.00000",
+              "srgb:0.58188,0.21569,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5163512884940284,
+                "y" : 0.06426156342144161
+              },
+              "stop" : {
+                "x" : 0.5180004411065227,
+                "y" : 0.9176980403871889
+              }
+            }
+          },
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 5.png",
+          "name" : "Cloud 2",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.5
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 8,
+            "translation-in-points" : [
+              -22.229486504049646,
+              253.88956181488186
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:1.01606,0.30307,0.62673,1.00000",
+              "srgb:1.00000,0.18574,0.57340,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.3822995510725911,
+                "y" : 0.2854901549122542
+              },
+              "stop" : {
+                "x" : 0.9405027912375452,
+                "y" : 0.8404715769174278
+              }
+            }
+          },
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy 6.png",
+          "name" : "Cloud 3",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.5
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 10,
+            "translation-in-points" : [
+              127.34582196626206,
+              133.20706211998458
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:1.00686,0.34212,1.05897,1.00000",
+              "srgb:1.00000,0.25279,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.6617870846691933,
+                "y" : 0.27855261767337774
+              },
+              "stop" : {
+                "x" : 0.09288143656621137,
+                "y" : 0.8035684627875908
+              }
+            }
+          },
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview copy.png",
+          "name" : "Cloud 4",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.5
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 10,
+            "translation-in-points" : [
+              -138.84440265205262,
+              148.20706211998458
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.60943,0.27912,1.07801,1.00000",
+              "srgb:0.58188,0.21569,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.23889737825937524,
+                "y" : 0.21652634238490262
+              },
+              "stop" : {
+                "x" : 0.15081055690476758,
+                "y" : 0.06814484003495543
+              }
+            }
+          },
+          "hidden" : false,
+          "image-name" : "Gemini_Generated_Image_n3itj4n3itj4n3it-removebg-preview.png",
+          "name" : "Cloud 5",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 0.5
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 9,
+            "translation-in-points" : [
+              111.65954652286405,
+              38.293329527522815
             ]
           }
         }
@@ -190,6 +280,11 @@
           "value" : 0
         }
       ],
+      "refractivity" : {
+        "depth" : 0.5,
+        "enabled" : true,
+        "strength" : 0
+      },
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
