@@ -305,14 +305,23 @@ struct ChecklistOverlay: View {
     @ObservedObject var store: DreamStore
     
     var body: some View {
-        VStack(spacing: 16) {
+        ZStack {
             if let question = store.activeQuestion {
+                let recommendations = store.getRecommendations(for: question)
+                
+                // Floating words cycle around the space above and below the card
+                if !store.isQuestionSatisfied && !recommendations.isEmpty {
+                    FloatingRecommendations(recommendations: recommendations)
+                        .transition(.opacity)
+                        .zIndex(0)
+                }
+                
                 QuestionCard(
                     questionText: question.question,
-                    isSatisfied: store.isQuestionSatisfied,
-                    recommendations: store.getRecommendations(for: question)
+                    isSatisfied: store.isQuestionSatisfied
                 )
                 .id(question.id)
+                .zIndex(1)
                 .transition(.asymmetric(
                     insertion: .move(edge: .bottom).combined(with: .opacity),
                     removal: .move(edge: .top).combined(with: .opacity)
@@ -325,7 +334,6 @@ struct ChecklistOverlay: View {
 private struct QuestionCard: View {
     let questionText: String
     let isSatisfied: Bool
-    let recommendations: [String]
     
     var body: some View {
         VStack(spacing: 16) {
@@ -342,10 +350,6 @@ private struct QuestionCard: View {
                         .transition(.scale.combined(with: .opacity))
                 }
             }
-            
-            if !recommendations.isEmpty {
-                SimpleWrappedPills(items: recommendations)
-            }
         }
         .padding(24)
         .frame(maxWidth: 520)
@@ -360,27 +364,60 @@ private struct QuestionCard: View {
     }
 }
 
-struct SimpleWrappedPills: View {
-    let items: [String]
+struct FloatingRecommendations: View {
+    let recommendations: [String]
+    @State private var displayItems: [String] = []
+    @State private var currentIndex: Int = 0
+    @State private var xOffset: CGFloat = 0
+    @State private var yOffset: CGFloat = 0
+    @State private var angle: Double = 0
     
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(items.prefix(3)), id: \.self) { item in
-                RecommendationPill(text: item.capitalized)
+        ZStack {
+            if !displayItems.isEmpty {
+                Text(displayItems[currentIndex].capitalized)
+                    .font(.title2.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.1)) // More faded, no background
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 14)
+                    .rotationEffect(.degrees(angle))
+                    .offset(x: xOffset, y: yOffset)
+                    .id(currentIndex) // Force transition when index changes
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.8).combined(with: .opacity).combined(with: .offset(y: 20)),
+                        removal: .scale(scale: 1.2).combined(with: .opacity).combined(with: .offset(y: -20))
+                    ))
             }
         }
-    }
-}
-
-struct RecommendationPill: View {
-    let text: String
-    var body: some View {
-        Text(text)
-            .font(.caption)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .glassEffect(.clear.tint(Theme.secondary.opacity(0.2)))
-            .fixedSize(horizontal: true, vertical: false)
+        .frame(maxWidth: .infinity, maxHeight: 350) // Large bounding box to float around in
+        .task(id: recommendations) {
+            if recommendations.isEmpty { return }
+            
+            // Shuffle the available keywords and cap at 15 to cycle through them continuously
+            let shuffled = recommendations.shuffled()
+            displayItems = Array(shuffled.prefix(15))
+            
+            currentIndex = 0
+            xOffset = CGFloat.random(in: -120...120)
+            // Start above or below the center card
+            yOffset = Bool.random() ? CGFloat.random(in: -150...(-70)) : CGFloat.random(in: 70...150)
+            angle = Double.random(in: -15...15)
+            
+            while !Task.isCancelled {
+                // Pause so the user can read the floating card
+                try? await Task.sleep(for: .seconds(3.0))
+                if Task.isCancelled { break }
+                
+                // Animate smoothly to the next card in the cycle
+                withAnimation(.easeInOut(duration: 2.0)) {
+                    currentIndex = (currentIndex + 1) % displayItems.count
+                    xOffset = CGFloat.random(in: -120...120)
+                    // Randomly choose to appear above or below the question card
+                    yOffset = Bool.random() ? CGFloat.random(in: -150...(-70)) : CGFloat.random(in: 70...150)
+                    angle = Double.random(in: -20...20)
+                }
+            }
+        }
     }
 }
 

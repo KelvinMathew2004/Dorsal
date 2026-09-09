@@ -57,7 +57,7 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
     
-    @AppStorage("isComplexVisualizerEnabled") var isComplexVisualizerEnabled: Bool = true {
+    @AppStorage("isComplexVisualizerEnabled") var isComplexVisualizerEnabled: Bool = false {
         didSet { objectWillChange.send() }
     }
     
