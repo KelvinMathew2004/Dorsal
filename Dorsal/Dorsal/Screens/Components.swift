@@ -274,7 +274,7 @@ struct ShootingStar: View {
 struct TypewriterText: View {
     let text: String
     let animates: Bool
-    @State private var displayedText = ""
+    @State private var visibleCount = 0
     
     init(text: String, animates: Bool = true) {
         self.text = text
@@ -282,30 +282,30 @@ struct TypewriterText: View {
     }
     
     var body: some View {
-        Text(displayedText)
+        // Use LocalizedStringKey so markdown formatting matches the final static view
+        Text(LocalizedStringKey(String(text.prefix(visibleCount))))
             .task(id: text) {
                 if !animates {
-                    displayedText = text
+                    visibleCount = text.count
                     return
                 }
                 
-                if !text.hasPrefix(displayedText) {
-                    displayedText = ""
+                // If the text string completely changed, reset the counter
+                let currentVisible = String(text.prefix(visibleCount))
+                if !text.hasPrefix(currentVisible) {
+                    visibleCount = 0
                 }
                 
-                let currentCount = displayedText.count
-                if currentCount < text.count {
-                    for i in currentCount..<text.count {
-                        if Task.isCancelled { return }
-                        try? await Task.sleep(for: .seconds(0.01))
-                        let index = text.index(text.startIndex, offsetBy: i)
-                        displayedText.append(text[index])
-                    }
+                // Safely advance the visible count without manual character indexing
+                while visibleCount < text.count {
+                    if Task.isCancelled { return }
+                    try? await Task.sleep(nanoseconds: 12_000_000)
+                    visibleCount += 1
                 }
             }
             .onAppear {
                 if !animates {
-                    displayedText = text
+                    visibleCount = text.count
                 }
             }
     }

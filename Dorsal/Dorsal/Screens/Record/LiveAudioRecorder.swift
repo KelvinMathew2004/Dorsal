@@ -202,6 +202,8 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
             
             if options.contains(.shouldResume) {
+                // FIXED: Resume recording automatically if the OS allows it (e.g., after phone calls)
+                self.resumeRecording()
             }
             
         @unknown default:
@@ -381,6 +383,7 @@ class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
                     
                     let modules = await analyzer.modules
                     if let module = modules.first {
+                        // FIXED: Single .results stream iteration with .isFinal checking.
                         if let dt = module as? DictationTranscriber {
                             for try await result in dt.results {
                                 let text = String(result.text.characters)
