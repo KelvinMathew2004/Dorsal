@@ -314,7 +314,7 @@ struct PermissionsView: View {
                     .foregroundStyle(.white)
                     .fontDesign(.rounded)
                 
-                Text("Access is needed to analyze dreams.")
+                Text("Microphone access is needed to record and analyze your dreams. Tap Continue to open the system alert.")
                     .multilineTextAlignment(.center)
                     .font(.body)
                     .foregroundStyle(OnboardingStep.permissions.textColor)
@@ -324,27 +324,11 @@ struct PermissionsView: View {
             Spacer()
             
             VStack(spacing: 24) {
-                // Permission Buttons
-                VStack(spacing: 16) {
-                    PermissionRow(
-                        title: "Microphone Access",
-                        icon: "mic.fill",
-                        isGranted: store.hasMicAccess,
-                        action: {
-                            store.requestMicrophoneAccess()
-                        }
-                    )
-                }
-                .padding(.horizontal, 24)
-                
-                if store.hasMicAccess {
-                    OnboardingActionButton(title: "Continue", action: onNext)
-                } else {
-                     Text("Please enable permission to continue")
-                        .font(.caption)
-                        .foregroundStyle(OnboardingStep.permissions.textColor)
-                        .padding(.bottom, 40)
-                }
+                // Exactly one button that proceeds and triggers the alert
+                OnboardingActionButton(title: "Continue", action: {
+                    store.requestMicrophoneAccess()
+                    onNext()
+                })
             }
         }
         .padding(.vertical)
@@ -367,7 +351,6 @@ struct NotificationOnboardingView: View {
         return calendar.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
     }()
     @State private var animate = false
-    @Namespace private var namespace
     
     var body: some View {
         VStack(spacing: 32) {
@@ -390,7 +373,7 @@ struct NotificationOnboardingView: View {
                     .foregroundStyle(.white)
                     .fontDesign(.rounded)
                 
-                Text("Set a time to record your dreams right after you wake up.")
+                Text("Set a time to record your dreams right after you wake up. Tap Continue to open the system alert.")
                     .multilineTextAlignment(.center)
                     .font(.body)
                     .foregroundStyle(OnboardingStep.notifications.textColor) // Updated
@@ -402,50 +385,35 @@ struct NotificationOnboardingView: View {
             // Bottom Controls Group
             VStack(spacing: 24) {
                 GlassEffectContainer {
-                    if store.hasNotificationAccess {
-                        // Time Picker
-                        VStack(spacing: 8) {
-                            Text("Reminder Time")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                                .fontWeight(.medium)
-                                .frame(maxWidth: .infinity)
-                            
-                            DatePicker("Select Time", selection: $selectedTime, displayedComponents: .hourAndMinute)
-                                .datePickerStyle(.wheel)
-                                .labelsHidden()
-                                .colorScheme(.dark)
-                                .frame(maxHeight: 100)
-                                .clipped()
-                                .frame(maxWidth: .infinity)
-                        }
-                        .padding(.vertical, 16)
-                        .glassEffect(.clear.tint(OnboardingStep.notifications.buttonColor.opacity(0.2)), in: RoundedRectangle(cornerRadius: 24))
-                        .glassEffectID("picker", in: namespace)
-                    } else {
-                        // Permission Row (wrapped as requested)
-                        PermissionRow(
-                            title: "Notifications",
-                            icon: "bell.fill",
-                            isGranted: store.hasNotificationAccess,
-                            action: {
-                                store.reminderTime = selectedTime.timeIntervalSince1970
-                                store.requestNotificationAccess()
-                            }
-                        )
-                        .glassEffectID("permission", in: namespace)
+                    // Always showing the time picker, cleanly integrated
+                    VStack(spacing: 8) {
+                        Text("Reminder Time")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .fontWeight(.medium)
+                            .frame(maxWidth: .infinity)
+
+                        DatePicker("Select Time", selection: $selectedTime, displayedComponents: .hourAndMinute)
+                            .datePickerStyle(.wheel)
+                            .labelsHidden()
+                            .colorScheme(.dark)
+                            .frame(maxHeight: 100)
+                            .clipped()
+                            .frame(maxWidth: .infinity)
                     }
+                    .padding(.vertical, 16)
+                    .glassEffect(.clear.tint(OnboardingStep.notifications.buttonColor.opacity(0.2)), in: RoundedRectangle(cornerRadius: 24))
                 }
                 .padding(.horizontal, 24)
     
+                // Exactly one button that handles the full workflow without offering confusing exit ramps
                 OnboardingActionButton(
-                    title: store.hasNotificationAccess ? "Continue" : "Skip for Now",
+                    title: "Continue",
                     action: {
                         store.reminderTime = selectedTime.timeIntervalSince1970
-                        if store.hasNotificationAccess {
-                            store.isReminderEnabled = true
-                            store.scheduleDailyReminder()
-                        }
+                        store.isReminderEnabled = true
+                        store.requestNotificationAccess()
+                        store.scheduleDailyReminder()
                         onNext()
                     }
                 )
@@ -456,8 +424,6 @@ struct NotificationOnboardingView: View {
                 animate = true
             }
         }
-        // Ensure smooth transition when swapping layouts
-        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: store.hasNotificationAccess)
     }
 }
 
@@ -541,48 +507,6 @@ struct CustomTextField: View {
             .foregroundStyle(.white)
             .glassEffect(.regular.interactive().tint(OnboardingStep.profile.buttonColor.opacity(0.1)), in: RoundedRectangle(cornerRadius: 24))
             .colorScheme(.dark)
-    }
-}
-
-struct PermissionRow: View {
-    let title: String
-    let icon: String
-    let isGranted: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .frame(width: 24)
-                .foregroundStyle(
-                        isGranted
-                        ? Color(red: 0.6, green: 0.85, blue: 0.6)
-                        : .white
-                    )
-            
-            Text(title)
-                .foregroundStyle(.white)
-                .fontWeight(.medium)
-            
-            Spacer()
-            
-            if isGranted {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 20, weight: .bold))
-                    .padding(3)
-                    .foregroundStyle(Color(red: 0.6, green: 0.85, blue: 0.6))
-            } else {
-                Button(action: action) {
-                    Text("Enable")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.black)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(Color.white)
-            }
-        }
-        .padding()
-        .glassEffect(.clear.tint(isGranted ? Color.mint.opacity(0.2) : Color.clear), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 

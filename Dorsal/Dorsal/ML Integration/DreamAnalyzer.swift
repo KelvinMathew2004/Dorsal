@@ -38,6 +38,7 @@ actor DreamAnalyzer {
     }
     
     func prewarmModel() {
+        guard case .available = SystemLanguageModel.default.availability else { return }
         let session = makeSession()
         session.prewarm()
     }
@@ -70,7 +71,7 @@ actor DreamAnalyzer {
         let prompt = "Analyze this transcript of a dream. Transcript: \"\(transcript)\""
         
         return AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
                     let session = self.makeSession()
                     
@@ -103,7 +104,7 @@ actor DreamAnalyzer {
                         continuation.finish(throwing: DreamError.tooLong)
                         
                     case .assetsUnavailable:
-                        continuation.finish(throwing: DreamError.modelDownloading)
+                        continuation.finish(throwing: DreamError.modelUnavailable)
                         
                     case .unsupportedLanguageOrLocale:
                         continuation.finish(throwing: DreamError.unsupportedLanguage)
@@ -124,6 +125,7 @@ actor DreamAnalyzer {
                     continuation.finish(throwing: error)
                 }
             }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
         }
     }
     
@@ -250,7 +252,7 @@ actor DreamAnalyzer {
         """
         
         return AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
                     let session = self.makeSession()
                     
@@ -268,6 +270,7 @@ actor DreamAnalyzer {
                     continuation.finish(throwing: error)
                 }
             }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
         }
     }
         

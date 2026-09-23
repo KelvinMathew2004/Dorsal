@@ -1,6 +1,7 @@
 import SwiftUI
 import Photos
 import PhotosUI
+import AVFoundation
 
 struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
@@ -174,6 +175,7 @@ struct DreamDetailView: View {
                 }
             }
         }
+        .task { await store.refreshAvailability() }
         .onAppear {
             if let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
                 self.dominantColor = uiImage.dominantColor
@@ -232,47 +234,45 @@ struct DreamDetailView: View {
         }
     }
     
+    var contentLayer: some View { mainScrollView }
+
     @ViewBuilder
-    var contentLayer: some View {
-        if let error = liveDream.analysisError {
-            errorView(error: error)
-        } else {
-            mainScrollView
-        }
-    }
-    
-    @ViewBuilder
-    func errorView(error: String) -> some View {
-        ContentUnavailableView {
-            Label("Analysis Failed", systemImage: "hand.raised.fill")
-        } description: {
-            Text(error)
-                .multilineTextAlignment(.center)
-        } actions: {
-            if liveDream.core?.summary != nil {
-                Button("Remove Entry", role: .destructive) {
-                    store.deleteDream(liveDream)
-                    store.navigationPath = NavigationPath()
+    var recoveryNotices: some View {
+        if let message = liveDream.transcriptionError {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Transcription", systemImage: "waveform")
+                Text(message).font(.subheadline)
+                if store.transcribingDreamID == liveDream.id {
+                    ProgressView("Transcribing recording…")
+                } else {
+                    Button("Retry Transcription") { store.retryTranscription(liveDream) }
+                        .disabled(store.isProcessing || store.transcribingDreamID != nil || store.isRecording || store.recordingIsBusy)
                 }
-                .buttonStyle(.glass)
-                .tint(.red)
-                
-                Button("Continue", role: .confirm) {
-                    store.ignoreErrorAndKeepDream(liveDream)
-                }
-                .buttonStyle(.glassProminent)
-                .foregroundStyle(Theme.accent)
-                .tint(Theme.secondary.opacity(0.2))
-            } else {
-                Button("Remove Entry", role: .destructive) {
-                    store.deleteDream(liveDream)
-                    store.navigationPath = NavigationPath()
-                }
-                .buttonStyle(.glassProminent)
-                .tint(.red)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
         }
-        .transition(.opacity)
+        if let message = liveDream.analysisError ?? ((!isProcessingThisDream && liveDream.needsAnalysis == true && !liveDream.rawTranscript.isEmpty)
+            ? "Analysis hasn’t finished. You can read your dream now and retry analysis when Apple Intelligence is available." : nil) {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Analysis Unavailable", systemImage: "sparkles")
+                Text(message).font(.subheadline)
+                Button("Retry Analysis") { store.regenerateDream(liveDream) }
+                    .disabled(store.isProcessing || liveDream.rawTranscript.isEmpty || store.isRecording || store.recordingIsBusy || store.transcribingDreamID != nil)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
+        if let message = liveDream.imageError {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Illustration Unavailable", systemImage: "photo")
+                Text(message).font(.subheadline)
+                Button("Retry Illustration") { store.regenerateDreamImage(liveDream) }
+                    .disabled(store.isProcessing || store.isRecording || store.recordingIsBusy || store.transcribingDreamID != nil)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
     }
 
     @ViewBuilder
@@ -280,7 +280,11 @@ struct DreamDetailView: View {
         ScrollView {
             VStack(spacing: 24) {
                 
+                recoveryNotices.padding(.horizontal)
                 headerSection
+                if let url = RecordingFiles.url(for: liveDream.recordingFileName) {
+                    RecordingPlaybackView(url: url).padding(.horizontal)
+                }
                 
                 if let core = liveDream.core {
                     DreamContextSection(
@@ -321,47 +325,17 @@ struct DreamDetailView: View {
             .animation(.default, value: liveDream.extras)
         }
         .scrollIndicators(.hidden)
-        .scrollDisabled(isProcessingThisDream || selectedInsight != nil)
+        .scrollDisabled(selectedInsight != nil)
         .blur(radius: selectedInsight != nil ? 10 : 0)
-        .overlay {
+        .safeAreaInset(edge: .bottom) {
             if isProcessingThisDream {
-                ZStack {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                    
-                    VStack(spacing: 40) {
-                        Image(systemName: analysisIcons[currentAnalysisIconIndex].name)
-                            .font(.system(size: 48, weight: .semibold))
-                            .foregroundStyle(analysisIcons[currentAnalysisIconIndex].color)
-                            .symbolRenderingMode(.hierarchical)
-                            .symbolColorRenderingMode(.gradient)
-                            .contentTransition(.symbolEffect(.replace))
-                            .frame(width: 64, height: 64)
-                        
-                        Text("Analyzing...")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                    }
-                    .padding(40)
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-                }
-                .onAppear {
-                    currentAnalysisIconIndex = 0
-                }
-                .task {
-                    while !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 800_000_000)
-                        if !isProcessingThisDream { break }
-                        
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                            currentAnalysisIconIndex = (currentAnalysisIconIndex + 1) % analysisIcons.count
-                        }
-                    }
-                }
+                ProgressView("Analyzing…")
+                    .padding()
+                    .background(.regularMaterial, in: Capsule())
             }
         }
     }
-    
+
     @ViewBuilder
     func insightCardRow(type: InsightType, text: String, isProcessing: Bool) -> some View {
         ZStack {
@@ -941,5 +915,48 @@ struct DreamTranscriptSection: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
+    }
+}
+
+private struct RecordingPlaybackView: View {
+    let url: URL
+    @State private var player: AVAudioPlayer?
+    @State private var isPlaying = false
+    @State private var playbackError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button(isPlaying ? "Stop Audio" : "Play Recording", systemImage: isPlaying ? "stop.fill" : "play.fill") {
+                    if isPlaying { player?.stop(); isPlaying = false }
+                    else {
+                        do {
+                            try AVAudioSession.sharedInstance().setCategory(.playback)
+                            try AVAudioSession.sharedInstance().setActive(true)
+                            player = try AVAudioPlayer(contentsOf: url)
+                            isPlaying = player?.play() == true
+                            playbackError = isPlaying ? nil : "The recording couldn’t be played. You can still export it."
+                        } catch { playbackError = "The recording couldn’t be played. You can still export it." }
+                    }
+                }
+                Spacer()
+                ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }
+                    .accessibilityLabel("Export recording")
+            }
+            if let playbackError { Text(playbackError).font(.footnote) }
+        }
+        .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .task(id: isPlaying) {
+            while isPlaying && !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { break }
+                if player?.isPlaying != true { isPlaying = false }
+            }
+            if !isPlaying { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+        }
+        .onDisappear {
+            player?.stop()
+            isPlaying = false
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 }

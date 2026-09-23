@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		D052A100000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5DC873B22FC3F36D005A4F74 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5DC873B92FC3F36D005A4F74;
+			remoteInfo = Dorsal;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		5DC873BA2FC3F36D005A4F74 /* Dorsal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dorsal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D052A1000000000000000001 /* DorsalReliabilityTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = DorsalReliabilityTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -29,10 +40,22 @@
 			path = Dorsal;
 			sourceTree = "<group>";
 		};
+		D052A1000000000000000002 /* DorsalReliabilityTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DorsalReliabilityTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		5DC873B72FC3F36D005A4F74 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D052A1000000000000000005 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -46,6 +69,7 @@
 			isa = PBXGroup;
 			children = (
 				5DC873BC2FC3F36D005A4F74 /* Dorsal */,
+				D052A1000000000000000002 /* DorsalReliabilityTests */,
 				5DC873BB2FC3F36D005A4F74 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				5DC873BA2FC3F36D005A4F74 /* Dorsal.app */,
+				D052A1000000000000000001 /* DorsalReliabilityTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -82,6 +107,27 @@
 			productName = Dorsal;
 			productReference = 5DC873BA2FC3F36D005A4F74 /* Dorsal.app */;
 			productType = "com.apple.product-type.application";
+		};
+		D052A1000000000000000003 /* DorsalReliabilityTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D052A1000000000000000007 /* Build configuration list for PBXNativeTarget "DorsalReliabilityTests" */;
+			buildPhases = (
+				D052A1000000000000000004 /* Sources */,
+				D052A1000000000000000005 /* Frameworks */,
+				D052A1000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D052A100000000000000000A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D052A1000000000000000002 /* DorsalReliabilityTests */,
+			);
+			name = DorsalReliabilityTests;
+			productName = DorsalReliabilityTests;
+			productReference = D052A1000000000000000001 /* DorsalReliabilityTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -112,6 +158,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				D052A1000000000000000003 /* DorsalReliabilityTests */,
 				5DC873B92FC3F36D005A4F74 /* Dorsal */,
 			);
 		};
@@ -119,6 +166,13 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		5DC873B82FC3F36D005A4F74 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D052A1000000000000000006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +189,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D052A1000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D052A100000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5DC873B92FC3F36D005A4F74 /* Dorsal */;
+			targetProxy = D052A100000000000000000B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		5DC873C92FC3F36F005A4F74 /* Debug */ = {
@@ -145,7 +214,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Dorsal/Dorsal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 879HFN9R93;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -186,7 +255,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Dorsal/Dorsal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 879HFN9R93;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -341,6 +410,36 @@
 			};
 			name = Release;
 		};
+		D052A1000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kelvinmathew.dorsal.reliabilitytests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dorsal.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Dorsal";
+			};
+			name = Debug;
+		};
+		D052A1000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kelvinmathew.dorsal.reliabilitytests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dorsal.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Dorsal";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -358,6 +457,15 @@
 			buildConfigurations = (
 				5DC873C92FC3F36F005A4F74 /* Debug */,
 				5DC873CA2FC3F36F005A4F74 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D052A1000000000000000007 /* Build configuration list for PBXNativeTarget "DorsalReliabilityTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D052A1000000000000000008 /* Debug */,
+				D052A1000000000000000009 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

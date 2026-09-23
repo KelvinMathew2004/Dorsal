@@ -25,6 +25,22 @@ class DreamStore: NSObject, ObservableObject {
     @Published var currentDreamID: UUID?
     
     @Published var generationError: String?
+    @Published var analysisAvailability = AnalysisAvailability(SystemLanguageModel.default.availability)
+    @Published var isStartingRecording = false
+    @Published var isFinishingRecording = false
+    @Published var transcriptionNotice: String?
+    @Published var recordingError: String?
+    @Published var persistenceError: String?
+    @Published var transcribingDreamID: UUID?
+    private var unsavedDreamIDs: Set<UUID> = []
+    private let recoveryStore = DreamRecoveryStore()
+    var recordingIsBusy: Bool { isStartingRecording || isFinishingRecording }
+
+    func refreshAvailability() async {
+        analysisAvailability = availabilityProvider()
+        await checkImageGenerationSupport()
+    }
+
     
     // MARK: - Synced User Properties
     @Published var firstName: String {
@@ -147,7 +163,8 @@ class DreamStore: NSObject, ObservableObject {
     @Published var isPaused: Bool = false
     @Published var audioPower: Float = 0.0
         
-    private let audioRecorder = LiveAudioRecorder()
+    private let audioRecorder: LiveAudioRecorder
+    private let availabilityProvider: () -> AnalysisAvailability
     private var cancellables = Set<AnyCancellable>()
     
     @Published var activeQuestion: ChecklistItem?
@@ -199,13 +216,17 @@ class DreamStore: NSObject, ObservableObject {
     ]
     private var updateStateTask: Task<Void, Never>?
     
-    override init() {
+    init(prepareServices: Bool = true,
+         availabilityProvider: @escaping () -> AnalysisAvailability = { AnalysisAvailability(SystemLanguageModel.default.availability) }) {
+        self.availabilityProvider = availabilityProvider
+        self.audioRecorder = LiveAudioRecorder(prepareModels: prepareServices)
         let kvs = NSUbiquitousKeyValueStore.default
         self.firstName = kvs.string(forKey: "userFirstName") ?? UserDefaults.standard.string(forKey: "userFirstName") ?? ""
         self.lastName = kvs.string(forKey: "userLastName") ?? UserDefaults.standard.string(forKey: "userLastName") ?? ""
         
         super.init()
-        
+        guard prepareServices else { setupObservers(); return }
+
         // Initial Theme Pull
         self.currentThemeID = kvs.string(forKey: "themeID") ?? UserDefaults.standard.string(forKey: "themeID") ?? "gold"
 
@@ -230,13 +251,15 @@ class DreamStore: NSObject, ObservableObject {
         
         // Listen for App returning to foreground
         NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
-            // Re-check permissions when returning from iOS Settings
-            self?.checkPermissions()
-            self?.checkNotificationStatus()
-            
-            // Check if iCloud Drive updated the profile image
-            if let newData = self?.loadProfileImageFromDisk(), newData != self?.profileImageData {
-                self?.profileImageData = newData
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                checkPermissions()
+                checkNotificationStatus()
+                await refreshAvailability()
+                retryPendingSaves()
+                if let newData = loadProfileImageFromDisk(), newData != profileImageData {
+                    profileImageData = newData
+                }
             }
         }
     }
@@ -257,6 +280,12 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     private func setupObservers() {
+        audioRecorder.$transcriptionMessage
+            .sink { [weak self] in self?.transcriptionNotice = $0 }
+            .store(in: &cancellables)
+        audioRecorder.$recordingError
+            .sink { [weak self] in self?.recordingError = $0 }
+            .store(in: &cancellables)
         audioRecorder.$audioLevel
             .receive(on: RunLoop.main)
             .sink { [weak self] level in
@@ -461,6 +490,7 @@ class DreamStore: NSObject, ObservableObject {
     func setContext(_ context: ModelContext) {
         self.modelContext = context
         fetchAllData()
+        recoverUnsavedDreams()
     }
     
     func fetchAllData() {
@@ -468,7 +498,9 @@ class DreamStore: NSObject, ObservableObject {
         do {
             let descriptor = FetchDescriptor<SavedDream>(sortBy: [SortDescriptor(\.date, order: .reverse)])
             let savedDreams = try context.fetch(descriptor)
-            self.dreams = savedDreams.map { Dream(from: $0) }
+            let unsaved = dreams.filter { unsavedDreamIDs.contains($0.id) }
+            self.dreams = savedDreams.filter { !unsavedDreamIDs.contains($0.id) }.map { Dream(from: $0) } + unsaved
+            self.dreams.sort { $0.date > $1.date }
         } catch { print("Fetch error: \(error)") }
         
         do {
@@ -599,17 +631,12 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     func checkImageGenerationSupport() async {
-        do {
-            _ = try await ImageCreator()
-            await MainActor.run { self.isImageGenerationAvailable = true }
-        } catch {
-            print("Image generation not supported: \(error)")
-            await MainActor.run { self.isImageGenerationAvailable = false }
-        }
+        await ImageGenerationService.shared.checkAvailability()
+        isImageGenerationAvailable = await ImageGenerationService.shared.isAvailable
     }
-    
+
     func generateImageFromPrompt(prompt: String, places: [String] = [], emotions: [String] = []) async throws -> Data {
-        guard isImageGenerationAvailable else { throw DreamError.imageUnavailable }
+        // Recheck at the point of use: a failed launch-time probe isn't permanent.
         return try await ImageGenerationService.shared.generate(prompt: prompt, places: places, emotions: emotions)
     }
     
@@ -797,16 +824,23 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     func deleteDream(_ dream: Dream) {
-        if let index = dreams.firstIndex(where: { $0.id == dream.id }) {
-            dreams.remove(at: index)
-            if let context = modelContext {
-                let id = dream.id
-                try? context.delete(model: SavedDream.self, where: #Predicate { $0.id == id })
-                try? context.save()
-            }
+        guard let context = modelContext else { return }
+        do {
+            let id = dream.id
+            let descriptor = FetchDescriptor<SavedDream>(predicate: #Predicate { $0.id == id })
+            for saved in try context.fetch(descriptor) { context.delete(saved) }
+            try context.save()
+            try recoveryStore.remove(id)
+            if currentDreamID == id { currentAnalysisTask?.cancel() }
+            dreams.removeAll { $0.id == id }
+            unsavedDreamIDs.remove(id)
+            if let url = RecordingFiles.url(for: dream.recordingFileName) { try? FileManager.default.removeItem(at: url) }
+        } catch {
+            context.rollback()
+            persistenceError = "The dream couldn’t be deleted. Your entry has been kept; please try again."
         }
     }
-    
+
     func ignoreErrorAndKeepDream(_ dream: Dream) {
         if let index = dreams.firstIndex(where: { $0.id == dream.id }) {
             dreams[index].analysisError = nil
@@ -837,87 +871,69 @@ class DreamStore: NSObject, ObservableObject {
     func toggleBookmark(id: UUID) {
         if let index = dreams.firstIndex(where: { $0.id == id }) {
             dreams[index].isBookmarked.toggle()
-            if let context = modelContext {
-                let dreamID = id
-                let descriptor = FetchDescriptor<SavedDream>(predicate: #Predicate { $0.id == dreamID })
-                if let saved = try? context.fetch(descriptor).first {
-                    saved.isBookmarked = dreams[index].isBookmarked
-                    try? context.save()
-                }
-            }
+            persistDream(dreams[index])
         }
     }
 
     func startRecording() {
-        let status = AVAudioApplication.shared.recordPermission
-        
-        // Handle case where user never granted/denied permission yet (skipping onboarding)
-        if status == .undetermined {
-            AVAudioApplication.requestRecordPermission { [weak self] granted in
-                Task { @MainActor in
-                    self?.hasMicAccess = granted
-                    if granted {
-                        self?.startRecording()
-                    } else {
-                        self?.showPermissionAlert = true
-                    }
-                }
+        guard !isRecording, !recordingIsBusy, !isProcessing, transcribingDreamID == nil else { return }
+        isStartingRecording = true
+        recordingError = nil
+        Task {
+            defer { isStartingRecording = false }
+            if AVAudioApplication.shared.recordPermission == .undetermined {
+                hasMicAccess = await AVAudioApplication.requestRecordPermission()
+            } else {
+                checkPermissions()
             }
-            return
-        }
-
-        if !hasMicAccess {
-            showPermissionAlert = true
-            return
-        }
-
-        currentTranscript = ""
-        answeredQuestions = []
-        isQuestionSatisfied = false
-        recommendationCache = [:]
-        activeQuestion = questions.first
-        
-        let keywords = questions.flatMap { $0.keywords }
-        
-        audioRecorder.startRecording(keywords: keywords) { [weak self] success in
-            Task { @MainActor [weak self] in
-                guard let self = self, success else { return }
-                withAnimation { self.isRecording = true; self.isPaused = false }
+            guard hasMicAccess else { showPermissionAlert = true; return }
+            currentTranscript = ""
+            answeredQuestions = []
+            isQuestionSatisfied = false
+            recommendationCache = [:]
+            activeQuestion = questions.first
+            do {
+                try await audioRecorder.startRecording(keywords: questions.flatMap { $0.keywords })
+                withAnimation { isRecording = true; isPaused = false }
+            } catch {
+                recordingError = (error as? LiveAudioRecorder.RecordingError)?.localizedDescription
+                    ?? "Recording couldn’t start. Check your microphone connection and available storage, then try again."
             }
         }
     }
-    
-    func pauseRecording() {
-        withAnimation { isPaused = true }
-        audioRecorder.pauseRecording()
-    }
-    
-    func resumeRecording() {
-        withAnimation { isPaused = false }
-        audioRecorder.resumeRecording()
-    }
-        
+
+    func pauseRecording() { audioRecorder.pauseRecording() }
+    func resumeRecording() { audioRecorder.resumeRecording() }
+
     func stopRecording(save: Bool) {
-        guard let url = audioRecorder.stopRecording() else {
+        guard isRecording, !isFinishingRecording else { return }
+        isFinishingRecording = true
+        Task {
+            let result = await audioRecorder.stopRecording(discard: !save)
             withAnimation { isRecording = false; isPaused = false }
-            return
+            isFinishingRecording = false
+            guard save, let result else { currentTranscript = ""; return }
+            currentTranscript = result.transcript
+            processDream(transcript: result.transcript, audioURL: result.url,
+                         transcriptionMessage: result.transcriptionMessage)
+            if result.audioWriteFailed {
+                recordingError = "Some audio couldn’t be saved. Any recognized text has been kept. Check your device’s available storage."
+            }
         }
-        withAnimation { isRecording = false; isPaused = false }
-        
-        if save && !currentTranscript.isEmpty {
-            processDream(transcript: currentTranscript, audioURL: url)
-        }
-        if !save { currentTranscript = "" }
     }
 
-    private func processDream(transcript: String, audioURL: URL) {
+    private func processDream(transcript: String, audioURL: URL, transcriptionMessage: String?) {
         currentAnalysisTask?.cancel()
         
         isProcessing = true
         let newID = UUID()
         currentDreamID = newID
         
-        let newDream = Dream(id: newID, rawTranscript: transcript)
+        var newDream = Dream(id: newID, rawTranscript: transcript)
+        newDream.recordingFileName = audioURL.lastPathComponent
+        newDream.transcriptionError = transcriptionMessage
+        newDream.needsTranscription = transcript.isEmpty || transcriptionMessage != nil
+        newDream.needsAnalysis = true
         dreams.insert(newDream, at: 0)
         
         persistDream(newDream)
@@ -926,12 +942,17 @@ class DreamStore: NSObject, ObservableObject {
         navigationPath = NavigationPath()
         navigationPath.append(newDream)
         
-        runAnalysis(for: newID, transcript: transcript, audioURL: audioURL, existingFatigue: nil)
+        if transcript.isEmpty {
+            isProcessing = false
+        } else {
+            runAnalysis(for: newID, transcript: transcript, audioURL: audioURL, existingFatigue: nil)
+        }
     }
     
     func regenerateDream(_ dream: Dream) {
-        guard !isProcessing else { return }
-        
+        guard !isProcessing, !isRecording, !recordingIsBusy, transcribingDreamID == nil else { return }
+        guard !dream.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
         currentAnalysisTask?.cancel()
         
         guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
@@ -941,83 +962,101 @@ class DreamStore: NSObject, ObservableObject {
         
         let existingFatigue = dreams[index].voiceFatigue
         
-        dreams[index].core = nil
-        dreams[index].extras = nil
-        dreams[index].generatedImageData = nil
+        // Keep the last successful analysis and illustration if a retry fails.
         dreams[index].analysisError = nil
+        dreams[index].needsAnalysis = true
         
         dreams[index].voiceFatigue = existingFatigue
         
         persistDream(dreams[index])
         
-        runAnalysis(for: dream.id, transcript: dream.rawTranscript, audioURL: nil, existingFatigue: existingFatigue)
+        runAnalysis(for: dream.id, transcript: dream.rawTranscript,
+                    audioURL: RecordingFiles.url(for: dream.recordingFileName), existingFatigue: existingFatigue)
     }
-    
+
     func regenerateDreamImage(_ dream: Dream) {
-        guard !isProcessing, isImageGenerationAvailable else { return }
+        guard !isProcessing, !isRecording, !recordingIsBusy, transcribingDreamID == nil else { return }
         guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
-        
-        currentAnalysisTask?.cancel()
-        
         isProcessing = true
         currentDreamID = dream.id
-        
-        // Capture existing image data for rollback
-        let previousImageData = dreams[index].generatedImageData
-        
-        // Clear existing image so the loading/gradient state appears
-        dreams[index].generatedImageData = nil
-        persistDream(dreams[index])
-        
-        let transcript = dream.rawTranscript
-        
+        dreams[index].imageError = nil
         currentAnalysisTask = Task {
+            defer { isProcessing = false }
             do {
-                let core = dreams[index].core
-                
-                // Generate prompt
-                let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: transcript)
-                
-                let places = core?.places ?? []
-                let emotions = core?.emotions ?? []
-                
-                let data = try await generateImageFromPrompt(prompt: sanitizedPrompt, places: places, emotions: emotions)
-                
-                await MainActor.run {
-                    if let idx = self.dreams.firstIndex(where: { $0.id == dream.id }) {
-                        self.dreams[idx].generatedImageData = data
-                        self.persistDream(self.dreams[idx])
-                    }
-                    self.isProcessing = false
+                // An existing summary is enough to retry the picture independently of text AI.
+                let prompt = dream.core?.summary ?? dream.rawTranscript
+                let data = try await generateImageFromPrompt(prompt: prompt, places: dream.places, emotions: dream.emotions)
+                try Task.checkCancellation()
+                if let idx = dreams.firstIndex(where: { $0.id == dream.id }) {
+                    dreams[idx].generatedImageData = data
+                    dreams[idx].imageError = nil
+                    persistDream(dreams[idx])
                 }
             } catch {
-                print("Image regeneration error: \(error)")
-                await MainActor.run {
-                    if let idx = self.dreams.firstIndex(where: { $0.id == dream.id }) {
-                        // Restore previous image on failure
-                        self.dreams[idx].generatedImageData = previousImageData
-                        
-                        if let dreamError = error as? DreamError {
-                            self.dreams[idx].analysisError = dreamError.localizedDescription
-                        } else {
-                            self.dreams[idx].analysisError = "Could not regenerate image. \(error.localizedDescription)"
-                        }
-                        self.persistDream(self.dreams[idx])
-                    }
-                    self.isProcessing = false
+                guard !Task.isCancelled, !DreamFailure.isCancellation(error) else { return }
+                if let idx = dreams.firstIndex(where: { $0.id == dream.id }) {
+                    dreams[idx].imageError = DreamFailure.imageMessage(for: error)
+                    persistDream(dreams[idx])
+                }
+            }
+            await checkImageGenerationSupport()
+        }
+    }
+
+    func retryTranscription(_ dream: Dream) {
+        guard !isProcessing, !isRecording, !recordingIsBusy, transcribingDreamID == nil else { return }
+        guard let url = RecordingFiles.url(for: dream.recordingFileName) else {
+            if let index = dreams.firstIndex(where: { $0.id == dream.id }) {
+                dreams[index].transcriptionError = "The original audio isn’t available on this device. Any existing transcript is still available."
+                persistDream(dreams[index])
+            }
+            return
+        }
+        transcribingDreamID = dream.id
+        Task {
+            defer { transcribingDreamID = nil }
+            do {
+                let text = try await audioRecorder.transcribeFile(at: url)
+                guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
+                dreams[index].rawTranscript = text
+                dreams[index].transcriptionError = nil
+                dreams[index].needsTranscription = false
+                dreams[index].needsAnalysis = true
+                persistDream(dreams[index])
+                isProcessing = true
+                currentDreamID = dream.id
+                runAnalysis(for: dream.id, transcript: text, audioURL: url, existingFatigue: dreams[index].voiceFatigue)
+            } catch {
+                if let index = dreams.firstIndex(where: { $0.id == dream.id }) {
+                    dreams[index].transcriptionError = (error as? LiveAudioRecorder.RecordingError)?.localizedDescription
+                        ?? "Transcription couldn’t finish. Your audio and any existing transcript are still available. Please try again."
+                    persistDream(dreams[index])
                 }
             }
         }
     }
-    
+
     private func runAnalysis(for dreamID: UUID, transcript: String, audioURL: URL?, existingFatigue: Int?) {
         currentAnalysisTask = Task {
+            defer { isProcessing = false; isAnalyzingFatigue = false }
+            analysisAvailability = availabilityProvider()
+            guard analysisAvailability == .available else {
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                    dreams[index].analysisError = analysisAvailability.message
+                    dreams[index].needsAnalysis = true
+                    persistDream(dreams[index])
+                }
+                return
+            }
+            let previousCore = dreams.first(where: { $0.id == dreamID })?.core
+            let previousExtras = dreams.first(where: { $0.id == dreamID })?.extras
             do {
+                var generatedCore = DreamCoreAnalysis()
                 for try await partialCore in await DreamAnalyzer.shared.streamCore(transcript: transcript, userName: self.firstName) {
                     if Task.isCancelled { return }
                     
                     if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                        var currentCore = dreams[index].core ?? DreamCoreAnalysis()
+                        var currentCore = generatedCore
                         if let t = partialCore.title { currentCore.title = t }
                         if let s = partialCore.summary { currentCore.summary = s }
                         if let e = partialCore.emotion { currentCore.emotion = e }
@@ -1031,14 +1070,16 @@ class DreamStore: NSObject, ObservableObject {
                         if let toneLabel = partialCore.tone?.label {
                             currentCore.tone = ToneAnalysis(label: toneLabel, confidence: partialCore.tone?.confidence)
                         }
-                        dreams[index].core = currentCore
+                        generatedCore = currentCore
+                        if previousCore == nil { dreams[index].core = currentCore }
                     }
                 }
                 
-                if let index = dreams.firstIndex(where: { $0.id == dreamID }),
-                   let currentCore = dreams[index].core {
-                    let repairedCore = await DreamAnalyzer.shared.ensureCoreFields(current: currentCore, transcript: transcript)
+                let repairedCore = await DreamAnalyzer.shared.ensureCoreFields(current: generatedCore, transcript: transcript)
+                try Task.checkCancellation()
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
                     dreams[index].core = repairedCore
+                    persistDream(dreams[index])
                 }
                 
                 var fatigueScore = 0
@@ -1067,31 +1108,30 @@ class DreamStore: NSObject, ObservableObject {
                     withAnimation { self.isAnalyzingFatigue = false }
                 }
                 
+                await checkImageGenerationSupport()
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }),
                    let _ = dreams[index].core?.summary {
-                    if isImageGenerationAvailable {
+                    if isImageGenerationAvailable && dreams[index].generatedImageData == nil {
                         do {
-                            let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: transcript)
-                            
-                            // UPDATED: Extract metadata for fallback (places + emotions)
                             let places = dreams[index].core?.places ?? []
                             let emotions = dreams[index].core?.emotions ?? []
+                            let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: transcript)
+                            try Task.checkCancellation()
                             
                             let data = try await generateImageFromPrompt(prompt: sanitizedPrompt, places: places, emotions: emotions)
                             
                             await MainActor.run {
                                 if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
                                     dreams[idx].generatedImageData = data
+                                    dreams[idx].imageError = nil
                                 }
                             }
                         } catch {
                             print("Image generation error: \(error)")
                             await MainActor.run {
                                 if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
-                                    if let dreamError = error as? DreamError {
-                                        dreams[idx].analysisError = dreamError.localizedDescription
-                                    } else {
-                                        dreams[idx].analysisError = "Could not visualize dream. \(error.localizedDescription)"
+                                    if !DreamFailure.isCancellation(error) {
+                                        dreams[idx].imageError = DreamFailure.imageMessage(for: error)
                                     }
                                     persistDream(dreams[idx])
                                 }
@@ -1100,29 +1140,31 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
+                var generatedExtras = DreamExtraAnalysis()
                 for try await partialExtra in await DreamAnalyzer.shared.streamExtras(transcript: transcript) {
                     if Task.isCancelled { return }
                     
                     if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                        var currentExtras = dreams[index].extras ?? DreamExtraAnalysis()
+                        var currentExtras = generatedExtras
                         if let s = partialExtra.sentimentScore { currentExtras.sentimentScore = s }
                         if let nm = partialExtra.isNightmare { currentExtras.isNightmare = nm }
                         if let l = partialExtra.lucidityScore { currentExtras.lucidityScore = l }
                         if let v = partialExtra.vividnessScore { currentExtras.vividnessScore = v }
                         if let c = partialExtra.coherenceScore { currentExtras.coherenceScore = c }
                         if let a = partialExtra.anxietyLevel { currentExtras.anxietyLevel = a }
-                        dreams[index].extras = currentExtras
+                        generatedExtras = currentExtras
+                        if previousExtras == nil { dreams[index].extras = currentExtras }
                     }
                 }
                 
-                if let index = dreams.firstIndex(where: { $0.id == dreamID }),
-                   let currentExtras = dreams[index].extras {
-                    let repairedExtras = await DreamAnalyzer.shared.ensureExtraFields(current: currentExtras, transcript: transcript)
-                    dreams[index].extras = repairedExtras
-                }
+                let repairedExtras = await DreamAnalyzer.shared.ensureExtraFields(current: generatedExtras, transcript: transcript)
+                try Task.checkCancellation()
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }) { dreams[index].extras = repairedExtras }
                 
-                if let finalDream = dreams.first(where: { $0.id == dreamID }) {
-                    persistDream(finalDream)
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                    dreams[index].analysisError = nil
+                    dreams[index].needsAnalysis = false
+                    persistDream(dreams[index])
                 }
                 
                 isProcessing = false
@@ -1134,7 +1176,8 @@ class DreamStore: NSObject, ObservableObject {
                 print("Analysis failed: \(error)")
                 
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                    dreams[index].analysisError = error.localizedDescription
+                    dreams[index].analysisError = DreamFailure.analysisMessage(for: error)
+                    dreams[index].needsAnalysis = true
                     persistDream(dreams[index])
                 }
                 
@@ -1144,52 +1187,49 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
     
-    func persistDream(_ dream: Dream) {
-        guard let context = modelContext else { return }
-        let dreamID = dream.id
-        
-        let descriptor = FetchDescriptor<SavedDream>(predicate: #Predicate { $0.id == dreamID })
-        let saved: SavedDream
-        
-        if let existing = try? context.fetch(descriptor).first {
-            saved = existing
-        } else {
-            saved = SavedDream(id: dreamID)
-            context.insert(saved)
+    @discardableResult
+    func persistDream(_ dream: Dream) -> Bool {
+        unsavedDreamIDs.insert(dream.id)
+        var hasRecoveryCopy = false
+        do { try recoveryStore.write(dream); hasRecoveryCopy = true }
+        catch { print("Recovery copy failed: \(error)") }
+        do {
+            guard let context = modelContext else {
+                throw NSError(domain: "Dorsal.Persistence", code: 1, userInfo: [NSLocalizedDescriptionKey: "The journal is not open yet."])
+            }
+            try DreamPersistence.save(dream, in: context) { try context.save() }
+            // A cleanup failure does not mean the committed journal entry failed to save.
+            do { try recoveryStore.remove(dream.id) }
+            catch { print("Recovery cleanup deferred: \(error)") }
+            unsavedDreamIDs.remove(dream.id)
+            if unsavedDreamIDs.isEmpty { persistenceError = nil }
+            return true
+        } catch {
+            print("Dream save failed: \(error)")
+            persistenceError = hasRecoveryCopy
+                ? "The journal couldn’t finish saving. A recovery copy is kept on this device. Retry saving."
+                : "Your latest changes couldn’t be saved. Keep Dorsal open, check available storage, and retry saving."
+            return false
         }
-        
-        // Map properties manually
-        saved.date = dream.date
-        saved.rawText = dream.rawTranscript
-        saved.generatedImageData = dream.generatedImageData
-        saved.isBookmarked = dream.isBookmarked
-        saved.voiceFatigue = dream.voiceFatigue ?? 0
-        
-        if let core = dream.core {
-            saved.title = core.title ?? ""
-            saved.summary = core.summary ?? ""
-            saved.people = core.people ?? []
-            saved.places = core.places ?? []
-            saved.emotions = core.emotions ?? []
-            saved.symbols = core.symbols ?? []
-            saved.interpretation = core.interpretation ?? ""
-            saved.actionableAdvice = core.actionableAdvice ?? ""
-            saved.toneLabel = core.tone?.label ?? ""
-            saved.toneConfidence = core.tone?.confidence ?? 0
-        }
-        
-        if let extras = dream.extras {
-            saved.sentimentScore = extras.sentimentScore ?? 50
-            saved.isNightmare = extras.isNightmare ?? false
-            saved.lucidityScore = extras.lucidityScore ?? 0
-            saved.vividnessScore = extras.vividnessScore ?? 0
-            saved.coherenceScore = extras.coherenceScore ?? 0
-            saved.anxietyLevel = extras.anxietyLevel ?? 0
-        }
-        
-        try? context.save()
     }
-    
+
+    func retryPendingSaves() {
+        for dream in dreams where unsavedDreamIDs.contains(dream.id) { persistDream(dream) }
+    }
+
+    private func recoverUnsavedDreams() {
+        do {
+            for recovered in try recoveryStore.load() {
+                if let index = dreams.firstIndex(where: { $0.id == recovered.id }) { dreams[index] = recovered }
+                else { dreams.append(recovered) }
+                persistDream(recovered)
+            }
+            dreams.sort { $0.date > $1.date }
+        } catch {
+            persistenceError = "A recovery copy couldn’t be opened. The original files have been kept on this device."
+        }
+    }
+
     func persistInsight(_ insight: WeeklyInsightResult) {
         guard let context = modelContext else { return }
         let saved = SavedWeeklyInsight(
