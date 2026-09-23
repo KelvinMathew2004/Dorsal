@@ -63,9 +63,28 @@ struct ContentView: View {
         }
         .tint(Theme.accent)
         .preferredColorScheme(.dark)
+        .safeAreaInset(edge: .top) {
+            if let message = store.persistenceError {
+                VStack(spacing: 8) {
+                    Text(message).font(.footnote)
+                    Button("Retry Saving") { store.retryPendingSaves() }
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
+            }
+        }
+        .alert("Recording Interrupted", isPresented: Binding(
+            get: { store.recordingError != nil },
+            set: { if !$0 { store.recordingError = nil } }
+        )) {
+            Button("OK", role: .cancel) { store.recordingError = nil }
+        } message: {
+            Text(store.recordingError ?? "")
+        }
         .onAppear {
             store.setContext(modelContext)
-            Task { DreamAnalyzer.shared.prewarmModel() }
+            Task { await DreamAnalyzer.shared.prewarmModel() }
         }
     }
 }

@@ -22,15 +22,11 @@ actor ImageGenerationService {
     }
     
     func generate(prompt: String, places: [String] = [], emotions: [String] = []) async throws -> Data {
-        if !isAvailable {
-            await checkAvailability()
-            guard isAvailable else { throw DreamError.imageUnavailable }
-        }
-        
+        try Task.checkCancellation()
         do {
-            print("🎨 Generating with prompt:", prompt)
             return try await performGeneration(prompt: prompt)
         } catch {
+            guard !Task.isCancelled, DreamFailure.shouldRetryImageWithSimplerPrompt(error) else { throw error }
             var fallbackPrompt = ""
             
             if !places.isEmpty {
@@ -50,6 +46,7 @@ actor ImageGenerationService {
     private func performGeneration(prompt: String) async throws -> Data {
         let creator = try await ImageCreator()
         
+        guard !creator.availableStyles.isEmpty else { throw DreamError.imageUnavailable }
         let style: ImagePlaygroundStyle = creator.availableStyles.contains(.animation)
             ? .animation
             : (creator.availableStyles.first ?? .illustration)

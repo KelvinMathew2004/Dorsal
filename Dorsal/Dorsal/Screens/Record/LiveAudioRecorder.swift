@@ -4,11 +4,11 @@ import Combine
 import Speech
 import UIKit
 
-private final class ConversionState: @unchecked Sendable {
+nonisolated private final class ConversionState: @unchecked Sendable {
     var isProcessed = false
 }
 
-private class BufferConverter {
+nonisolated private class BufferConverter {
     enum Error: Swift.Error {
         case failedToCreateConverter
         case failedToCreateConversionBuffer
@@ -20,7 +20,19 @@ private class BufferConverter {
     func convertBuffer(_ buffer: AVAudioPCMBuffer, to format: AVAudioFormat) throws -> AVAudioPCMBuffer {
         let inputFormat = buffer.format
         guard inputFormat != format else {
-            return buffer
+            // The audio engine reuses its tap buffers. The asynchronous analyzer needs ownership.
+            guard let copy = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: buffer.frameLength) else {
+                throw Error.failedToCreateConversionBuffer
+            }
+            copy.frameLength = buffer.frameLength
+            let source = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+            let destination = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+            for index in source.indices {
+                if let input = source[index].mData, let output = destination[index].mData {
+                    memcpy(output, input, Int(source[index].mDataByteSize))
+                }
+            }
+            return copy
         }
         
         if converter == nil || converter?.outputFormat != format || converter?.inputFormat != inputFormat {
@@ -57,441 +69,347 @@ private class BufferConverter {
     }
 }
 
-class LiveAudioRecorder: NSObject, ObservableObject, @unchecked Sendable {
-    enum TranscriptionError: Error {
-        case localeNotSupported
-        case failedToSetupRecognitionStream
+// The tap runs off the main actor. Locking makes closing the file/stream wait for
+// the last buffer without touching UI or recorder state on the realtime callback.
+nonisolated final class AudioCaptureSink: @unchecked Sendable {
+    private let lock = NSLock()
+    private var file: AVAudioFile?
+    private var continuation: AsyncStream<AnalyzerInput>.Continuation?
+    private let format: AVAudioFormat?
+    private let converter = BufferConverter()
+    private var closed = false
+    private var reportedWriteError = false
+    private var reportedConversionError = false
+    private var lastMeterTime: TimeInterval = 0
+    let onFailure: @Sendable (Bool) -> Void
+    let onLevel: @Sendable (Float) -> Void
+
+    init(file: AVAudioFile, format: AVAudioFormat?, continuation: AsyncStream<AnalyzerInput>.Continuation?,
+         onFailure: @escaping @Sendable (Bool) -> Void, onLevel: @escaping @Sendable (Float) -> Void) {
+        self.file = file
+        self.format = format
+        self.continuation = continuation
+        self.onFailure = onFailure
+        self.onLevel = onLevel
     }
 
-    @Published var isRecording = false
-    @Published var isPaused = false
-    @Published var duration: TimeInterval = 0
-    @Published var audioLevel: Float = 0
-    @Published var liveTranscript: String = ""
-    private var finalizedText: String = ""
-    
+    func consume(_ buffer: AVAudioPCMBuffer) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !closed else { return }
+        do { try file?.write(from: buffer) }
+        catch {
+            if !reportedWriteError { reportedWriteError = true; onFailure(true) }
+        }
+        if let format, let continuation {
+            do { continuation.yield(AnalyzerInput(buffer: try converter.convertBuffer(buffer, to: format))) }
+            catch {
+                if !reportedConversionError { reportedConversionError = true; onFailure(false) }
+            }
+        }
+        let now = Date.timeIntervalSinceReferenceDate
+        guard now - lastMeterTime > 0.03, buffer.frameLength > 0,
+              let samples = buffer.floatChannelData?[0] else { return }
+        lastMeterTime = now
+        var sum: Float = 0
+        for index in stride(from: 0, to: Int(buffer.frameLength) * buffer.stride, by: buffer.stride) {
+            sum += samples[index] * samples[index]
+        }
+        onLevel(min(sqrt(sum / Float(buffer.frameLength)) * 10, 1))
+    }
+
+    func finish() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        closed = true
+        file = nil
+        continuation?.finish()
+        continuation = nil
+        return reportedWriteError
+    }
+}
+
+@MainActor
+final class LiveAudioRecorder: NSObject, ObservableObject {
+    struct RecordingResult {
+        let url: URL
+        let transcript: String
+        let transcriptionMessage: String?
+        let audioWriteFailed: Bool
+    }
+
+    enum RecordingError: LocalizedError {
+        case microphoneDenied, invalidInput, speechUnavailable, noSpeech
+        var errorDescription: String? {
+            switch self {
+            case .microphoneDenied: return "Allow microphone access in Settings to record a dream."
+            case .invalidInput: return "The microphone isn’t available. Check your audio connection and try again."
+            case .speechUnavailable: return "Transcription isn’t available yet. Your audio is kept on this device; retry transcription later."
+            case .noSpeech: return "No speech was recognized. Your audio is kept on this device; you can play it or retry transcription."
+            }
+        }
+    }
+
+    @Published private(set) var isRecording = false
+    @Published private(set) var isPaused = false
+    @Published private(set) var audioLevel: Float = 0
+    @Published private(set) var liveTranscript = ""
+    @Published private(set) var transcriptionMessage: String?
+    @Published var recordingError: String?
+
     private let audioEngine = AVAudioEngine()
-    private var audioFile: AVAudioFile?
+    private var sink: AudioCaptureSink?
     private var recordingURL: URL?
-    
     private var analyzer: SpeechAnalyzer?
-    private var currentAnalyzerFormat: AVAudioFormat?
-    private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
-    private var analysisTask: Task<Void, Never>?
-    private let bufferConverter = BufferConverter()
-    
-    private var startTime: Date?
-    private var accumulatedTime: TimeInterval = 0
-    private var timer: Timer?
-    
-    private let queue = DispatchQueue(label: "com.dorsal.audioQueue", qos: .userInitiated)
-    
-    private var lastUpdateTime: TimeInterval = 0
-    
-    private let targetLocale = Locale(identifier: "en_US")
-    
-    override init() {
+    private var resultsTask: Task<Void, Never>?
+    private var preparationTask: Task<Void, Never>?
+    private var accumulator = TranscriptAccumulator()
+    private var hasTap = false
+    private var isStarting = false
+    private var isStopping = false
+    private let locale = Locale(identifier: "en_US")
+
+    init(prepareModels: Bool = true) {
         super.init()
-        setupInterruptionObserver()
-        Task {
-            await checkAndPrepareModels()
-        }
+        NotificationCenter.default.addObserver(self, selector: #selector(handleInterruption),
+                                               name: AVAudioSession.interruptionNotification, object: nil)
+        if prepareModels { preparationTask = Task { [weak self] in await self?.checkAndPrepareModels() } }
     }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-        Task { [weak self] in
-            await self?.analyzer?.cancelAndFinishNow()
-        }
-    }
-    
-    // MARK: - Model Preparation (Background Only)
-    
+
+    // Downloads may finish at any time, but never replace an analyzer in use.
     func checkAndPrepareModels() async {
-        let transcriber = SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
-        
         do {
-            if await installed(locale: targetLocale) {
-            } else {
-                print("LiveAudioRecorder: Starting background download for SpeechTranscriber assets...")
-                try await downloadIfNeeded(for: transcriber)
+            guard let module = await supportedModule() else { return }
+            if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
+                try await request.downloadAndInstall()
             }
-            
-            await prepareAnalyzer()
-            
         } catch {
-            print("LiveAudioRecorder: Background asset check failed (non-fatal): \(error)")
+            // Optional preparation: a later recording or explicit retry checks again.
+            print("Speech asset preparation deferred: \(error)")
         }
-    }
-    
-    private func getSelectedModule() async -> any SpeechModule {
-        let isHQInstalled = await SpeechTranscriber.installedLocales.contains { $0.identifier == targetLocale.identifier }
-        
-        if isHQInstalled {
-            print("🔊 Using High-Quality SpeechTranscriber")
-            return SpeechTranscriber(locale: targetLocale, preset: .progressiveTranscription)
-        } else {
-            print("⚠️ Using Fallback DictationTranscriber")
-            return DictationTranscriber(locale: targetLocale, preset: .progressiveLongDictation)
-        }
-    }
-    
-    private func prepareAnalyzer() async {
-        let selectedModule = await getSelectedModule()
-        guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [selectedModule]) else {
-            print("LiveAudioRecorder: Skipping preheat; no best available format determined without engine.")
-            return
-        }
-        
-        let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .processLifetime)
-        let newAnalyzer = SpeechAnalyzer(modules: [selectedModule], options: options)
-        
-        do {
-            print("LiveAudioRecorder: Preheating analyzer initially...")
-            try await newAnalyzer.prepareToAnalyze(in: format)
-            
-            self.analyzer = newAnalyzer
-            self.currentAnalyzerFormat = format
-        } catch {
-            print("LiveAudioRecorder: Failed to preheat analyzer: \(error)")
-        }
-    }
-    
-    func supported(locale: Locale) async -> Bool {
-        let supported = await SpeechTranscriber.supportedLocales
-        return supported.map { $0.identifier(.bcp47) }.contains(locale.identifier(.bcp47))
     }
 
-    func installed(locale: Locale) async -> Bool {
-        let installed = await Set(SpeechTranscriber.installedLocales)
-        return installed.map { $0.identifier(.bcp47) }.contains(locale.identifier(.bcp47))
+    private func supportedModule() async -> (any SpeechModule)? {
+        if SpeechTranscriber.isAvailable,
+           let supported = await SpeechTranscriber.supportedLocale(equivalentTo: locale) {
+            return SpeechTranscriber(locale: supported, preset: .progressiveTranscription)
+        }
+        if let supported = await DictationTranscriber.supportedLocale(equivalentTo: locale) {
+            return DictationTranscriber(locale: supported, preset: .progressiveLongDictation)
+        }
+        return nil
     }
 
-    func downloadIfNeeded(for module: SpeechTranscriber) async throws {
-        if let downloader = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
-            try await downloader.downloadAndInstall()
-            print("LiveAudioRecorder: Speech assets installed successfully.")
+    private func installedModule() async -> (any SpeechModule)? {
+        if let preferred = await supportedModule(), await AssetInventory.status(forModules: [preferred]) == .installed {
+            return preferred
         }
+        if let supported = await DictationTranscriber.supportedLocale(equivalentTo: locale) {
+            let fallback = DictationTranscriber(locale: supported, preset: .progressiveLongDictation)
+            if await AssetInventory.status(forModules: [fallback]) == .installed { return fallback }
+        }
+        return nil
     }
-    
-    // MARK: - Audio Handling
-    
-    private func setupInterruptionObserver() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleInterruption),
-            name: AVAudioSession.interruptionNotification,
-            object: AVAudioSession.sharedInstance()
-        )
-    }
-    
-    @objc private func handleInterruption(notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
-            return
-        }
-        
-        switch type {
-        case .began:
-            print("Audio Session Interruption Began")
-            self.pauseRecording()
-            
-        case .ended:
-            guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
-            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-            
-            if options.contains(.shouldResume) {
-                // FIXED: Resume recording automatically if the OS allows it (e.g., after phone calls)
-                self.resumeRecording()
-            }
-            
-        @unknown default:
-            break
-        }
-    }
-    
-    func startRecording(keywords: [String] = [], completion: @escaping @Sendable (Bool) -> Void) {
-        if AVAudioApplication.shared.recordPermission != .granted {
-            print("Microphone not authorized in Recorder")
-            completion(false)
-            return
-        }
-        
-        queue.async { [weak self] in
-            Task {
-                await self?.setupAndStartEngine(keywords: keywords, completion: completion)
-            }
-        }
-    }
-    
-    func pauseRecording() {
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            
-            if self.audioEngine.isRunning {
-                self.audioEngine.pause()
-            }
-            
-            DispatchQueue.main.async {
-                if self.isRecording && !self.isPaused {
-                    self.isPaused = true
-                    self.timer?.invalidate()
-                    
-                    if let start = self.startTime {
-                        self.accumulatedTime += Date().timeIntervalSince(start)
-                    }
-                    self.startTime = nil
-                    self.audioLevel = 0
-                }
-            }
-        }
-    }
-    
-    func resumeRecording() {
-        guard isRecording && isPaused else { return }
-        
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            do {
-                try self.audioEngine.start()
-                
-                DispatchQueue.main.async {
-                    self.isPaused = false
-                    self.startTime = Date()
-                    self.startTimer()
-                }
-            } catch {
-                print("Error resuming engine: \(error)")
-            }
-        }
-    }
-    
-    func stopRecording() -> URL? {
-        if audioEngine.isRunning {
-            audioEngine.stop()
-        }
-        audioEngine.reset() // Clear any stale hardware states
-        let inputNode = audioEngine.inputNode
-        inputNode.removeTap(onBus: 0)
-        
-        inputContinuation?.finish()
-        inputContinuation = nil
-        
-        let _ = Task { [weak self] in
-            if let analyzer = self?.analyzer {
-                do {
-                    try await analyzer.finalizeAndFinishThroughEndOfInput()
-                } catch {
-                    // Ignore - Expected if task was cancelled or finished
-                }
-            }
-            self?.analysisTask?.cancel()
-            self?.analysisTask = nil
-            self?.analyzer = nil
-        }
-        
-        audioFile = nil
-        
-        DispatchQueue.main.async {
-            self.isRecording = false
-            self.isPaused = false
-            self.timer?.invalidate()
-            self.audioLevel = 0
-            self.duration = 0
-            self.accumulatedTime = 0
-        }
-        
-        return recordingURL
-    }
-    
-    private func setupAndStartEngine(keywords: [String], completion: @escaping @Sendable (Bool) -> Void) async {
+
+    func startRecording(keywords: [String] = []) async throws {
+        guard !isRecording, !isStarting, !isStopping else { return }
+        isStarting = true
+        defer { isStarting = false }
+        guard AVAudioApplication.shared.recordPermission == .granted else { throw RecordingError.microphoneDenied }
+        transcriptionMessage = nil
+        recordingError = nil
+        accumulator = TranscriptAccumulator()
+        liveTranscript = ""
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {
-            print("Audio Session Error: \(error)")
-            DispatchQueue.main.async { completion(false) }
-            return
-        }
-        
-        analysisTask?.cancel()
-        
-        DispatchQueue.main.async {
-            self.liveTranscript = ""
-            self.finalizedText = ""
-            self.duration = 0
-            self.accumulatedTime = 0
-            self.audioLevel = 0
-        }
-        
-        let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let url = docDir.appendingPathComponent("live_recording.m4a")
-        recordingURL = url
-        
-        let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
-        
-        if recordingFormat.sampleRate == 0 || recordingFormat.channelCount == 0 {
-             print("Error: Invalid Input Format. AudioSession might not be ready.")
-             DispatchQueue.main.async { completion(false) }
-             return
-        }
-        
-        do {
-            audioFile = try AVAudioFile(forWriting: url, settings: recordingFormat.settings)
-        } catch {
-            print("Audio File Error: \(error)")
-            DispatchQueue.main.async { completion(false) }
-            return
-        }
-        
-        do {
-            if self.analyzer == nil {
-                print("LiveAudioRecorder: Analyzer was not preheated or missing. Creating now...")
-                let selectedModule = await getSelectedModule()
-                let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [selectedModule]) ?? recordingFormat
-                self.currentAnalyzerFormat = format
-                
-                let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .processLifetime)
-                let newAnalyzer = SpeechAnalyzer(modules: [selectedModule], options: options)
-                
-                try? await newAnalyzer.prepareToAnalyze(in: format)
-                
-                self.analyzer = newAnalyzer
-            }
-            
-            guard let analyzer = self.analyzer, let analyzerFormat = self.currentAnalyzerFormat else {
-                print("Error: Analyzer failed to initialize.")
-                DispatchQueue.main.async { completion(false) }
-                return
-            }
-            
-            let context = AnalysisContext()
-            if !keywords.isEmpty {
-                context.contextualStrings = [.general: keywords]
-            }
-            try await analyzer.setContext(context)
-            
-            let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
-            self.inputContinuation = continuation
-            
-            self.analysisTask = Task {
+            try session.setCategory(.playAndRecord, mode: .measurement,
+                                    options: [.duckOthers, .defaultToSpeaker, .allowBluetoothHFP])
+            try session.setActive(true)
+            let format = audioEngine.inputNode.outputFormat(forBus: 0)
+            guard format.sampleRate > 0, format.channelCount > 0 else { throw RecordingError.invalidInput }
+            let url = try RecordingFiles.makeURL()
+            recordingURL = url
+            // CAF matches the PCM format supplied by the engine; an .m4a extension does not.
+            let file = try AVAudioFile(forWriting: url, settings: format.settings)
+            var continuation: AsyncStream<AnalyzerInput>.Continuation?
+            var analyzerFormat: AVAudioFormat?
+            if let module = await installedModule(),
+               let speechFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module], considering: format) {
+                let speechAnalyzer = SpeechAnalyzer(modules: [module])
                 do {
-                    try await analyzer.start(inputSequence: stream)
-                    
-                    let modules = await analyzer.modules
-                    if let module = modules.first {
-                        // FIXED: Single .results stream iteration with .isFinal checking.
-                        if let dt = module as? DictationTranscriber {
-                            for try await result in dt.results {
-                                let text = String(result.text.characters)
-                                let isFinal = result.isFinal
-                                
-                                await MainActor.run {
-                                    if isFinal {
-                                        self.finalizedText += (self.finalizedText.isEmpty ? "" : " ") + text
-                                        self.liveTranscript = self.finalizedText
-                                    } else {
-                                        self.liveTranscript = (self.finalizedText.isEmpty ? "" : self.finalizedText + " ") + text
-                                    }
-                                }
+                    let context = AnalysisContext()
+                    context.contextualStrings = [.general: keywords]
+                    try await speechAnalyzer.setContext(context)
+                    let (stream, input) = AsyncStream<AnalyzerInput>.makeStream()
+                    // start() performs required setup; optional prewarming isn't a readiness gate.
+                    try await speechAnalyzer.start(inputSequence: stream)
+                    analyzer = speechAnalyzer
+                    continuation = input
+                    analyzerFormat = speechFormat
+                    resultsTask = Task { [weak self] in
+                        do {
+                            try await Self.consumeResults(module) { text, isFinal in
+                                self?.accumulator.append(text, isFinal: isFinal)
+                                self?.liveTranscript = self?.accumulator.text ?? ""
                             }
-                        } else if let st = module as? SpeechTranscriber {
-                            for try await result in st.results {
-                                let text = String(result.text.characters)
-                                let isFinal = result.isFinal
-                                
-                                await MainActor.run {
-                                    if isFinal {
-                                        self.finalizedText += (self.finalizedText.isEmpty ? "" : " ") + text
-                                        self.liveTranscript = self.finalizedText
-                                    } else {
-                                        self.liveTranscript = (self.finalizedText.isEmpty ? "" : self.finalizedText + " ") + text
-                                    }
-                                }
-                            }
+                        } catch {
+                            guard !Task.isCancelled else { return }
+                            self?.transcriptionMessage = RecordingError.speechUnavailable.localizedDescription
                         }
                     }
-                    
-                } catch is CancellationError {
-                    // Ignore expected cancellation
                 } catch {
-                    print("Speech Analysis Error: \(error)")
+                    await speechAnalyzer.cancelAndFinishNow()
+                    transcriptionMessage = RecordingError.speechUnavailable.localizedDescription
                 }
+            } else {
+                transcriptionMessage = RecordingError.speechUnavailable.localizedDescription
             }
-            
-            inputNode.removeTap(onBus: 0)
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, time in
-                self?.handleAudioBuffer(buffer: buffer, targetFormat: analyzerFormat)
+            let capture = AudioCaptureSink(file: file, format: analyzerFormat, continuation: continuation,
+                onFailure: { [weak self] isWriteFailure in
+                    Task { @MainActor [weak self] in
+                        if isWriteFailure {
+                            self?.recordingError = "Audio couldn’t be fully written. Stop recording and check the available storage on your device."
+                        } else {
+                            self?.transcriptionMessage = "Live transcription was interrupted. Your audio is kept; retry transcription after recording."
+                        }
+                    }
+                }, onLevel: { [weak self] level in
+                    Task { @MainActor [weak self] in
+                        guard self?.isRecording == true, self?.isPaused == false else { return }
+                        self?.audioLevel = level
+                    }
+                })
+            sink = capture
+            audioEngine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+                capture.consume(buffer)
             }
-            
+            hasTap = true
             audioEngine.prepare()
             try audioEngine.start()
-            
-            DispatchQueue.main.async {
-                self.isRecording = true
-                self.isPaused = false
-                self.startTime = Date()
-                self.startTimer()
-                completion(true)
-            }
-            
+            isRecording = true
+            isPaused = false
         } catch {
-            print("Engine/Analyzer Start Error: \(error)")
-            DispatchQueue.main.async { completion(false) }
+            stopCapture()
+            await analyzer?.cancelAndFinishNow()
+            resultsTask?.cancel()
+            await resultsTask?.value
+            resultsTask = nil
+            analyzer = nil
+            if let recordingURL { try? FileManager.default.removeItem(at: recordingURL) }
+            recordingURL = nil
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            throw error
         }
     }
-    
-    private func handleAudioBuffer(buffer: AVAudioPCMBuffer, targetFormat: AVAudioFormat) {
-        if !audioEngine.isRunning { return }
-        
-        try? audioFile?.write(from: buffer)
-        
+
+    func pauseRecording() {
+        guard isRecording, !isPaused, !isStopping else { return }
+        audioEngine.pause()
+        isPaused = true
+        audioLevel = 0
+    }
+
+    func resumeRecording() {
+        guard isRecording, isPaused, !isStopping else { return }
         do {
-            let convertedBuffer = try bufferConverter.convertBuffer(buffer, to: targetFormat)
-            inputContinuation?.yield(AnalyzerInput(buffer: convertedBuffer))
+            try AVAudioSession.sharedInstance().setActive(true)
+            try audioEngine.start()
+            isPaused = false
         } catch {
-            print("Buffer conversion error: \(error)")
-        }
-        
-        let now = Date().timeIntervalSince1970
-        if now - lastUpdateTime < 0.03 { return }
-        lastUpdateTime = now
-        
-        let channelData = buffer.floatChannelData?[0]
-        let frameLength = Int(buffer.frameLength)
-        let bufferStride = buffer.stride
-        
-        if let data = channelData {
-            var sum: Float = 0
-            for i in stride(from: 0, to: frameLength * bufferStride, by: bufferStride) {
-                let sample = data[i]
-                sum += sample * sample
-            }
-            let rms = sqrt(sum / Float(frameLength))
-            let normalized = min(max(rms * 10.0, 0), 1.0)
-            
-            Task { @MainActor in
-                self.audioLevel = normalized
-            }
+            recordingError = "Recording couldn’t resume. You can retry, or stop to keep what you’ve recorded."
         }
     }
-    
-    private func startTimer() {
-        DispatchQueue.main.async {
-            self.timer?.invalidate()
-            self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-                guard let self = self else { return }
-                if self.isPaused { return }
-                
-                if let start = self.startTime {
-                    self.duration = self.accumulatedTime + Date().timeIntervalSince(start)
-                } else {
-                    self.duration = self.accumulatedTime
-                }
+
+    @discardableResult
+    private func stopCapture() -> Bool {
+        audioEngine.stop()
+        if hasTap { audioEngine.inputNode.removeTap(onBus: 0); hasTap = false }
+        let writeFailed = sink?.finish() ?? false
+        sink = nil
+        audioEngine.reset()
+        audioLevel = 0
+        return writeFailed
+    }
+
+    func stopRecording(discard: Bool = false) async -> RecordingResult? {
+        guard isRecording, !isStopping else { return nil }
+        isStopping = true
+        defer { isStopping = false }
+        let writeFailed = stopCapture()
+        isRecording = false
+        isPaused = false
+        // Release the microphone before waiting for any final speech results.
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if let analyzer {
+            if discard {
+                await analyzer.cancelAndFinishNow()
+                resultsTask?.cancel()
+            } else {
+                do { try await analyzer.finalizeAndFinishThroughEndOfInput() }
+                catch { transcriptionMessage = RecordingError.speechUnavailable.localizedDescription }
             }
         }
+        // Finalize ends result production; await the consumer to drain queued final passages.
+        await resultsTask?.value
+        resultsTask = nil
+        analyzer = nil
+        guard let url = recordingURL else { return nil }
+        recordingURL = nil
+        if discard {
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
+        let transcript = accumulator.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return RecordingResult(url: url, transcript: transcript,
+                               transcriptionMessage: transcriptionMessage ?? (transcript.isEmpty ? RecordingError.noSpeech.localizedDescription : nil),
+                               audioWriteFailed: writeFailed)
+    }
+
+    func transcribeFile(at url: URL) async throws -> String {
+        let installed = await installedModule()
+        let candidate = installed != nil ? installed : await supportedModule()
+        guard let module = candidate else {
+            throw RecordingError.speechUnavailable
+        }
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
+            try await request.downloadAndInstall()
+        }
+        try Task.checkCancellation()
+        let speechAnalyzer = SpeechAnalyzer(modules: [module])
+        let consumer = Task {
+            var transcript = TranscriptAccumulator()
+            try await Self.consumeResults(module) { text, isFinal in transcript.append(text, isFinal: isFinal) }
+            return transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        do {
+            let file = try AVAudioFile(forReading: url)
+            try await speechAnalyzer.start(inputAudioFile: file, finishAfterFile: true)
+            let text = try await consumer.value
+            guard !text.isEmpty else { throw RecordingError.noSpeech }
+            return text
+        } catch {
+            await speechAnalyzer.cancelAndFinishNow()
+            consumer.cancel()
+            _ = try? await consumer.value
+            throw error
+        }
+    }
+
+
+    private static func consumeResults(_ module: any SpeechModule,
+                                       update: (String, Bool) -> Void) async throws {
+        if let transcriber = module as? SpeechTranscriber {
+            for try await result in transcriber.results { update(String(result.text.characters), result.isFinal) }
+        } else if let transcriber = module as? DictationTranscriber {
+            for try await result in transcriber.results { update(String(result.text.characters), result.isFinal) }
+        }
+    }
+
+    @objc private func handleInterruption(_ notification: Notification) {
+        guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        if type == .began { pauseRecording() }
+        else if let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt,
+                AVAudioSession.InterruptionOptions(rawValue: rawOptions).contains(.shouldResume) { resumeRecording() }
     }
 }

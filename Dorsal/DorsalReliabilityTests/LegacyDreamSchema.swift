@@ -1,54 +1,44 @@
 import Foundation
 import SwiftData
 
+enum LegacyDreamSchema {
 @Model
 final class SavedDream {
     var id: UUID = UUID()
     var date: Date = Date()
     var rawText: String = ""
-    
-    // Optional additions preserve compatibility with existing SwiftData/CloudKit records.
-    var analysisError: String? = nil
-    var imageError: String? = nil
-    var transcriptionError: String? = nil
-    var recordingFileName: String? = nil
-    var needsAnalysis: Bool? = nil
-    var needsTranscription: Bool? = nil
-    var hasCoreAnalysis: Bool? = nil
-    var hasExtraAnalysis: Bool? = nil
-    var hasVoiceFatigue: Bool? = nil
 
     // Analysis Data
     var title: String = ""
     var summary: String = ""
     var interpretation: String = ""
     var actionableAdvice: String = ""
-    
+
     // Entities
     var people: [String] = []
     var places: [String] = []
     var emotions: [String] = []
     var symbols: [String] = []
-    
+
     // Tone & Metrics
     var toneLabel: String = ""
     var toneConfidence: Int = 0
     var voiceFatigue: Int = 0
     var sentimentScore: Int = 0
-    
+
     // Advanced Metrics
     var lucidityScore: Int = 0
     var vividnessScore: Int = 0
     var anxietyLevel: Int = 0
     var coherenceScore: Int = 0
     var isNightmare: Bool = false
-    
+
     // Image Data
     var imagePrompt: String = ""
     @Attribute(.externalStorage) var generatedImageData: Data? = nil
-    
+
     var isBookmarked: Bool = false
-    
+
     // Designated Initializer
     init(
         id: UUID = UUID(),
@@ -101,27 +91,5 @@ final class SavedDream {
     }
 }
 
-// SwiftData Model for Weekly Insights
-@Model
-final class SavedWeeklyInsight {
-    var id: UUID = UUID()
-    var dateGenerated: Date = Date()
-    var periodOverview: String = ""
-    var dominantTheme: String = ""
-    var mentalHealthTrend: String = ""
-    var strategicAdvice: String = ""
-    
-    init(
-        periodOverview: String = "",
-        dominantTheme: String = "",
-        mentalHealthTrend: String = "",
-        strategicAdvice: String = ""
-    ) {
-        self.id = UUID()
-        self.dateGenerated = Date()
-        self.periodOverview = periodOverview
-        self.dominantTheme = dominantTheme
-        self.mentalHealthTrend = mentalHealthTrend
-        self.strategicAdvice = strategicAdvice
-    }
+
 }

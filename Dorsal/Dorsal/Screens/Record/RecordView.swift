@@ -6,11 +6,6 @@ struct RecordView: View {
     @State private var showRipple = false
     @Namespace private var namespace
     
-    private let model = SystemLanguageModel.default
-    
-    @State private var showAvailabilityAlert = false
-    @State private var availabilityMessage = ""
-    
     @State private var showProcessingAlert = false
     
     private var greetingData: (text: String, icon: String) {
@@ -177,6 +172,7 @@ struct RecordView: View {
                                 .contentShape(Circle())
                                 .glassEffect(.clear.interactive(), in: Circle())
                                 .glassEffectID("pauseButton", in: namespace)
+                                .disabled(store.isFinishingRecording)
                             }
                             
                             Button {
@@ -191,7 +187,7 @@ struct RecordView: View {
                             .frame(width: 80, height: 80)
                             .contentShape(Circle())
                             .glassEffect(.clear.interactive().tint(store.isRecording ? .red.opacity(0.8) : store.themeAccentColor.opacity(0.7)), in: Circle())
-                            .disabled(store.isProcessing)
+                            .disabled(store.isProcessing || store.recordingIsBusy || store.transcribingDreamID != nil)
                             .glassEffectID("recordButton", in: namespace)
                             
                             if store.isRecording {
@@ -206,6 +202,7 @@ struct RecordView: View {
                                 .contentShape(Circle())
                                 .glassEffect(.clear.interactive(), in: Circle())
                                 .glassEffectID("cancelButton", in: namespace)
+                                .disabled(store.isFinishingRecording)
                             }
                         }
                     }
@@ -234,10 +231,26 @@ struct RecordView: View {
             .navigationDestination(for: Dream.self) { dream in
                 DreamDetailView(store: store, dream: dream)
             }
-            .alert("Feature Unavailable", isPresented: $showAvailabilityAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(availabilityMessage)
+            .safeAreaInset(edge: .top) {
+                VStack(spacing: 8) {
+                    if store.recordingIsBusy {
+                        ProgressView(store.isFinishingRecording ? "Finishing recording…" : "Starting recording…")
+                    }
+                    if let notice = store.isRecording ? store.transcriptionNotice : store.analysisAvailability.message {
+                        Text(notice)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .task {
+                // Availability may change while assets finish installing. This never gates recording.
+                while !Task.isCancelled {
+                    store.analysisAvailability = AnalysisAvailability(SystemLanguageModel.default.availability)
+                    do { try await Task.sleep(for: .seconds(5)) } catch { break }
+                }
             }
             .alert("Processing in Background", isPresented: $showProcessingAlert) {
                 Button("OK", role: .cancel) { }
@@ -273,32 +286,9 @@ struct RecordView: View {
             return
         }
         
-        switch SystemLanguageModel.default.availability {
-        case .available:
-            store.startRecording()
-            
-        case .unavailable(let reason):
-            handleUnavailability(reason)
-            
-        @unknown default:
-            availabilityMessage = "An unknown error occurred with Apple Intelligence."
-            showAvailabilityAlert = true
-        }
+        store.startRecording()
     }
-    
-    private func handleUnavailability(_ reason: SystemLanguageModel.Availability.UnavailableReason) {
-        switch reason {
-        case .appleIntelligenceNotEnabled:
-            availabilityMessage = "Enable Apple Intelligence in Settings to use this feature."
-        case .modelNotReady:
-            availabilityMessage = "Downloading model assets. Please wait a moment..."
-        case .deviceNotEligible:
-            availabilityMessage = "This feature requires iPhone 15 Pro or newer."
-        @unknown default:
-            availabilityMessage = "Feature temporarily unavailable."
-        }
-        showAvailabilityAlert = true
-    }
+
 }
 
 struct ChecklistOverlay: View {

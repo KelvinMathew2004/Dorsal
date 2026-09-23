@@ -5,11 +5,11 @@ import ImagePlayground
 import SwiftData
 
 // MARK: - ERRORS
-enum DreamError: Error, LocalizedError {
+nonisolated enum DreamError: Error, LocalizedError {
     case safetyViolation
     case refusal(String)
     case tooLong
-    case modelDownloading
+    case modelUnavailable
     case unsupportedLanguage
     case formatError
     case systemBusy
@@ -29,7 +29,7 @@ enum DreamError: Error, LocalizedError {
         case .safetyViolation: return "Content flagged by safety filters."
         case .refusal(let r): return "Model refused: \(r)"
         case .tooLong: return "The dream is too long for the model to process."
-        case .modelDownloading: return "Apple Intelligence is still downloading assets."
+        case .modelUnavailable: return "Apple Intelligence’s model is currently unavailable. Your dream is still available; retry analysis later."
         case .unsupportedLanguage: return "This language is not supported for on-device AI."
         case .formatError: return "Failed to process the model output."
         case .systemBusy: return "System is busy with other AI tasks. Try again in a moment."
@@ -215,7 +215,7 @@ struct RepairStrategicAdvice: Codable, Sendable {
 struct Dream: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let date: Date
-    let rawTranscript: String
+    var rawTranscript: String
     
     var core: DreamCoreAnalysis?
     var extras: DreamExtraAnalysis?
@@ -227,10 +227,15 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     var isBookmarked: Bool
     
     var analysisError: String?
+    var imageError: String?
+    var transcriptionError: String?
+    var recordingFileName: String?
+    var needsAnalysis: Bool?
+    var needsTranscription: Bool?
     
     // Legacy Helpers
-    var smartSummary: String { core?.summary ?? "Processing..." }
-    var interpretation: String { core?.interpretation ?? "Generating analysis..." }
+    var smartSummary: String { core?.summary ?? (rawTranscript.isEmpty ? "Recording saved" : "Dream saved") }
+    var interpretation: String { core?.interpretation ?? "Analysis not available yet." }
     var actionableAdvice: String { core?.actionableAdvice ?? "" }
     var tone: String { core?.tone?.label ?? "Neutral" }
     
@@ -321,7 +326,20 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
             coherenceScore: saved.coherenceScore,
             anxietyLevel: saved.anxietyLevel
         )
-        self.analysisError = nil
+        self.analysisError = saved.analysisError
+        self.imageError = saved.imageError
+        self.transcriptionError = saved.transcriptionError
+        self.recordingFileName = saved.recordingFileName
+        self.needsAnalysis = saved.needsAnalysis
+        self.needsTranscription = saved.needsTranscription
+        if saved.hasCoreAnalysis == false { self.core = nil }
+        if saved.hasExtraAnalysis == false { self.extras = nil }
+        if saved.hasVoiceFatigue == false { self.voiceFatigue = nil }
+        // Legacy records used empty strings/zeroes for unfinished generation.
+        if saved.title.isEmpty && saved.summary.isEmpty && saved.interpretation.isEmpty {
+            self.core = nil
+            self.extras = nil
+        }
     }
 }
 
