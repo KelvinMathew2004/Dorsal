@@ -2,11 +2,14 @@ import SwiftUI
 import Photos
 import PhotosUI
 import AVFoundation
+import ImagePlayground
 
 struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
     let dream: Dream
     
+    @Environment(\.supportsImagePlayground) private var supportsImagePlayground
+    @State private var showImagePlayground = false
     @Namespace private var namespace
     
     @State private var activeEntity: EntityIdentifier?
@@ -153,6 +156,11 @@ struct DreamDetailView: View {
                             }
                         }
                         
+                        if #available(iOS 27, *), supportsImagePlayground {
+                            Button("Create Image in Image Playground", systemImage: "photo.badge.plus") {
+                                showImagePlayground = true
+                            }
+                        }
                         if store.isImageGenerationAvailable {
                             Button {
                                 store.regenerateDreamImage(liveDream)
@@ -174,6 +182,10 @@ struct DreamDetailView: View {
                     }
                 }
             }
+        }
+        .imagePlaygroundSheet(isPresented: $showImagePlayground,
+                              concepts: [.text(liveDream.core?.summary ?? liveDream.rawTranscript)]) { url in
+            store.keepCreatedImage(for: liveDream, from: url)
         }
         .task { await store.refreshAvailability() }
         .onAppear {
@@ -268,8 +280,14 @@ struct DreamDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Illustration Unavailable", systemImage: "photo")
                 Text(message).font(.subheadline)
-                Button("Retry Illustration") { store.regenerateDreamImage(liveDream) }
-                    .disabled(store.isProcessing || store.isRecording || store.recordingIsBusy || store.transcribingDreamID != nil)
+                if #available(iOS 27, *) {
+                    if supportsImagePlayground {
+                        Button("Create in Image Playground") { showImagePlayground = true }
+                    }
+                } else {
+                    Button("Retry Illustration") { store.regenerateDreamImage(liveDream) }
+                        .disabled(store.isProcessing || store.isRecording || store.recordingIsBusy || store.transcribingDreamID != nil)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -296,6 +314,8 @@ struct DreamDetailView: View {
                     )
                     .padding()
                 }
+                
+                sleepArchitectureSection
                 
                 if let interp = liveDream.core?.interpretation {
                     insightCardRow(
@@ -437,6 +457,55 @@ struct DreamDetailView: View {
             }
             .padding(.horizontal)
             .frame(maxWidth: 500)
+        }
+    }
+    
+    @ViewBuilder
+    var sleepArchitectureSection: some View {
+        if liveDream.hasSleepData {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Sleep Architecture", systemImage: "bed.double.fill")
+                    .font(.headline)
+                    .foregroundStyle(store.themeAccentColor)
+                
+                HStack(spacing: 24) {
+                    let totalMinutes = liveDream.totalSleepMinutes ?? 0
+                    let hours = totalMinutes / 60
+                    let minutes = totalMinutes % 60
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(hours)h \(minutes)m")
+                            .font(.title2.bold())
+                            .foregroundStyle(.white)
+                        Text("Total Sleep")
+                            .font(.caption)
+                            .foregroundStyle(secondaryColor)
+                    }
+                    
+                    Spacer()
+                    
+                    let efficiency = liveDream.sleepEfficiency ?? 0
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("\(efficiency)%")
+                            .font(.title2.bold())
+                            .foregroundStyle(.green)
+                        Text("Efficiency")
+                            .font(.caption)
+                            .foregroundStyle(secondaryColor)
+                    }
+                }
+                
+                SleepStageBar(
+                    rem: Double(liveDream.remSleepMinutes ?? 0),
+                    deep: Double(liveDream.deepSleepMinutes ?? 0),
+                    core: Double(liveDream.coreSleepMinutes ?? 0),
+                    awake: Double(liveDream.awakeMinutes ?? 0),
+                    total: max(Double(liveDream.totalSleepMinutes ?? 1), 1.0)
+                )
+            }
+            .padding(24)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+            .padding(.horizontal)
         }
     }
     
@@ -688,10 +757,11 @@ struct InsightDetailView: View {
         
         Task {
             do {
-                let answer = try await DreamAnalyzer.shared.DreamQuestion(
+                let answer = try await DreamAnalyzer.shared.DreamQuestionWithContext(
                     transcript: dream.rawTranscript,
                     analysis: rawText,
-                    question: questionText
+                    question: questionText,
+                    searcher: DreamStore.shared
                 )
                 withAnimation {
                     self.answerText = answer

@@ -3,7 +3,7 @@ import SwiftData
 
 @main
 struct DorsalApp: App {
-    @StateObject private var store = DreamStore()
+    @StateObject private var store = DreamStore.shared
     
     var body: some Scene {
         WindowGroup {

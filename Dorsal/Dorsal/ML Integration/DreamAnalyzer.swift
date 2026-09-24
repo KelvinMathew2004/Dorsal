@@ -496,4 +496,184 @@ actor DreamAnalyzer {
         let response = try await session.respond(to: prompt)
         return response.content
     }
+    
+    // MARK: - Tool-Enabled Methods (WithContext)
+    // These variants use Foundation Models Tool Calling to query past dreams
+    // and metric history for richer, more personalized responses.
+    // They fall back to the original non-tool methods on failure.
+    
+    private func makeToolSession(searcher: any DreamSearchable) -> LanguageModelSession {
+        let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+        
+        return LanguageModelSession(
+            model: model,
+            tools: [
+                QueryPastDreamsTool(dreamSearcher: searcher),
+                FetchMetricHistoryTool(dreamSearcher: searcher)
+            ],
+            instructions: """
+            You are a compassionate, insightful Dream Psychologist.
+            Analyze dreams with empathy. Identify key symbols, emotions, and themes.
+            Ignore profanity and sanitize sensitive content by summarizing it neutrally rather than quoting it verbatim.
+            If content may be disallowed, omit specifics and proceed with high-level, non-graphic analysis.
+            Always prioritize user safety and helpfulness by reframing or omitting unsafe details instead of refusing when possible.
+            You MUST respond in U.S. English.
+            
+            You have access to tools that can search the user's past dream journal and fetch metric history.
+            Use these tools when the user's question relates to patterns, recurring themes, or trends across multiple dreams.
+            Do NOT call tools when the question is purely about the current dream or analysis context.
+            """
+        )
+    }
+    
+    func analyzeWeeklyTrendsWithContext(dreams: [Dream], userName: String, searcher: any DreamSearchable) async throws -> WeeklyInsightResult {
+        do {
+            let validDreams = dreams.filter {
+                if let summary = $0.core?.summary, !summary.isEmpty { return true }
+                return false
+            }
+            
+            let dreamSummaries = validDreams.prefix(20).map { dream in
+                let summary = dream.core?.summary ?? "No summary available"
+                let emo = dream.core?.emotion ?? "Unknown"
+                return "- \(dream.date.formatted(date: .abbreviated, time: .omitted)): \(summary) (Emotion: \(emo))"
+            }.joined(separator: "\n")
+            
+            let prompt = """
+            Review these dream summaries and generate a holistic insight report.
+            Use the queryPastDreams tool to search for recurring themes or patterns if you notice repeated elements.
+            Use the fetchMetricHistory tool to check trends in anxiety, sentiment, or other metrics for deeper analysis.
+            
+            Dream summaries:
+            \(dreamSummaries)
+            """
+            
+            let session = makeToolSession(searcher: searcher)
+            
+            var response = try await session.respond(
+                to: prompt,
+                generating: WeeklyInsightResult.self,
+                options: GenerationOptions(temperature: 0.7)
+            ).content
+            
+            response = await ensureWeeklyInsights(current: response, context: dreamSummaries)
+            return response
+        } catch {
+            // Fallback to non-tool version
+            print("Tool-enabled weekly trends failed, falling back: \(error)")
+            return try await analyzeWeeklyTrends(dreams: dreams, userName: userName)
+        }
+    }
+    
+    func GenerateCoachingTipWithContext(metric: String, description: String, statsContext: String, trendStatus: String, searcher: any DreamSearchable) async throws -> String {
+        do {
+            let session = makeToolSession(searcher: searcher)
+            
+            let prompt = """
+            You are a sleep coach analyzing the user's "\(metric)" trend.
+            
+            About this metric:
+            \(description)
+            
+            Data Context (Timeframe & Data Points):
+            \(statsContext)
+            
+            Current Trend Status: \(trendStatus)
+            
+            Task:
+            Use the fetchMetricHistory tool to get additional historical context for this metric.
+            Use the queryPastDreams tool if a specific dream event seems related to a metric spike or dip.
+            Then provide a single, short (1-2 sentences) personalized insight or tip that references specific patterns.
+            """
+            let response = try await session.respond(to: prompt)
+            return response.content
+        } catch {
+            print("Tool-enabled coaching tip failed, falling back: \(error)")
+            return try await GenerateCoachingTip(metric: metric, description: description, statsContext: statsContext, trendStatus: trendStatus)
+        }
+    }
+    
+    func DreamQuestionWithContext(transcript: String, analysis: String, question: String, searcher: any DreamSearchable) async throws -> String {
+        do {
+            let session = makeToolSession(searcher: searcher)
+            
+            let prompt = """
+            Use the provided transcript and analysis context to answer the user's question.
+            If the question relates to patterns, recurring themes, or past dreams, use the queryPastDreams tool to search for relevant history.
+            Answer in short paragraphs and concise pointers.
+            
+            Transcript:
+            "\(transcript)"
+            
+            Analysis Context:
+            "\(analysis)"
+            
+            User Question:
+            "\(question)"
+            """
+            
+            let response = try await session.respond(to: prompt)
+            return response.content
+        } catch {
+            print("Tool-enabled dream question failed, falling back: \(error)")
+            return try await DreamQuestion(transcript: transcript, analysis: analysis, question: question)
+        }
+    }
+    
+    func DreamsQuestionWithContext(summaries: String, analysis: String, question: String, searcher: any DreamSearchable) async throws -> String {
+        do {
+            let session = makeToolSession(searcher: searcher)
+            
+            let prompt = """
+            Answer the User Question by synthesizing the weekly information below.
+            If the question asks about specific patterns, people, places, or themes, use the queryPastDreams tool to search for relevant dreams.
+            If the question asks about metric trends, use the fetchMetricHistory tool.
+            Keep the response concise (under 150 words) unless the question requires deep detail.
+            
+            ---
+            Weekly Dream Summaries:
+            \(summaries)
+            
+            Weekly Analysis (Context):
+            \(analysis)
+            ---
+            
+            User Question:
+            "\(question)"
+            """
+            
+            let response = try await session.respond(to: prompt)
+            return response.content
+        } catch {
+            print("Tool-enabled dreams question failed, falling back: \(error)")
+            return try await DreamsQuestion(summaries: summaries, analysis: analysis, question: question)
+        }
+    }
+    
+    func TrendQuestionWithContext(metric: String, statsContext: String, trendStatus: String, question: String, searcher: any DreamSearchable) async throws -> String {
+        do {
+            let session = makeToolSession(searcher: searcher)
+            
+            let prompt = """
+            Context:
+            Metric: \(metric)
+            Data Points:
+            \(statsContext)
+            Current Status: \(trendStatus)
+            
+            Use the fetchMetricHistory tool to get broader historical context if relevant.
+            Use the queryPastDreams tool if the question relates to specific dream content.
+            
+            User Question:
+            "\(question)"
+            
+            Answer concisely (max 100 words) using the provided data context and any tool results.
+            """
+            let response = try await session.respond(to: prompt)
+            return response.content
+        } catch {
+            print("Tool-enabled trend question failed, falling back: \(error)")
+            return try await TrendQuestion(metric: metric, statsContext: statsContext, trendStatus: trendStatus, question: question)
+        }
+    }
 }

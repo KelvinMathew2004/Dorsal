@@ -233,6 +233,15 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     var needsAnalysis: Bool?
     var needsTranscription: Bool?
     
+    // Sleep Data
+    var totalSleepMinutes: Int?
+    var remSleepMinutes: Int?
+    var deepSleepMinutes: Int?
+    var coreSleepMinutes: Int?
+    var awakeMinutes: Int?
+    var sleepEfficiency: Int?
+    var hasSleepData: Bool = false
+    
     // Legacy Helpers
     var smartSummary: String { core?.summary ?? (rawTranscript.isEmpty ? "Recording saved" : "Dream saved") }
     var interpretation: String { core?.interpretation ?? "Analysis not available yet." }
@@ -302,6 +311,15 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.generatedImageData = saved.generatedImageData
         self.isBookmarked = saved.isBookmarked
         self.voiceFatigue = saved.voiceFatigue
+        
+        // Sleep Data
+        self.totalSleepMinutes = saved.totalSleepMinutes
+        self.remSleepMinutes = saved.remSleepMinutes
+        self.deepSleepMinutes = saved.deepSleepMinutes
+        self.coreSleepMinutes = saved.coreSleepMinutes
+        self.awakeMinutes = saved.awakeMinutes
+        self.sleepEfficiency = saved.sleepEfficiency
+        self.hasSleepData = saved.hasSleepData
         
         // Reconstruct Core Analysis from flat properties
         self.core = DreamCoreAnalysis(

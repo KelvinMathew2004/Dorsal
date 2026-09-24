@@ -721,10 +721,11 @@ struct WeeklyInsightDetailView: View {
         Task {
             do {
                 // Uses the dedicated DreamsQuestion function in DreamAnalyzer
-                let answer = try await DreamAnalyzer.shared.DreamsQuestion(
+                let answer = try await DreamAnalyzer.shared.DreamsQuestionWithContext(
                     summaries: summariesContext,
                     analysis: analysisContent,
-                    question: questionText
+                    question: questionText,
+                    searcher: DreamStore.shared
                 )
                 withAnimation {
                     self.answerText = answer

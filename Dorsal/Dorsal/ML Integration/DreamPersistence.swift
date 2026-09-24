@@ -5,17 +5,17 @@ import SwiftData
 enum DreamPersistence {
     static func save(_ dream: Dream, in context: ModelContext, commit: () throws -> Void) throws {
         let dreamID = dream.id
-
+        
         let descriptor = FetchDescriptor<SavedDream>(predicate: #Predicate { $0.id == dreamID })
         let saved: SavedDream
-
+        
         if let existing = try context.fetch(descriptor).first {
             saved = existing
         } else {
             saved = SavedDream(id: dreamID)
             context.insert(saved)
         }
-
+        
         // Map properties manually
         saved.analysisError = dream.analysisError
         saved.imageError = dream.imageError
@@ -31,7 +31,16 @@ enum DreamPersistence {
         saved.generatedImageData = dream.generatedImageData
         saved.isBookmarked = dream.isBookmarked
         saved.voiceFatigue = dream.voiceFatigue ?? 0
-
+        
+        // Sleep data
+        saved.totalSleepMinutes = dream.totalSleepMinutes ?? 0
+        saved.remSleepMinutes = dream.remSleepMinutes ?? 0
+        saved.deepSleepMinutes = dream.deepSleepMinutes ?? 0
+        saved.coreSleepMinutes = dream.coreSleepMinutes ?? 0
+        saved.awakeMinutes = dream.awakeMinutes ?? 0
+        saved.sleepEfficiency = dream.sleepEfficiency ?? 0
+        saved.hasSleepData = dream.hasSleepData
+        
         if let core = dream.core {
             saved.title = core.title ?? ""
             saved.summary = core.summary ?? ""
@@ -44,7 +53,7 @@ enum DreamPersistence {
             saved.toneLabel = core.tone?.label ?? ""
             saved.toneConfidence = core.tone?.confidence ?? 0
         }
-
+        
         if let extras = dream.extras {
             saved.sentimentScore = extras.sentimentScore ?? 50
             saved.isNightmare = extras.isNightmare ?? false
@@ -53,7 +62,7 @@ enum DreamPersistence {
             saved.coherenceScore = extras.coherenceScore ?? 0
             saved.anxietyLevel = extras.anxietyLevel ?? 0
         }
-
+        
         try commit()
     }
 }

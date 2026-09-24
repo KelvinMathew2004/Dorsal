@@ -585,3 +585,60 @@ struct ShimmerEffect: ViewModifier {
 extension View {
     func shimmering() -> some View { modifier(ShimmerEffect()) }
 }
+
+struct SleepStageBar: View {
+    let rem: Double
+    let deep: Double
+    let core: Double
+    let awake: Double
+    let total: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GeometryReader { proxy in
+                HStack(spacing: 0) {
+                    if awake > 0 {
+                        Rectangle()
+                            .fill(Color.orange)
+                            .frame(width: proxy.size.width * (awake / total))
+                    }
+                    if rem > 0 {
+                        Rectangle()
+                            .fill(Color.teal)
+                            .frame(width: proxy.size.width * (rem / total))
+                    }
+                    if core > 0 {
+                        Rectangle()
+                            .fill(Color.blue)
+                            .frame(width: proxy.size.width * (core / total))
+                    }
+                    if deep > 0 {
+                        Rectangle()
+                            .fill(Color.indigo)
+                            .frame(width: proxy.size.width * (deep / total))
+                    }
+                }
+                .clipShape(Capsule())
+            }
+            .frame(height: 12)
+            
+            HStack(spacing: 16) {
+                legendItem(color: .orange, label: "Awake")
+                legendItem(color: .teal, label: "REM")
+                legendItem(color: .blue, label: "Core")
+                legendItem(color: .indigo, label: "Deep")
+            }
+            .font(.caption)
+        }
+    }
+    
+    private func legendItem(color: Color, label: String) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .foregroundStyle(.secondary)
+        }
+    }
+}

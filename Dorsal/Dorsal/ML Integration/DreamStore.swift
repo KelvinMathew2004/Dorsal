@@ -9,6 +9,7 @@ import NaturalLanguage
 import UserNotifications
 import CloudKit
 import PhotosUI
+import HealthKit
 
 struct DreamFilter: Equatable {
     var people: Set<String> = []
@@ -21,6 +22,8 @@ struct DreamFilter: Equatable {
 
 @MainActor
 class DreamStore: NSObject, ObservableObject {
+    static let shared = DreamStore()
+    
     @Published var dreams: [Dream] = []
     @Published var currentDreamID: UUID?
     
@@ -974,6 +977,19 @@ class DreamStore: NSObject, ObservableObject {
                     audioURL: RecordingFiles.url(for: dream.recordingFileName), existingFatigue: existingFatigue)
     }
 
+    func keepCreatedImage(for dream: Dream, from url: URL) {
+        guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            guard UIImage(data: data) != nil else { throw DreamError.imageGenerationFailed }
+            dreams[index].generatedImageData = data
+            dreams[index].imageError = nil
+            persistDream(dreams[index])
+        } catch {
+            dreams[index].imageError = "The illustration couldn’t be saved. Your previous image and dream are still available."
+        }
+    }
+
     func regenerateDreamImage(_ dream: Dream) {
         guard !isProcessing, !isRecording, !recordingIsBusy, transcribingDreamID == nil else { return }
         guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
@@ -1051,8 +1067,29 @@ class DreamStore: NSObject, ObservableObject {
             let previousCore = dreams.first(where: { $0.id == dreamID })?.core
             let previousExtras = dreams.first(where: { $0.id == dreamID })?.extras
             do {
+                // Try to fetch sleep data if this is a new dream (not a regeneration)
+                var enrichedTranscript = transcript
+                if existingFatigue == nil {
+                    if let sleep = try? await SleepDataManager.shared.fetchLastNightSleep(), sleep.hasStageData {
+                        await MainActor.run {
+                            if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
+                                dreams[idx].totalSleepMinutes = sleep.totalSleepMinutes
+                                dreams[idx].remSleepMinutes = sleep.remMinutes
+                                dreams[idx].deepSleepMinutes = sleep.deepSleepMinutes
+                                dreams[idx].coreSleepMinutes = sleep.coreSleepMinutes
+                                dreams[idx].awakeMinutes = sleep.awakeMinutes
+                                dreams[idx].sleepEfficiency = sleep.sleepEfficiency
+                                dreams[idx].hasSleepData = sleep.hasStageData
+                                persistDream(dreams[idx])
+                            }
+                        }
+                        let sleepContext = " [Sleep Context: The user slept \(sleep.totalSleepMinutes/60)h\(sleep.totalSleepMinutes%60)m with \(sleep.remMinutes)m REM and \(sleep.deepSleepMinutes)m deep sleep. Efficiency: \(sleep.sleepEfficiency)%]"
+                        enrichedTranscript += sleepContext
+                    }
+                }
+                
                 var generatedCore = DreamCoreAnalysis()
-                for try await partialCore in await DreamAnalyzer.shared.streamCore(transcript: transcript, userName: self.firstName) {
+                for try await partialCore in await DreamAnalyzer.shared.streamCore(transcript: enrichedTranscript, userName: self.firstName) {
                     if Task.isCancelled { return }
                     
                     if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
@@ -1260,10 +1297,66 @@ class DreamStore: NSObject, ObservableObject {
                 return
             }
             
-            let insights = try await DreamAnalyzer.shared.analyzeWeeklyTrends(dreams: recentDreams, userName: self.firstName)
+            let insights = try await DreamAnalyzer.shared.analyzeWeeklyTrendsWithContext(dreams: recentDreams, userName: self.firstName, searcher: self)
             self.weeklyInsight = insights
             persistInsight(insights)
         } catch { print("Insights error: \(error)") }
         withAnimation { isGeneratingInsights = false }
+    }
+}
+
+// MARK: - DreamSearchable Conformance (Foundation Models Tool Calling)
+extension DreamStore: DreamSearchable {
+    nonisolated func searchDreams(query: String, limit: Int) async -> [DreamSearchResult] {
+        let allDreams = await MainActor.run { self.dreams }
+        let lowerQuery = query.lowercased()
+        
+        let matches = allDreams.filter { dream in
+            let text = dream.rawTranscript.lowercased()
+            let title = dream.core?.title?.lowercased() ?? ""
+            let summary = dream.core?.summary?.lowercased() ?? ""
+            let tags = dream.keyEntities.map { $0.lowercased() } + dream.emotions.map { $0.lowercased() } + dream.people.map { $0.lowercased() } + dream.places.map { $0.lowercased() }
+            
+            return text.contains(lowerQuery) || title.contains(lowerQuery) || summary.contains(lowerQuery) || tags.contains { $0.contains(lowerQuery) }
+        }.prefix(limit)
+        
+        return matches.map { dream in
+            DreamSearchResult(
+                date: dream.date,
+                title: dream.core?.title ?? "Untitled",
+                summary: dream.core?.summary ?? "No summary available.",
+                people: dream.people,
+                places: dream.places,
+                emotions: dream.emotions,
+                symbols: dream.keyEntities,
+                sentimentScore: dream.extras?.sentimentScore ?? 50,
+                anxietyLevel: dream.extras?.anxietyLevel ?? 0,
+                vividnessScore: dream.extras?.vividnessScore ?? 0,
+                lucidityScore: dream.extras?.lucidityScore ?? 0
+            )
+        }
+    }
+    
+    nonisolated func fetchMetricHistory(metric: String, days: Int) async -> [MetricDataPoint] {
+        let allDreams = await MainActor.run { self.dreams }
+        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+        
+        let recentDreams = allDreams.filter { $0.date >= cutoff }.sorted { $0.date < $1.date }
+        
+        return recentDreams.compactMap { dream in
+            let score: Int?
+            switch metric.lowercased() {
+            case "anxiety": score = dream.extras?.anxietyLevel
+            case "sentiment": score = dream.extras?.sentimentScore
+            case "lucidity": score = dream.extras?.lucidityScore
+            case "vividness": score = dream.extras?.vividnessScore
+            case "coherence": score = dream.extras?.coherenceScore
+            case "fatigue": score = dream.voiceFatigue
+            default: score = nil
+            }
+            
+            guard let finalScore = score else { return nil }
+            return MetricDataPoint(date: dream.date, score: finalScore)
+        }
     }
 }

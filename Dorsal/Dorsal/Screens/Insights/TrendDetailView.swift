@@ -1505,11 +1505,12 @@ struct CoachingDetailView: View {
     
     func generateInitialTip() async {
         do {
-            let tip = try await DreamAnalyzer.shared.GenerateCoachingTip(
+            let tip = try await DreamAnalyzer.shared.GenerateCoachingTipWithContext(
                 metric: metric.rawValue,
                 description: metric.description,
                 statsContext: context,
-                trendStatus: trendStatus
+                trendStatus: trendStatus,
+                searcher: DreamStore.shared
             )
             withAnimation {
                 self.initialTip = tip
@@ -1533,11 +1534,12 @@ struct CoachingDetailView: View {
         
         Task {
             do {
-                let answer = try await DreamAnalyzer.shared.TrendQuestion(
+                let answer = try await DreamAnalyzer.shared.TrendQuestionWithContext(
                     metric: metric.rawValue,
                     statsContext: context,
                     trendStatus: trendStatus,
-                    question: questionText
+                    question: questionText,
+                    searcher: DreamStore.shared
                 )
                 withAnimation {
                     self.answerText = answer

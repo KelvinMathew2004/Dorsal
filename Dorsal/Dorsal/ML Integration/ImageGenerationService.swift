@@ -13,6 +13,8 @@ actor ImageGenerationService {
     }
     
     func checkAvailability() async {
+        // ImageCreator was discontinued in iOS 27; the detail view offers the system sheet.
+        if #available(iOS 27, *) { isAvailable = false; return }
         do {
             _ = try await ImageCreator()
             isAvailable = true
@@ -22,6 +24,7 @@ actor ImageGenerationService {
     }
     
     func generate(prompt: String, places: [String] = [], emotions: [String] = []) async throws -> Data {
+        if #available(iOS 27, *) { throw DreamError.imageNotSupported }
         try Task.checkCancellation()
         do {
             return try await performGeneration(prompt: prompt)
