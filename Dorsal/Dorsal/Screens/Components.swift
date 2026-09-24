@@ -593,6 +593,9 @@ struct SleepStageBar: View {
     let awake: Double
     let total: Double
 
+    private var denominator: Double { max(1, total, rem + deep + core + awake) }
+    private var unspecified: Double { max(0, total - rem - deep - core - awake) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             GeometryReader { proxy in
@@ -600,22 +603,26 @@ struct SleepStageBar: View {
                     if awake > 0 {
                         Rectangle()
                             .fill(Color.orange)
-                            .frame(width: proxy.size.width * (awake / total))
+                            .frame(width: proxy.size.width * (awake / denominator))
                     }
                     if rem > 0 {
                         Rectangle()
                             .fill(Color.teal)
-                            .frame(width: proxy.size.width * (rem / total))
+                            .frame(width: proxy.size.width * (rem / denominator))
                     }
                     if core > 0 {
                         Rectangle()
                             .fill(Color.blue)
-                            .frame(width: proxy.size.width * (core / total))
+                            .frame(width: proxy.size.width * (core / denominator))
                     }
                     if deep > 0 {
                         Rectangle()
                             .fill(Color.indigo)
-                            .frame(width: proxy.size.width * (deep / total))
+                            .frame(width: proxy.size.width * (deep / denominator))
+                    }
+                    if unspecified > 0 {
+                        Rectangle().fill(Color.gray)
+                            .frame(width: proxy.size.width * (unspecified / denominator))
                     }
                 }
                 .clipShape(Capsule())
@@ -627,6 +634,7 @@ struct SleepStageBar: View {
                 legendItem(color: .teal, label: "REM")
                 legendItem(color: .blue, label: "Core")
                 legendItem(color: .indigo, label: "Deep")
+                if unspecified > 0 { legendItem(color: .gray, label: "Other") }
             }
             .font(.caption)
         }

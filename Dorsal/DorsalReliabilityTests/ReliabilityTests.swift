@@ -152,26 +152,42 @@ struct ReliabilityTests {
         #expect(retained.needsAnalysis == true)
     }
 
-    @Test func audioSinkClosesFileAndDrainsOwnedSpeechBuffers() async throws {
+    @Test(arguments: [false, true])
+    func audioSinkClosesFileAndDrainsOwnedSpeechBuffers(convertCapture: Bool) async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("caf")
         defer { try? FileManager.default.removeItem(at: url) }
-        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1))
+        // The recorder asks SpeechAnalyzer for a supported format. iOS 27 rejects
+        // Float32 AnalyzerInput, so use valid Int16 speech data in this fixture.
+        let speechFormat = try #require(AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: false))
+        let format = convertCapture ? try #require(AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)) : speechFormat
         let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 160))
         buffer.frameLength = 160
-        for frame in 0..<160 { buffer.floatChannelData![0][frame] = 0.25 }
+        for frame in 0..<160 {
+            if convertCapture { buffer.floatChannelData![0][frame] = 0.25 }
+            else { buffer.int16ChannelData![0][frame] = 8192 }
+        }
         let stream = AsyncStream<AnalyzerInput>.makeStream()
-        let sink = AudioCaptureSink(file: try AVAudioFile(forWriting: url, settings: format.settings),
-                                    format: format, continuation: stream.continuation,
+        let sink = AudioCaptureSink(file: try AVAudioFile(forWriting: url, settings: format.settings,
+                                                        commonFormat: format.commonFormat, interleaved: format.isInterleaved),
+                                    format: speechFormat, continuation: stream.continuation,
                                     onFailure: { _ in Issue.record("Unexpected audio write/conversion failure") }, onLevel: { _ in })
         sink.consume(buffer)
         // Simulate the engine reusing its input storage before speech consumes it.
-        for frame in 0..<160 { buffer.floatChannelData![0][frame] = 0 }
+        for frame in 0..<160 {
+            if convertCapture { buffer.floatChannelData![0][frame] = 0 }
+            else { buffer.int16ChannelData![0][frame] = 0 }
+        }
         #expect(!sink.finish())
         sink.consume(buffer) // A late tap callback after close must not append or reopen the file.
         var received = 0
         for await input in stream.stream {
             received += 1
-            #expect(input.buffer.floatChannelData![0][0] == 0.25)
+            // On iOS 27 this getter creates an AVAudioPCMBuffer view. Keep it
+            // alive while reading its raw channel pointer.
+            let receivedBuffer = input.buffer
+            let firstSample = withExtendedLifetime(receivedBuffer) { receivedBuffer.int16ChannelData?[0][0] }
+            let sample = try #require(firstSample)
+            #expect(abs(Int(sample) - 8192) <= 1)
         }
         #expect(received == 1)
         let saved = try AVAudioFile(forReading: url)

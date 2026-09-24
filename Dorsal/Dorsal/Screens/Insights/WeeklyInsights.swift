@@ -133,6 +133,7 @@ struct WeeklyInsightsView: View {
                     .padding()
                 }
                 .scrollIndicators(.hidden)
+                .upgradeScrollEdgeEffect()
                 .scrollDisabled(store.isGeneratingInsights || selectedInsight != nil)
                 .blur(radius: selectedInsight != nil ? 10 : 0) // Darken background when expanded
                 .overlay {
@@ -613,6 +614,7 @@ struct WeeklyInsightDetailView: View {
                 .padding(.top, 60)
             }
             .scrollIndicators(.hidden)
+            .upgradeScrollEdgeEffect()
             
             // Close Button
             .safeAreaInset(edge: .bottom) {

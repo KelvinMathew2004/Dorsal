@@ -72,6 +72,7 @@ struct JournalView: View {
                             }
                         }
                         .listStyle(.plain)
+                        .upgradeScrollEdgeEffect()
                         .scrollContentBackground(.hidden)
                         .animation(.default, value: store.filteredDreams)
                     }

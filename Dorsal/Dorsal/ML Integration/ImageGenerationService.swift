@@ -7,6 +7,11 @@ actor ImageGenerationService {
     static let shared = ImageGenerationService()
     
     private(set) var isAvailable: Bool = false
+
+    nonisolated static var supportsAutomaticGeneration: Bool {
+        if #available(iOS 27, *) { return false }
+        return true
+    }
     
     init() {
         Task { await checkAvailability() }
@@ -14,7 +19,7 @@ actor ImageGenerationService {
     
     func checkAvailability() async {
         // ImageCreator was discontinued in iOS 27; the detail view offers the system sheet.
-        if #available(iOS 27, *) { isAvailable = false; return }
+        guard Self.supportsAutomaticGeneration else { isAvailable = false; return }
         do {
             _ = try await ImageCreator()
             isAvailable = true
@@ -24,7 +29,7 @@ actor ImageGenerationService {
     }
     
     func generate(prompt: String, places: [String] = [], emotions: [String] = []) async throws -> Data {
-        if #available(iOS 27, *) { throw DreamError.imageNotSupported }
+        guard Self.supportsAutomaticGeneration else { throw DreamError.imageNotSupported }
         try Task.checkCancellation()
         do {
             return try await performGeneration(prompt: prompt)

@@ -315,6 +315,7 @@ struct EntityDetailView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                .upgradeScrollEdgeEffect()
                 
                 VStack {
                     Spacer()

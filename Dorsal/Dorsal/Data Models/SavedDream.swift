@@ -47,16 +47,8 @@ final class SavedDream {
     var imagePrompt: String = ""
     @Attribute(.externalStorage) var generatedImageData: Data? = nil
     
-    // Sleep Data
-    var totalSleepMinutes: Int = 0
-    var remSleepMinutes: Int = 0
-    var deepSleepMinutes: Int = 0
-    var coreSleepMinutes: Int = 0
-    var awakeMinutes: Int = 0
-    var sleepEfficiency: Int = 0
-    var hasSleepData: Bool = false
+    var isBookmarked: Bool = false
     
-    var isBookmarked: Bool = false    
     // Designated Initializer
     init(
         id: UUID = UUID(),
@@ -81,13 +73,6 @@ final class SavedDream {
         isNightmare: Bool = false,
         imagePrompt: String = "",
         generatedImageData: Data? = nil,
-        totalSleepMinutes: Int = 0,
-        remSleepMinutes: Int = 0,
-        deepSleepMinutes: Int = 0,
-        coreSleepMinutes: Int = 0,
-        awakeMinutes: Int = 0,
-        sleepEfficiency: Int = 0,
-        hasSleepData: Bool = false,
         isBookmarked: Bool = false
     ) {
         self.id = id
@@ -112,13 +97,6 @@ final class SavedDream {
         self.isNightmare = isNightmare
         self.imagePrompt = imagePrompt
         self.generatedImageData = generatedImageData
-        self.totalSleepMinutes = totalSleepMinutes
-        self.remSleepMinutes = remSleepMinutes
-        self.deepSleepMinutes = deepSleepMinutes
-        self.coreSleepMinutes = coreSleepMinutes
-        self.awakeMinutes = awakeMinutes
-        self.sleepEfficiency = sleepEfficiency
-        self.hasSleepData = hasSleepData
         self.isBookmarked = isBookmarked
     }
 }

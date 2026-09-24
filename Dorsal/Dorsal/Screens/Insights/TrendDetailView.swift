@@ -690,6 +690,7 @@ struct TrendDetailView: View {
                 .padding(.top)
             }
             .scrollIndicators(.hidden)
+            .upgradeScrollEdgeEffect()
             .blur(radius: showCoaching ? 10 : 0)
             
             // Detail View Overlay
@@ -1467,6 +1468,7 @@ struct CoachingDetailView: View {
                     .padding(.top, 20)
                 }
                 .scrollIndicators(.hidden)
+                .upgradeScrollEdgeEffect()
             }
             
             // Close Button

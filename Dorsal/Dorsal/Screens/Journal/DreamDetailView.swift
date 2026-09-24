@@ -10,6 +10,7 @@ struct DreamDetailView: View {
     
     @Environment(\.supportsImagePlayground) private var supportsImagePlayground
     @State private var showImagePlayground = false
+    @State private var sleepSummary: SleepSummary?
     @Namespace private var namespace
     
     @State private var activeEntity: EntityIdentifier?
@@ -188,6 +189,13 @@ struct DreamDetailView: View {
             store.keepCreatedImage(for: liveDream, from: url)
         }
         .task { await store.refreshAvailability() }
+        .task(id: store.usesSleepData) {
+            sleepSummary = nil
+            guard store.usesSleepData else { return }
+            let summary = try? await store.sleepSummary(for: liveDream.date)
+            guard !Task.isCancelled, store.usesSleepData else { return }
+            sleepSummary = summary
+        }
         .onAppear {
             if let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
                 self.dominantColor = uiImage.dominantColor
@@ -301,6 +309,20 @@ struct DreamDetailView: View {
                 
                 recoveryNotices.padding(.horizontal)
                 headerSection
+
+                if #available(iOS 27, *), supportsImagePlayground,
+                   liveDream.generatedImageData == nil, liveDream.imageError == nil,
+                   !isProcessingThisDream, !liveDream.rawTranscript.isEmpty {
+                    Button {
+                        showImagePlayground = true
+                    } label: {
+                        Label("Create Illustration", systemImage: "apple.image.playground")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    }
+                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+                    .padding(.horizontal)
+                }
                 
                 if let core = liveDream.core {
                     DreamContextSection(
@@ -347,6 +369,7 @@ struct DreamDetailView: View {
             .animation(.default, value: liveDream.extras)
         }
         .scrollIndicators(.hidden)
+        .upgradeScrollEdgeEffect()
         .scrollDisabled(isProcessingThisDream || selectedInsight != nil)
         .blur(radius: selectedInsight != nil ? 10 : 0)
         .overlay {
@@ -462,14 +485,14 @@ struct DreamDetailView: View {
     
     @ViewBuilder
     var sleepArchitectureSection: some View {
-        if liveDream.hasSleepData {
+        if store.usesSleepData, let sleep = sleepSummary {
             VStack(alignment: .leading, spacing: 16) {
                 Label("Sleep Architecture", systemImage: "bed.double.fill")
                     .font(.headline)
                     .foregroundStyle(store.themeAccentColor)
                 
                 HStack(spacing: 24) {
-                    let totalMinutes = liveDream.totalSleepMinutes ?? 0
+                    let totalMinutes = sleep.totalSleepMinutes
                     let hours = totalMinutes / 60
                     let minutes = totalMinutes % 60
                     
@@ -484,24 +507,28 @@ struct DreamDetailView: View {
                     
                     Spacer()
                     
-                    let efficiency = liveDream.sleepEfficiency ?? 0
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("\(efficiency)%")
-                            .font(.title2.bold())
-                            .foregroundStyle(.green)
-                        Text("Efficiency")
-                            .font(.caption)
-                            .foregroundStyle(secondaryColor)
+                    if let efficiency = sleep.sleepEfficiency {
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("\(efficiency)%")
+                                .font(.title2.bold())
+                                .foregroundStyle(.green)
+                            Text("Recorded Asleep")
+                                .font(.caption)
+                                .foregroundStyle(secondaryColor)
+                        }
                     }
                 }
                 
-                SleepStageBar(
-                    rem: Double(liveDream.remSleepMinutes ?? 0),
-                    deep: Double(liveDream.deepSleepMinutes ?? 0),
-                    core: Double(liveDream.coreSleepMinutes ?? 0),
-                    awake: Double(liveDream.awakeMinutes ?? 0),
-                    total: max(Double(liveDream.totalSleepMinutes ?? 1), 1.0)
-                )
+                if sleep.hasStageData {
+                    SleepStageBar(
+                        rem: Double(sleep.remMinutes), deep: Double(sleep.deepSleepMinutes),
+                        core: Double(sleep.coreSleepMinutes), awake: Double(sleep.awakeMinutes),
+                        total: Double(sleep.totalSleepMinutes + sleep.awakeMinutes)
+                    )
+                }
+                Text("Based on available Health samples.")
+                    .font(.caption)
+                    .foregroundStyle(secondaryColor)
             }
             .padding(24)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
@@ -629,6 +656,7 @@ struct InsightDetailView: View {
                 .padding(.top, 60)
             }
             .scrollIndicators(.hidden)
+            .upgradeScrollEdgeEffect()
             .safeAreaInset(edge: .bottom) {
                 if showContent {
                     Button {
@@ -761,7 +789,8 @@ struct InsightDetailView: View {
                     transcript: dream.rawTranscript,
                     analysis: rawText,
                     question: questionText,
-                    searcher: DreamStore.shared
+                    searcher: store,
+                    dreamDate: dream.date
                 )
                 withAnimation {
                     self.answerText = answer

@@ -233,31 +233,22 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     var needsAnalysis: Bool?
     var needsTranscription: Bool?
     
-    // Sleep Data
-    var totalSleepMinutes: Int?
-    var remSleepMinutes: Int?
-    var deepSleepMinutes: Int?
-    var coreSleepMinutes: Int?
-    var awakeMinutes: Int?
-    var sleepEfficiency: Int?
-    var hasSleepData: Bool = false
-    
     // Legacy Helpers
     var smartSummary: String { core?.summary ?? (rawTranscript.isEmpty ? "Recording saved" : "Dream saved") }
     var interpretation: String { core?.interpretation ?? "Analysis not available yet." }
     var actionableAdvice: String { core?.actionableAdvice ?? "" }
     var tone: String { core?.tone?.label ?? "Neutral" }
     
-    var people: [String] { core?.people ?? [] }
-    var places: [String] { core?.places ?? [] }
-    var emotions: [String] {
+    nonisolated var people: [String] { core?.people ?? [] }
+    nonisolated var places: [String] { core?.places ?? [] }
+    nonisolated var emotions: [String] {
         var all = core?.emotions ?? []
         if let primary = core?.emotion, !all.contains(primary) {
             all.insert(primary, at: 0)
         }
         return all
     }
-    var keyEntities: [String] { core?.symbols ?? [] }
+    nonisolated var keyEntities: [String] { core?.symbols ?? [] }
     
     var analysis: DreamAnalysisResult {
         DreamAnalysisResult(
@@ -311,15 +302,6 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.generatedImageData = saved.generatedImageData
         self.isBookmarked = saved.isBookmarked
         self.voiceFatigue = saved.voiceFatigue
-        
-        // Sleep Data
-        self.totalSleepMinutes = saved.totalSleepMinutes
-        self.remSleepMinutes = saved.remSleepMinutes
-        self.deepSleepMinutes = saved.deepSleepMinutes
-        self.coreSleepMinutes = saved.coreSleepMinutes
-        self.awakeMinutes = saved.awakeMinutes
-        self.sleepEfficiency = saved.sleepEfficiency
-        self.hasSleepData = saved.hasSleepData
         
         // Reconstruct Core Analysis from flat properties
         self.core = DreamCoreAnalysis(

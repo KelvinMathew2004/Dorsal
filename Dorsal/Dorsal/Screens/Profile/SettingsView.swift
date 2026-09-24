@@ -18,12 +18,14 @@ struct SettingsView: View {
                         headerSection
                         appearanceSection
                         notificationsSection
+                        if store.isHealthDataAvailable { sleepSection }
                         dataSection
                         Spacer(minLength: 50)
                     }
                     .padding(.horizontal)
                 }
                 .scrollIndicators(.hidden)
+                .upgradeScrollEdgeEffect()
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -148,6 +150,36 @@ struct SettingsView: View {
         }
     }
     
+    private var sleepSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Sleep", systemImage: "bed.double.fill")
+                .font(.headline)
+                .foregroundStyle(Theme.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                if store.usesSleepData {
+                    Toggle("Show Sleep Data", isOn: $store.usesSleepData)
+                    Button("Refresh Sleep Data") {
+                        Task { await store.requestSleepAccess() }
+                    }
+                } else {
+                    Text("View sleep recorded in Health alongside your dreams. Sleep readings stay on this device and can inform answers to your questions.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Button("Continue") {
+                        Task { await store.requestSleepAccess() }
+                    }
+                }
+                if store.requestingSleepAccess { ProgressView() }
+                if let message = store.sleepAccessMessage {
+                    Text(message).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            .disabled(store.requestingSleepAccess)
+            .padding()
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+        }
+    }
+
     private var dataSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Data & Storage", systemImage: "internaldrive.fill")
