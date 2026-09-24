@@ -250,7 +250,8 @@ struct DreamDetailView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .padding()
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
         }
         if let message = liveDream.analysisError ?? ((!isProcessingThisDream && liveDream.needsAnalysis == true && !liveDream.rawTranscript.isEmpty)
             ? "Analysis hasn’t finished. You can read your dream now and retry analysis when Apple Intelligence is available." : nil) {
@@ -282,9 +283,6 @@ struct DreamDetailView: View {
                 
                 recoveryNotices.padding(.horizontal)
                 headerSection
-                if let url = RecordingFiles.url(for: liveDream.recordingFileName) {
-                    RecordingPlaybackView(url: url).padding(.horizontal)
-                }
                 
                 if let core = liveDream.core {
                     DreamContextSection(
@@ -318,6 +316,10 @@ struct DreamDetailView: View {
                 metricsSection
                 
                 DreamTranscriptSection(transcript: liveDream.rawTranscript, secondary: secondaryColor)
+
+                if let url = RecordingFiles.url(for: liveDream.recordingFileName) {
+                    RecordingPlaybackView(url: url).padding(.horizontal)
+                }
             }
             .padding(.top)
             .padding(.bottom, 50)
@@ -325,13 +327,44 @@ struct DreamDetailView: View {
             .animation(.default, value: liveDream.extras)
         }
         .scrollIndicators(.hidden)
-        .scrollDisabled(selectedInsight != nil)
+        .scrollDisabled(isProcessingThisDream || selectedInsight != nil)
         .blur(radius: selectedInsight != nil ? 10 : 0)
-        .safeAreaInset(edge: .bottom) {
+        .overlay {
             if isProcessingThisDream {
-                ProgressView("Analyzing…")
-                    .padding()
-                    .background(.regularMaterial, in: Capsule())
+                ZStack {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 40) {
+                        Image(systemName: analysisIcons[currentAnalysisIconIndex].name)
+                            .font(.system(size: 48, weight: .semibold))
+                            .foregroundStyle(analysisIcons[currentAnalysisIconIndex].color)
+                            .symbolRenderingMode(.hierarchical)
+                            .symbolColorRenderingMode(.gradient)
+                            .contentTransition(.symbolEffect(.replace))
+                            .frame(width: 64, height: 64)
+
+                        Text("Analyzing...")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                    }
+                    .padding(40)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+                }
+                .onAppear {
+                    currentAnalysisIconIndex = 0
+                }
+                .task {
+                    while !Task.isCancelled {
+                        do { try await Task.sleep(for: .milliseconds(800)) }
+                        catch { break }
+                        guard isProcessingThisDream else { break }
+
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                            currentAnalysisIconIndex = (currentAnalysisIconIndex + 1) % analysisIcons.count
+                        }
+                    }
+                }
             }
         }
     }
@@ -927,16 +960,25 @@ private struct RecordingPlaybackView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Button(isPlaying ? "Stop Audio" : "Play Recording", systemImage: isPlaying ? "stop.fill" : "play.fill") {
-                    if isPlaying { player?.stop(); isPlaying = false }
+                Button {
+                    if isPlaying { player?.pause(); isPlaying = false }
                     else {
                         do {
                             try AVAudioSession.sharedInstance().setCategory(.playback)
                             try AVAudioSession.sharedInstance().setActive(true)
-                            player = try AVAudioPlayer(contentsOf: url)
+                            if player == nil {
+                                player = try AVAudioPlayer(contentsOf: url)
+                            }
                             isPlaying = player?.play() == true
                             playbackError = isPlaying ? nil : "The recording couldn’t be played. You can still export it."
                         } catch { playbackError = "The recording couldn’t be played. You can still export it." }
+                    }
+                } label: {
+                    Label {
+                        Text(isPlaying ? "Pause Recording" : "Play Recording")
+                    } icon: {
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .contentTransition(.symbolEffect(.replace))
                     }
                 }
                 Spacer()
@@ -945,16 +987,21 @@ private struct RecordingPlaybackView: View {
             }
             if let playbackError { Text(playbackError).font(.footnote) }
         }
-        .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding()
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
         .task(id: isPlaying) {
             while isPlaying && !Task.isCancelled {
                 do { try await Task.sleep(for: .milliseconds(250)) } catch { break }
-                if player?.isPlaying != true { isPlaying = false }
+                if player?.isPlaying != true {
+                    player?.currentTime = 0
+                    isPlaying = false
+                }
             }
             if !isPlaying { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
         }
         .onDisappear {
             player?.stop()
+            player = nil
             isPlaying = false
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }

@@ -233,9 +233,6 @@ struct RecordView: View {
             }
             .safeAreaInset(edge: .top) {
                 VStack(spacing: 8) {
-                    if store.recordingIsBusy {
-                        ProgressView(store.isFinishingRecording ? "Finishing recording…" : "Starting recording…")
-                    }
                     if let notice = store.isRecording ? store.transcriptionNotice : store.analysisAvailability.message {
                         Text(notice)
                             .font(.footnote)
