@@ -2,14 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Allows you to record audio descriptions of your dreams.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Allows you to select photos from your library for your profile or dream entries.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Allows you to save generated dream visuals to your photo library.</string>
-	<key>NSContactsUsageDescription</key>
-	<string>Allows you to select contacts when linking people to your dream entries.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
