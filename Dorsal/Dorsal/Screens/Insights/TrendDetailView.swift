@@ -244,7 +244,7 @@ struct TrendDetailView: View {
                 )
     
             VStack(alignment: .leading, spacing: 4) {
-                Text(data.date.formatted(date: .abbreviated, time: .shortened))
+                Text(DreamDateLabel.string(data.date))
                     .font(.caption2)
                     .foregroundStyle(Theme.secondary)
                 

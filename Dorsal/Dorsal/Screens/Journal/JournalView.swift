@@ -2,6 +2,7 @@ import SwiftUI
 
 struct JournalView: View {
     @ObservedObject var store: DreamStore
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     @State private var showingDeleteAlert = false
     @State private var dreamToDelete: Dream?
@@ -45,6 +46,22 @@ struct JournalView: View {
                             
                             Spacer()
                         }
+                    } else if horizontalSizeClass == .regular {
+                        ScrollView {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], spacing: 16) {
+                                ForEach(store.filteredDreams) { dream in
+                                    DreamJournalTile(store: store, dream: dream)
+                                        .contextMenu {
+                                            Button("Delete Dream", systemImage: "trash", role: .destructive) {
+                                                dreamToDelete = dream
+                                                showingDeleteAlert = true
+                                            }
+                                        }
+                                }
+                            }
+                            .padding(16)
+                        }
+                        .upgradeScrollEdgeEffect()
                     } else {
                         List {
                             ForEach(store.filteredDreams) { dream in
@@ -240,7 +257,7 @@ struct DreamRow: View {
                 Image(uiImage: uiImage).resizable().aspectRatio(contentMode: .fill).frame(width: 50, height: 50).clipShape(RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1)))
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(dream.date.formatted(date: .abbreviated, time: .shortened)).font(.caption.weight(.semibold)).foregroundStyle(store.themeAccentColor)
+                Text(DreamDateLabel.string(dream.date)).font(.caption.weight(.semibold)).foregroundStyle(store.themeAccentColor)
                 Text(dream.core?.title ?? "Processing...").font(.subheadline).foregroundStyle(.primary).lineLimit(2)
             }
             Spacer()

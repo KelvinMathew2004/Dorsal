@@ -55,10 +55,10 @@ struct DreamCoreAnalysis: Codable, Sendable, Hashable {
     @Guide(description: "A 1-2 sentence summary of the dream's narrative flow.")
     var summary: String?
 
-    @Guide(description: "List of people or characters. Use single-word base nouns only. No descriptors or modifiers.")
+    @Guide(description: "List of people, characters, or animals. Keep names intact. If an adjective is tied to a noun, extract the full modifier and noun together (e.g. 'old man', 'shady figure').")
     var people: [String]?
 
-    @Guide(description: "List of locations or settings. You MUST use single-word base location nouns only. No descriptors or modifiers.")
+    @Guide(description: "List of locations or settings. Keep full names or descriptive terms together (e.g. 'high school', 'grandma house').")
     var places: [String]?
     
     @Guide(description: "The primary emotion felt.")
@@ -99,6 +99,7 @@ struct DreamExtraAnalysis: Codable, Sendable, Hashable {
     
     @Guide(description: "Anxiety level (0-100).", .range(0...100))
     var anxietyLevel: Int?
+
 }
 
 @Generable
@@ -324,7 +325,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
             lucidityScore: saved.lucidityScore,
             vividnessScore: saved.vividnessScore,
             coherenceScore: saved.coherenceScore,
-            anxietyLevel: saved.anxietyLevel
+            anxietyLevel: saved.anxietyLevel,
         )
         self.analysisError = saved.analysisError
         self.imageError = saved.imageError

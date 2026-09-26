@@ -727,7 +727,8 @@ struct WeeklyInsightDetailView: View {
                     summaries: summariesContext,
                     analysis: analysisContent,
                     question: questionText,
-                    searcher: DreamStore.shared
+                    searcher: DreamStore.shared,
+                    includeSleep: DreamStore.shared.usesSleepData
                 )
                 withAnimation {
                     self.answerText = answer

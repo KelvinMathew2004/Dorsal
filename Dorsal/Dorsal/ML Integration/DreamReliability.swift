@@ -29,6 +29,22 @@ nonisolated enum AnalysisAvailability: Equatable {
 nonisolated enum DreamFailure {
     static func analysisMessage(for error: Error) -> String {
         if let error = error as? DreamError { return error.localizedDescription }
+        if #available(iOS 27, *) {
+            if error is SystemLanguageModel.Error { return DreamError.modelUnavailable.localizedDescription }
+            if let error = error as? LanguageModelSession.Error, error == .concurrentRequests {
+                return DreamError.systemBusy.localizedDescription
+            }
+            if let error = error as? LanguageModelError {
+                switch error {
+                case .contextSizeExceeded: return DreamError.tooLong.localizedDescription
+                case .rateLimited: return DreamError.systemBusy.localizedDescription
+                case .unsupportedLanguageOrLocale: return DreamError.unsupportedLanguage.localizedDescription
+                case .guardrailViolation, .refusal:
+                    return "Apple Intelligence couldn’t analyze this content. Your original dream is still available."
+                default: return "Analysis couldn’t finish. Your dream is still available. Please try again."
+                }
+            }
+        }
         guard let error = error as? LanguageModelSession.GenerationError else {
             return "Analysis couldn’t finish. Your dream is still available. Please try again."
         }

@@ -16,7 +16,7 @@ actor DreamToolBudget {
     }
 }
 
-nonisolated enum DreamToolError: Error { case callLimit }
+nonisolated enum DreamToolError: Error { case callLimit, contextBudget }
 
 nonisolated enum DreamToolPolicy {
     static func mayFallback(after error: Error) -> Bool {

@@ -8,9 +8,7 @@
 			<key>UTTypeIdentifier</key>
 			<string>com.KelvinMathew.Dorsal.profile-entity</string>
 			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.data</string>
-			</array>
+			<array><string>public.data</string></array>
 			<key>UTTypeDescription</key>
 			<string>Dorsal Profile Item</string>
 		</dict>

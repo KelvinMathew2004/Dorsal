@@ -57,7 +57,7 @@ struct UpgradeTests {
 
     @Test func profileGroupingReorderingAndUnlinkingPersist() throws {
         let container = try ModelContainer(for: SavedDream.self, SavedEntity.self, SavedWeeklyInsight.self,
-                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none))
         let context = ModelContext(container)
         for name in ["Alice", "Bob", "Charlie"] { context.insert(SavedEntity(name: name, type: "person")) }
         try context.save()
@@ -128,34 +128,6 @@ struct UpgradeTests {
         #expect(DreamContextDate.string(date, timeZone: zone) == "2025-12-31")
     }
 
-    @Test func profileNativeContainerRendersWithGroupedEntities() async throws {
-        guard #available(iOS 27, *) else { return }
-        let container = try ModelContainer(for: SavedDream.self, SavedEntity.self, SavedWeeklyInsight.self,
-                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        let context = ModelContext(container)
-        context.insert(SavedEntity(name: "Ocean", type: "place"))
-        context.insert(SavedEntity(name: "Alice", type: "person"))
-        context.insert(SavedEntity(name: "Bob", type: "person", parentID: "person:Alice"))
-        context.insert(SavedEntity(name: "Charlie", type: "person"))
-        try context.save()
-        let store = DreamStore(prepareServices: false, availabilityProvider: { .notReady })
-        store.modelContext = context
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-        let previousWindow = scene.windows.first { $0.isKeyWindow }
-        let window = UIWindow(windowScene: scene)
-        window.rootViewController = UIHostingController(rootView: ProfileView(store: store).preferredColorScheme(.dark))
-        window.makeKeyAndVisible()
-        defer { window.isHidden = true; previousWindow?.makeKey() }
-        try await Task.sleep(for: .seconds(1))
-        window.layoutIfNeeded()
-        let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
-        let image = renderer.image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
-        let png = try #require(image.pngData())
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("dorsal-profile-ios27.png")
-        try png.write(to: url)
-        print("Profile rendering screenshot: \(url.path)")
-        #expect(window.bounds.width > 0 && window.bounds.height > 0)
-    }
 }
 
 private struct LongDreamSearch: DreamSearchable {

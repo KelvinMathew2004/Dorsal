@@ -10,6 +10,8 @@ struct DreamDetailView: View {
     
     @Environment(\.supportsImagePlayground) private var supportsImagePlayground
     @State private var showImagePlayground = false
+    @State private var illustrationRequest: DreamIllustrationRequest?
+    @State private var preparedImagePlaygroundPrompt: String?
     @State private var sleepSummary: SleepSummary?
     @Namespace private var namespace
     
@@ -89,6 +91,16 @@ struct DreamDetailView: View {
         store.isAnalyzingFatigue && liveDream.id == store.currentDreamID
     }
     
+    private func presentImagePlayground() {
+        guard #available(iOS 27, *), supportsImagePlayground else { return }
+        illustrationRequest = DreamIllustrationRequest(
+            promptTags: preparedImagePlaygroundPrompt.map { [$0] }
+                ?? DreamIllustrationPrompt.styled(liveDream.core?.summary ?? liveDream.rawTranscript),
+            profileImageData: store.profileImageData
+        )
+        showImagePlayground = true
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             Group {
@@ -142,53 +154,70 @@ struct DreamDetailView: View {
                 .zIndex(300)
             }
         }
-        .navigationTitle(liveDream.core?.title ?? liveDream.date.formatted(date: .abbreviated, time: .shortened))
+        .navigationTitle(liveDream.core?.title ?? DreamDateLabel.string(liveDream.date))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if !store.isProcessing && selectedInsight == nil {
-                    Menu {
-                        if liveDream.generatedImageData != nil {
+                        ToolbarItem(placement: .primaryAction) {
                             Button {
-                                saveImageToGallery()
+                                store.toggleBookmark(id: liveDream.id)
                             } label: {
-                                Label("Save Image", systemImage: "square.and.arrow.down")
-                                    .tint(textColor)
+                                Image(systemName: liveDream.isBookmarked ? "bookmark.fill" : "bookmark")
                             }
+
                         }
-                        
-                        if #available(iOS 27, *), supportsImagePlayground {
-                            Button("Create Image in Image Playground", systemImage: "photo.badge.plus") {
-                                showImagePlayground = true
+            if #available(iOS 27, *) {
+                if !store.isProcessing && selectedInsight == nil {
+                    ToolbarOverflowMenu {
+                        if liveDream.generatedImageData != nil {
+                            Button("Save Image", systemImage: "square.and.arrow.down") {
+                                saveImageToGallery()
                             }
                         }
                         if store.isImageGenerationAvailable {
-                            Button {
+                            Button("Regenerate Image", systemImage: "sparkles") {
                                 store.regenerateDreamImage(liveDream)
-                            } label: {
-                                Label("Regenerate Image", systemImage: "sparkles")
-                                    .tint(textColor)
                             }
                         }
-                        
-                        Button {
+                        Button("Regenerate Analysis", systemImage: "arrow.clockwise") {
                             store.regenerateDream(liveDream)
-                        } label: {
-                            Label("Regenerate Analysis", systemImage: "arrow.clockwise")
-                                .tint(textColor)
                         }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .foregroundStyle(textColor)
+                    }
+                }
+            } else {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if !store.isProcessing && selectedInsight == nil {
+                        if liveDream.generatedImageData != nil {
+                            Button("Save Image", systemImage: "square.and.arrow.down") { saveImageToGallery() }
+                        }
+                        if store.isImageGenerationAvailable {
+                            Button("Regenerate Image", systemImage: "sparkles") { store.regenerateDreamImage(liveDream) }
+                        }
+                        Button("Regenerate Analysis", systemImage: "arrow.clockwise") { store.regenerateDream(liveDream) }
                     }
                 }
             }
         }
-        .imagePlaygroundSheet(isPresented: $showImagePlayground,
-                              concepts: [.text(liveDream.core?.summary ?? liveDream.rawTranscript)]) { url in
+        .modifier(DreamIllustrationSheet(isPresented: $showImagePlayground, request: illustrationRequest) { url in
             store.keepCreatedImage(for: liveDream, from: url)
-        }
+        })
+
         .task { await store.refreshAvailability() }
+        .task(id: liveDream.id) {
+            guard #available(iOS 27, *), supportsImagePlayground,
+                  liveDream.generatedImageData == nil, !liveDream.rawTranscript.isEmpty else { return }
+            do {
+                let prompt = try await DreamAnalyzer.shared.generateVisualPrompt(
+                    transcript: liveDream.rawTranscript,
+                    allowsCharacters: true,
+                    includeMyself: store.imageIncludeMyself
+                )
+                guard !Task.isCancelled else { return }
+                preparedImagePlaygroundPrompt = prompt
+            } catch {
+                // The sheet opens immediately with a styled summary if prompt
+                // preparation is slow or Apple Intelligence is unavailable.
+            }
+        }
         .task(id: store.usesSleepData) {
             sleepSummary = nil
             guard store.usesSleepData else { return }
@@ -290,7 +319,7 @@ struct DreamDetailView: View {
                 Text(message).font(.subheadline)
                 if #available(iOS 27, *) {
                     if supportsImagePlayground {
-                        Button("Create in Image Playground") { showImagePlayground = true }
+                        Button("Create in Image Playground") { presentImagePlayground() }
                     }
                 } else {
                     Button("Retry Illustration") { store.regenerateDreamImage(liveDream) }
@@ -309,20 +338,6 @@ struct DreamDetailView: View {
                 
                 recoveryNotices.padding(.horizontal)
                 headerSection
-
-                if #available(iOS 27, *), supportsImagePlayground,
-                   liveDream.generatedImageData == nil, liveDream.imageError == nil,
-                   !isProcessingThisDream, !liveDream.rawTranscript.isEmpty {
-                    Button {
-                        showImagePlayground = true
-                    } label: {
-                        Label("Create Illustration", systemImage: "apple.image.playground")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                    }
-                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
-                    .padding(.horizontal)
-                }
                 
                 if let core = liveDream.core {
                     DreamContextSection(
@@ -337,7 +352,6 @@ struct DreamDetailView: View {
                     .padding()
                 }
                 
-                sleepArchitectureSection
                 
                 if let interp = liveDream.core?.interpretation {
                     insightCardRow(
@@ -357,6 +371,7 @@ struct DreamDetailView: View {
                 
                 metricsSection
                 
+                sleepArchitectureSection
                 DreamTranscriptSection(transcript: liveDream.rawTranscript, secondary: secondaryColor)
 
                 if let url = RecordingFiles.url(for: liveDream.recordingFileName) {
@@ -457,7 +472,7 @@ struct DreamDetailView: View {
             return nil
         }()
         
-        if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) || liveDream.core?.summary != nil {
+        if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) || liveDream.core?.summary != nil || !liveDream.rawTranscript.isEmpty {
             VStack(spacing: 20) {
                 if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) {
                     LensView(
@@ -468,6 +483,19 @@ struct DreamDetailView: View {
                     .frame(maxWidth: 400)
                 }
                 
+                if #available(iOS 27, *), supportsImagePlayground,
+                   image == nil, liveDream.imageError == nil,
+                   !isProcessingThisDream, !liveDream.rawTranscript.isEmpty {
+                    Button {
+                        presentImagePlayground()
+                    } label: {
+                        Label("Create Illustration", systemImage: "apple.image.playground")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    }
+                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+                }
+
                 if let summary = liveDream.core?.summary {
                     Text("\(Text("Summary: ").bold())\(summary)")
                         .font(.caption)
@@ -790,7 +818,8 @@ struct InsightDetailView: View {
                     analysis: rawText,
                     question: questionText,
                     searcher: store,
-                    dreamDate: dream.date
+                    dreamDate: dream.date,
+                    includeSleep: store.usesSleepData
                 )
                 withAnimation {
                     self.answerText = answer

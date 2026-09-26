@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-
 @MainActor
 enum DreamPersistence {
     static func save(_ dream: Dream, in context: ModelContext, commit: () throws -> Void) throws {

@@ -11,6 +11,7 @@ final class SavedEntity {
     var lastUpdated: Date = Date()
     var parentID: String? = nil
     var contactId: String? = nil
+    var linkedPlaceData: Data? = nil
     
     init(
         name: String = "",

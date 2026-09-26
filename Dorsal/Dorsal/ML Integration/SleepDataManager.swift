@@ -98,11 +98,8 @@ actor SleepDataManager {
     func fetchSleepForDate(_ date: Date) async throws -> SleepSummary? {
         guard isAvailable else { return nil }
         try Task.checkCancellation()
-        let calendar = Calendar.current
-        guard let previousDay = calendar.date(byAdding: .day, value: -1, to: date),
-              let start = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: previousDay) else { return nil }
-        let end = min(date, Date())
-        guard start < end else { return nil }
+        guard let interval = Self.queryWindow(endingAt: date) else { return nil }
+        let start = interval.start, end = interval.end
         // Include overlapping samples, then clip them to the requested interval.
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
         let descriptor = HKSampleQueryDescriptor(
@@ -126,5 +123,15 @@ actor SleepDataManager {
             return SleepSegment(start: sample.startDate, end: sample.endDate, stage: stage, source: source)
         }
         return SleepAggregation.summarize(segments, from: start, to: end)
+    }
+
+    nonisolated static func queryWindow(endingAt date: Date, now: Date = Date(), calendar: Calendar = .current) -> DateInterval? {
+        guard let previousDay = calendar.date(byAdding: .day, value: -1, to: date),
+              let start = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: previousDay),
+              let evening = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: date) else { return nil }
+        // A late journal entry must not combine the previous night with the
+        // beginning of a second night's sleep.
+        let end = min(min(date, now), evening)
+        return start < end ? DateInterval(start: start, end: end) : nil
     }
 }
