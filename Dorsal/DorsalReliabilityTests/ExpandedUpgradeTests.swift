@@ -20,6 +20,18 @@ struct ExpandedUpgradeTests {
         #expect(ChecklistKeywordMatcher.match(in: "I felt thrilled", keywords: emotions) == "thrilled")
     }
 
+    @Test func customizationKeepsFreeStylesAndFailsOpenIfEntitlementCannotBeChecked() {
+        #expect(RevenueCatManager.canUseImageStyle("pixar", entitlementStatusKnown: true, isPremium: false))
+        #expect(!RevenueCatManager.canUseImageStyle("warm", entitlementStatusKnown: true, isPremium: false))
+        #expect(!RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: false))
+        #expect(RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: false, isPremium: false))
+        #expect(RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: true))
+        #expect(RevenueCatManager.canUseTheme("gold", entitlementStatusKnown: true, isPremium: false))
+        #expect(!RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: false))
+        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: false, isPremium: false))
+        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: true))
+    }
+
     @Test func illustrationUsesOnlyADecodableProfilePhotoAsTheDreamer() throws {
         let preferences = UserDefaults.standard
         let priorPreference = preferences.object(forKey: "imageIncludeMyself")

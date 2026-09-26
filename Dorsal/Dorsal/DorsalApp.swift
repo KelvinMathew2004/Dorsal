@@ -9,6 +9,7 @@ struct DorsalApp: App {
 
     init() {
         DorsalShortcuts.updateAppShortcutParameters()
+        RevenueCatManager.configure()
     }
     
     var body: some Scene {
@@ -110,6 +111,7 @@ struct ContentView: View {
         }
         .onAppear {
             store.setContext(modelContext)
+            Task { await RevenueCatManager.shared.refresh() }
             Task { await DreamAnalyzer.shared.prewarmModel() }
         }
     }

@@ -1,6 +1,6 @@
 import Foundation
 
-enum ImageScenePreference {
+nonisolated enum ImageScenePreference {
     static let settingOnly = "settingOnly"
     static let dreamScene = "dreamScene"
 

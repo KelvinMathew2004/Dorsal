@@ -5,6 +5,10 @@ struct SettingsView: View {
     @ObservedObject var store: DreamStore
     @Binding var showOnboarding: Bool
     @Environment(\.dismiss) var dismiss
+    @StateObject private var purchaseManager = RevenueCatManager.shared
+    @State private var showingCustomizationPaywall = false
+    @State private var pendingPremiumStyle: String?
+    @State private var pendingPremiumThemeID: String?
     
     var body: some View {
         NavigationStack {
@@ -44,6 +48,23 @@ struct SettingsView: View {
             } message: {
                 Text("Please enable notifications in Settings to set a daily reminder.")
             }
+            .sheet(isPresented: $showingCustomizationPaywall, onDismiss: {
+                pendingPremiumStyle = nil
+                pendingPremiumThemeID = nil
+            }) {
+                CustomizationPaywallView(manager: purchaseManager) {
+                    if purchaseManager.isPremium, let pendingPremiumStyle {
+                        store.imageGenerationStyle = pendingPremiumStyle
+                    }
+                    if purchaseManager.isPremium, let pendingPremiumThemeID {
+                        store.currentThemeID = pendingPremiumThemeID
+                    }
+                    pendingPremiumStyle = nil
+                    pendingPremiumThemeID = nil
+                    showingCustomizationPaywall = false
+                }
+            }
+            .task { await purchaseManager.refresh() }
         }
     }
     
@@ -98,7 +119,18 @@ struct SettingsView: View {
                 .font(.headline)
                 .foregroundStyle(Theme.secondary)
             
-            ThemeWheelSelector(currentThemeID: $store.currentThemeID)
+            ThemeWheelSelector(currentThemeID: Binding(
+                get: { store.currentThemeID },
+                set: { themeID in
+                    guard !showingCustomizationPaywall else { return }
+                    if purchaseManager.canUseTheme(themeID) {
+                        store.currentThemeID = themeID
+                    } else {
+                        pendingPremiumThemeID = themeID
+                        showingCustomizationPaywall = true
+                    }
+                }
+            ))
             
             // NEW: Visualizer Toggle
             Toggle(isOn: $store.isComplexVisualizerEnabled) {
@@ -115,23 +147,39 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 16) {
                 // Style picker — works on iOS 26 too (drives the LLM prompt and tag list)
-                HStack {
-                    Text("Style").foregroundStyle(.white)
-                    Spacer()
-                    Picker("Style", selection: $store.imageGenerationStyle) {
-                        Text("Dreamlike").tag("warm")
-                        Text("Animation").tag("pixar")
-                        Text("Lofi").tag("lofi")
-                        Text("Comic").tag("comic")
-                        Text("Anime").tag("ghibli")
-                        Text("Watercolor").tag("watercolor")
-                        Text("Gaming").tag("arcane")
-                        Text("Sci-Fi").tag("cyberpunk")
-                        Text("Realistic").tag("cinematic")
-                        Text("Noir").tag("noir")
+                if #available(iOS 27, *) {
+                    HStack {
+                        Text("Style").foregroundStyle(.white)
+                        Spacer()
+                        Picker("Style", selection: Binding(
+                            get: { store.imageGenerationStyle },
+                            set: { style in
+                                guard !showingCustomizationPaywall else { return }
+                                if purchaseManager.canUseImageStyle(style) {
+                                    store.imageGenerationStyle = style
+                                } else {
+                                    pendingPremiumStyle = style
+                                    showingCustomizationPaywall = true
+                                }
+                            }
+                        )) {
+                            Text("Dreamlike").tag("warm")
+                            Text("Animation").tag("pixar")
+                            Text("Lofi").tag("lofi")
+                            Text("Comic").tag("comic")
+                            Text("Anime").tag("ghibli")
+                            Text("Watercolor").tag("watercolor")
+                            Text("Gaming").tag("arcane")
+                            Text("Sci-Fi").tag("cyberpunk")
+                            Text("Realistic").tag("cinematic")
+                            Text("Noir").tag("noir")
+                        }
+                        .pickerStyle(.menu)
+                        .colorScheme(.dark)
                     }
-                    .pickerStyle(.menu)
-                    .colorScheme(.dark)
+                    Text("Animation and the Gold theme are free. Other image styles and themes unlock with Customization.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 // Scene picker — iOS 26 locks to "Setting only" because Image Playground
