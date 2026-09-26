@@ -133,8 +133,19 @@ struct SettingsView: View {
                     .colorScheme(.dark)
                 }
 
-                Toggle("Include Myself in Image", isOn: $store.imageIncludeMyself)
-                    .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Scene")
+                        .foregroundStyle(.white)
+                    Picker("Scene", selection: $store.imageSceneMode) {
+                        Text("Setting only").tag(ImageScenePreference.settingOnly)
+                        Text("Setting with people + me").tag(ImageScenePreference.dreamScene)
+                    }
+                    .pickerStyle(.menu)
+                    .colorScheme(.dark)
+                    Text("Choose an environment without people, or a dream scene that can include people and you.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding()
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
@@ -187,21 +198,34 @@ struct SettingsView: View {
                 .foregroundStyle(Theme.secondary)
             VStack(alignment: .leading, spacing: 12) {
                 if store.usesSleepData {
-                    Toggle("Show Sleep Data", isOn: $store.usesSleepData)
-                    Button("Refresh Sleep Data") {
+                    Toggle(isOn: $store.usesSleepData) {
+                        Text("Show Sleep Data")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .tint(Theme.accent)
+                    Button {
                         Task { await store.requestSleepAccess() }
+                    } label: {
+                        Text("Refresh Sleep Data")
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else {
                     Text("View sleep recorded in Health alongside your dreams. Sleep readings stay on this device and can inform answers to your questions.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Button("Continue") {
+                    Button {
                         Task { await store.requestSleepAccess() }
+                    } label: {
+                        Text("Continue")
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 if store.requestingSleepAccess { ProgressView() }
                 if let message = store.sleepAccessMessage {
-                    Text(message).font(.footnote).foregroundStyle(.secondary)
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .disabled(store.requestingSleepAccess)

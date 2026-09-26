@@ -60,11 +60,11 @@ actor ImageGenerationService {
             : (creator.availableStyles.first ?? .illustration)
         
         var concepts: [ImagePlaygroundConcept] = [.text(prompt)]
-        if UserDefaults.standard.object(forKey: "imageIncludeMyself") as? Bool ?? true,
+        if ImageScenePreference.includesPeople,
            let profileImageData,
            let profileImage = UIImage(data: profileImageData)?.cgImage {
             concepts.append(.image(profileImage))
-            concepts.append(.text("Use the image as reference for the dreamer's appearance. It is not the dream setting."))
+            concepts.append(.text("Use this image as a reference for the dreamer's facial identity only. Preserve the face, but freely change clothing and outfit to fit the dream scene. Do not copy the source outfit by default, and do not use the photo as the setting."))
         }
         let stream = creator.images(for: concepts, style: style, limit: 1)
         

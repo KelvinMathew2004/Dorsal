@@ -14,10 +14,14 @@ struct ExpandedUpgradeTests {
     @Test func illustrationUsesOnlyADecodableProfilePhotoAsTheDreamer() throws {
         let preferences = UserDefaults.standard
         let priorPreference = preferences.object(forKey: "imageIncludeMyself")
+        let priorSceneMode = preferences.object(forKey: "imageSceneMode")
         preferences.set(true, forKey: "imageIncludeMyself")
+        preferences.set(ImageScenePreference.dreamScene, forKey: "imageSceneMode")
         defer {
             if let priorPreference { preferences.set(priorPreference, forKey: "imageIncludeMyself") }
             else { preferences.removeObject(forKey: "imageIncludeMyself") }
+            if let priorSceneMode { preferences.set(priorSceneMode, forKey: "imageSceneMode") }
+            else { preferences.removeObject(forKey: "imageSceneMode") }
         }
         let image = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
             UIColor.blue.setFill()
@@ -35,10 +39,13 @@ struct ExpandedUpgradeTests {
             #expect(request.options.creationStrategy == .generateNew)
             #expect(request.options.personalization == .enabled)
         }
-        preferences.set(false, forKey: "imageIncludeMyself")
+        preferences.set(ImageScenePreference.settingOnly, forKey: "imageSceneMode")
         let withoutDreamer = DreamIllustrationRequest(promptTags: request.promptTags, profileImageData: try #require(image.pngData()))
         #expect(withoutDreamer.profileImage == nil)
-        #expect(withoutDreamer.conceptText.contains { $0.contains("other dream characters and animals") })
+        #expect(withoutDreamer.conceptText.contains { $0.contains("Do not depict people") })
+        preferences.set(ImageScenePreference.dreamScene, forKey: "imageSceneMode")
+        let dreamScene = DreamIllustrationRequest(promptTags: request.promptTags, profileImageData: try #require(image.pngData()))
+        #expect(dreamScene.conceptText.contains { $0.contains("Preserve their facial identity") && $0.contains("freely change their clothing") })
     }
 
     @Test func newerIntentSupersedesDeferredEntryAndClearsJournalFilters() throws {

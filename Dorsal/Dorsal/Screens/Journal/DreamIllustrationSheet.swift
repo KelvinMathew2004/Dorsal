@@ -9,7 +9,7 @@ struct DreamIllustrationRequest {
 
     init(promptTags: [String], profileImageData: Data?) {
         self.promptTags = promptTags
-        let includesMyself = UserDefaults.standard.object(forKey: "imageIncludeMyself") as? Bool ?? true
+        let includesMyself = ImageScenePreference.includesPeople
         if includesMyself {
             self.profileImage = profileImageData.flatMap(UIImage.init(data:))
         } else {
@@ -19,12 +19,13 @@ struct DreamIllustrationRequest {
 
         var conceptText: [String] {
         var result = promptTags
-        let includesMyself = UserDefaults.standard.object(forKey: "imageIncludeMyself") as? Bool ?? true
-        if includesMyself && profileImage != nil {
-            result.append("The person in the reference profile photo is the dreamer. Use their appearance for the dreamer, not for other characters.")
-            result.append("Create the dream scene described. The photo is a reference for the dreamer's appearance, not the setting.")
-        } else if !includesMyself {
-            result.append("Do not depict the dream narrator or use any reference likeness; other dream characters and animals may appear when described in the dream.")
+        let includesPeople = ImageScenePreference.includesPeople
+        if includesPeople && profileImage != nil {
+            result.append("The person in the reference profile photo is the dreamer. Preserve their facial identity, but freely change their clothing and outfit to fit this dream; do not copy the reference outfit unless it suits the scene. Do not use the profile photo as the setting.")
+        } else if !includesPeople {
+            result.append("Create only the dream's setting and atmosphere. Do not depict people, animals, the narrator, or any reference likeness.")
+        } else {
+            result.append("Create the dream scene with people and animals when the dream describes them. Include a generic dreamer only when supported by the scene.")
         }
         return result
     }
@@ -33,7 +34,7 @@ struct DreamIllustrationRequest {
     var options: ImagePlaygroundOptions {
         var options = ImagePlaygroundOptions()
         options.creationStrategy = .generateNew
-        let includesMyself = UserDefaults.standard.object(forKey: "imageIncludeMyself") as? Bool ?? true
+        let includesMyself = ImageScenePreference.includesPeople
         options.personalization = (includesMyself && profileImage != nil) ? .enabled : .disabled
         return options
     }

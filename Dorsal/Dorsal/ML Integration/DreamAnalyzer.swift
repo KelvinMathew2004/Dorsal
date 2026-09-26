@@ -108,14 +108,14 @@ actor DreamAnalyzer {
         try Task.checkCancellation()
         let session = makeSession()
         
-        let shouldIncludeMyself = includeMyself ?? (UserDefaults.standard.object(forKey: "imageIncludeMyself") as? Bool ?? true)
+        let shouldIncludeMyself = includeMyself ?? ImageScenePreference.includesPeople
         let style = UserDefaults.standard.string(forKey: "imageGenerationStyle") ?? "pixar"
 
         let charRule: String
         if allowsCharacters && shouldIncludeMyself {
-            charRule = "People and animals described in the dream may appear. Include the dreamer only if supported by the scene, as a small figure in the wider composition. Describe everyone generically; no close-up portraits."
+            charRule = "People and animals described in the dream may appear. Include the dreamer when supported by the scene. If a profile photo is supplied separately, preserve facial identity while freely changing clothing to fit the dream; do not repeatedly copy the source outfit. Keep the camera wide; no close-up portraits."
         } else if allowsCharacters {
-            charRule = "People and animals described in the dream may appear, but do not depict the narrator or dreamer. Describe characters generically; no close-up portraits."
+            charRule = "Create only the setting and atmosphere. Do not depict people, animals, the narrator, or any reference likeness."
         } else {
             charRule = "NO HUMANS: The image must contain NO people, men, women, children, faces, silhouettes, or body parts."
         }

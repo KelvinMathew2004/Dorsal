@@ -117,8 +117,14 @@ class DreamStore: NSObject, ObservableObject {
         didSet { objectWillChange.send() }
     }
 
-    @AppStorage("imageIncludeMyself") var imageIncludeMyself: Bool = true {
+    @AppStorage("imageSceneMode") var imageSceneMode: String = ImageScenePreference.dreamScene {
         didSet { objectWillChange.send() }
+    }
+
+    /// Compatibility for image-generation paths and stored preferences from earlier builds.
+    var imageIncludeMyself: Bool {
+        get { imageSceneMode == ImageScenePreference.dreamScene }
+        set { imageSceneMode = newValue ? ImageScenePreference.dreamScene : ImageScenePreference.settingOnly }
     }
 
     @AppStorage("profileColorComponents") var profileColorComponents: String = ""
@@ -310,6 +316,10 @@ class DreamStore: NSObject, ObservableObject {
         self.lastName = kvs.string(forKey: "userLastName") ?? UserDefaults.standard.string(forKey: "userLastName") ?? ""
         
         super.init()
+        if UserDefaults.standard.object(forKey: "imageSceneMode") == nil,
+           let oldPreference = UserDefaults.standard.object(forKey: "imageIncludeMyself") as? Bool {
+            imageSceneMode = oldPreference ? ImageScenePreference.dreamScene : ImageScenePreference.settingOnly
+        }
         guard prepareServices else { setupObservers(); return }
 
         // Initial Theme Pull
