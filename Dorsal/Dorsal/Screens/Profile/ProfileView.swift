@@ -48,12 +48,8 @@ struct ProfileView: View {
         return baseColor.mix(with: .white, by: 0.5)
     }
     
-    struct EntityIdentifier: Hashable, Identifiable, Codable {
-        let name: String
-        let type: String
-        var id: String { "\(type):\(name)" }
-    }
-    
+    typealias EntityIdentifier = ProfileEntityID
+
     @State private var editFirstName = ""
     @State private var editLastName = ""
     
@@ -254,7 +250,8 @@ struct ProfileView: View {
             .padding(.bottom, 100)
         }
         .coordinateSpace(name: "scroll")
-        .onDrop(of: [UTType.text], delegate: RootDropDelegate(draggedItem: $draggedItem, store: store))
+        .upgradeScrollEdgeEffect()
+        .modifier(ProfileEntityContainer(store: store, type: filterTypeForCategory, draggedItem: $draggedItem))
         
         .alert("Delete Details?", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
@@ -349,151 +346,187 @@ struct ProfileView: View {
             }
             
             VStack(spacing: 0) {
-                ForEach(itemsForCategory, id: \.self) { item in
-                    let itemIdentifier = EntityIdentifier(name: item, type: filterTypeForCategory)
-                    let children = store.getChildren(for: item, type: filterTypeForCategory)
-                    let hasChildren = !children.isEmpty
-                    
-                    VStack(spacing: 0) {
-                        HStack(spacing: 16) {
-                            Button {
-                                selectedEntity = itemIdentifier
-                            } label: {
-                                HStack(spacing: 16) {
-                                    EntityListImage(store: store, name: itemIdentifier.name, type: itemIdentifier.type, icon: iconForCategory, textColor: textColor)
-                                    
-                                    Text(itemIdentifier.name.capitalized)
-                                        .font(.body.weight(.medium))
-                                        .foregroundStyle(.white)
-                                    
-                                    Spacer()
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            
-                            Menu {
-                                Button {
-                                    selectedEntity = itemIdentifier
-                                } label: {
-                                    Label("View Details", systemImage: "richtext.page")
-                                        .tint(textColor)
-                                }
-                                
-                                Button {
-                                    store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
-                                } label: {
-                                    Label("Filter Dreams", systemImage: "line.3.horizontal.decrease")
-                                        .tint(textColor)
-                                }
-                                
-                                Divider()
-                                
-                                Button(role: .destructive) {
-                                    itemToDelete = itemIdentifier
-                                    showDeleteAlert = true
-                                } label: {
-                                    Label("Delete Details", systemImage: "trash")
-                                        .tint(.red)
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .foregroundStyle(textColor)
-                                    .font(.title2)
-                                    .padding()
-                            }
-                        }
-                        .padding()
-                        .glassEffect(.clear.interactive(), in: Capsule())
-                        .overlay(
-                            Capsule()
-                                .stroke(dropTargetItem?.name == item ? Theme.accent.opacity(0.8) : Color.clear, lineWidth: 3)
-                        )
-                        .padding(.vertical, 8)
-                        .padding(.horizontal)
-                        .draggableIf(!hasChildren) {
-                            self.draggedItem = itemIdentifier
-                            return NSItemProvider(object: item as NSString)
-                        }
-                        .onDrop(of: [UTType.text], delegate: EntityDropDelegate(
-                            item: itemIdentifier,
-                            draggedItem: $draggedItem,
-                            dropTargetItem: $dropTargetItem,
-                            store: store,
-                            scrollViewProxy: proxy
-                        ))
-                        
-                        ForEach(children, id: \.id) { child in
-                            let childIdentifier = EntityIdentifier(name: child.name, type: child.type)
-                            
-                            HStack(spacing: 16) {
-                                Button {
-                                    selectedEntity = itemIdentifier
-                                } label: {
-                                    HStack(spacing: 16) {
-                                        Image(systemName: "arrow.turn.down.right")
-                                            .font(.system(size: 20, weight: .regular))
-                                            .foregroundStyle(textColor.opacity(0.7))
-                                            .frame(width: 40, height: 40)
-                                        
-                                        Text(child.name.capitalized)
-                                            .font(.body.weight(.medium))
-                                            .foregroundStyle(.white)
-                                        
-                                        Spacer()
-                                    }
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                
-                                Menu {
-                                    Button {
-                                        selectedEntity = itemIdentifier
-                                    } label: {
-                                        Label("View Details", systemImage: "richtext.page")
-                                            .tint(textColor)
-                                    }
-                                    
-                                    Button {
-                                        store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
-                                    } label: {
-                                        Label("Filter Dreams", systemImage: "line.3.horizontal.decrease")
-                                            .tint(textColor)
-                                    }
-                                    
-                                    Divider()
-                                    
-                                    Button(role: .destructive) {
-                                        withAnimation {
-                                            store.unlinkEntity(name: child.name, type: child.type)
-                                        }
-                                    } label: {
-                                        Label("Unlink", systemImage: "personalhotspot.slash")
-                                            .tint(.red)
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .foregroundStyle(textColor)
-                                        .font(.title2)
-                                        .padding()
-                                }
-                            }
-                            .padding()
-                            .glassEffect(.clear.interactive(), in: Capsule())
-                            .padding(.vertical, 8)
-                            .padding(.horizontal)
-                            .draggableIf(true) {
-                                self.draggedItem = childIdentifier
-                                return NSItemProvider(object: child.name as NSString)
-                            }
-                            .onDrop(of: [UTType.text], delegate: ChildDropDelegate())
-                        }
+                if #available(iOS 27, *) {
+                    ForEach(store.profileEntities(type: filterTypeForCategory)) { item in
+                        entityGroup(item, proxy: proxy)
+                    }
+                    .reorderable(collectionID: "root:\(filterTypeForCategory)")
+                } else {
+                    ForEach(itemsForCategory, id: \.self) { name in
+                        entityGroup(EntityIdentifier(name: name, type: filterTypeForCategory), proxy: proxy)
                     }
                 }
             }
         }
     }
-    
+
+    @ViewBuilder
+    private func entityGroup(_ item: EntityIdentifier, proxy: ScrollViewProxy) -> some View {
+        VStack(spacing: 0) {
+            if #available(iOS 27, *) {
+                rootEntityLabel(item)
+                    .dropDestination(for: EntityIdentifier.self) { items, session in
+                        guard session.localSession != nil else { return }
+                        withAnimation {
+                            _ = store.moveProfileEntities(items.map(\.id), type: item.type, parentID: item.id, before: nil)
+                            dropTargetItem = nil
+                        }
+                    }
+                    .dropConfiguration { session in
+                        let ids = session.localSession?.draggedItemIDs(for: String.self) ?? []
+                        return DropConfiguration(operation: store.canMoveProfileEntities(ids, type: item.type, parentID: item.id) ? .move : .forbidden)
+                    }
+                    .onDropSessionUpdated { session in
+                        let ids = session.localSession?.draggedItemIDs(for: String.self) ?? []
+                        let targeted = session.phase == .active && store.canMoveProfileEntities(ids, type: item.type, parentID: item.id)
+                        withAnimation { dropTargetItem = targeted ? item : nil }
+                    }
+                ForEach(store.profileEntities(type: item.type, parentID: item.id)) { child in
+                    childEntityLabel(child, parent: item)
+                }
+                .reorderable(collectionID: item.id)
+            } else {
+                rootEntityLabel(item)
+                    .draggableIf(store.getChildren(for: item.name, type: item.type).isEmpty) {
+                        draggedItem = item
+                        return NSItemProvider(object: item.name as NSString)
+                    }
+                    .onDrop(of: [UTType.text], delegate: EntityDropDelegate(
+                        item: item, draggedItem: $draggedItem, dropTargetItem: $dropTargetItem,
+                        store: store, scrollViewProxy: proxy
+                    ))
+                ForEach(store.getChildren(for: item.name, type: item.type), id: \.id) { child in
+                    let identifier = EntityIdentifier(name: child.name, type: child.type)
+                    childEntityLabel(identifier, parent: item)
+                        .draggableIf(true) {
+                            draggedItem = identifier
+                            return NSItemProvider(object: child.name as NSString)
+                        }
+                        .onDrop(of: [UTType.text], delegate: ChildDropDelegate())
+                }
+            }
+        }
+    }
+
+    private func rootEntityLabel(_ itemIdentifier: EntityIdentifier) -> some View {
+        let item = itemIdentifier.name
+        return HStack(spacing: 16) {
+            Button {
+                selectedEntity = itemIdentifier
+            } label: {
+                HStack(spacing: 16) {
+                    EntityListImage(store: store, name: itemIdentifier.name, type: itemIdentifier.type, icon: iconForCategory, textColor: textColor)
+
+                    Text(itemIdentifier.name.capitalized)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.white)
+
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                Button {
+                    selectedEntity = itemIdentifier
+                } label: {
+                    Label("View Details", systemImage: "richtext.page")
+                        .tint(textColor)
+                }
+
+                Button {
+                    store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
+                } label: {
+                    Label("Filter Dreams", systemImage: "line.3.horizontal.decrease")
+                        .tint(textColor)
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    itemToDelete = itemIdentifier
+                    showDeleteAlert = true
+                } label: {
+                    Label("Delete Details", systemImage: "trash")
+                        .tint(.red)
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .foregroundStyle(textColor)
+                    .font(.title2)
+                    .padding()
+            }
+        }
+        .padding()
+        .glassEffect(.clear.interactive(), in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(dropTargetItem?.name == item ? Theme.accent.opacity(0.8) : Color.clear, lineWidth: 3)
+        )
+        .padding(.vertical, 8)
+        .padding(.horizontal)
+    }
+
+    private func childEntityLabel(_ childIdentifier: EntityIdentifier, parent itemIdentifier: EntityIdentifier) -> some View {
+        HStack(spacing: 16) {
+            Button {
+                selectedEntity = itemIdentifier
+            } label: {
+                HStack(spacing: 16) {
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundStyle(textColor.opacity(0.7))
+                        .frame(width: 40, height: 40)
+
+                    Text(childIdentifier.name.capitalized)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.white)
+
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                Button {
+                    selectedEntity = itemIdentifier
+                } label: {
+                    Label("View Details", systemImage: "richtext.page")
+                        .tint(textColor)
+                }
+
+                Button {
+                    store.jumpToFilter(type: itemIdentifier.type, value: itemIdentifier.name)
+                } label: {
+                    Label("Filter Dreams", systemImage: "line.3.horizontal.decrease")
+                        .tint(textColor)
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    withAnimation {
+                        store.unlinkEntity(name: childIdentifier.name, type: childIdentifier.type)
+                    }
+                } label: {
+                    Label("Unlink", systemImage: "personalhotspot.slash")
+                        .tint(.red)
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .foregroundStyle(textColor)
+                    .font(.title2)
+                    .padding()
+            }
+        }
+        .padding()
+        .glassEffect(.clear.interactive(), in: Capsule())
+        .padding(.vertical, 8)
+        .padding(.horizontal)
+    }
+
     var itemsForCategory: [String] {
         switch selectedCategory {
         case "People": return store.allPeople

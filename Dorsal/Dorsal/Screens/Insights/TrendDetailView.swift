@@ -57,13 +57,13 @@ enum DreamMetric: String, CaseIterable, Identifiable {
         case .lucidity:
             return "Indicates the degree of awareness you possess that you are dreaming while in the dream state. Higher lucidity is key to controlling dream narratives and exploring the subconscious."
         case .vividness:
-            return "Reflects the clarity, sensory detail, and intensity of your dream recall. High vividness often correlates with better sleep quality or heightened emotional engagement."
+            return "Reflects the sensory detail and intensity described in the dreams you recorded. This is a journal pattern, not a measure of sleep quality."
         case .fatigue:
             return "Analyzes vocal characteristics from your audio recordings to estimate physical and mental tiredness. Changes in voice biomarkers can often predict fatigue levels before you feel them."
         case .tone:
             return "Analyzes the emotional quality of your voice during recording. Tracking tone helps correlate your spoken emotion with the content of your dreams."
         case .coherence:
-            return "Measures the logical flow, structure, and narrative consistency of your dream story. Higher coherence suggests better cognitive function during recall and more structured REM sleep."
+            return "Measures how continuous and organized the recorded dream narratives are. It does not measure cognition or identify a sleep stage."
         case .nightmares:
             return "Tracks the frequency of distressing or frightening dreams. Monitoring this can help identify triggers and measure the effectiveness of stress-reduction techniques."
         case .positive:
@@ -244,7 +244,7 @@ struct TrendDetailView: View {
                 )
     
             VStack(alignment: .leading, spacing: 4) {
-                Text(data.date.formatted(date: .abbreviated, time: .shortened))
+                Text(DreamDateLabel.string(data.date))
                     .font(.caption2)
                     .foregroundStyle(Theme.secondary)
                 
@@ -690,6 +690,7 @@ struct TrendDetailView: View {
                 .padding(.top)
             }
             .scrollIndicators(.hidden)
+            .upgradeScrollEdgeEffect()
             .blur(radius: showCoaching ? 10 : 0)
             
             // Detail View Overlay
@@ -1467,6 +1468,7 @@ struct CoachingDetailView: View {
                     .padding(.top, 20)
                 }
                 .scrollIndicators(.hidden)
+                .upgradeScrollEdgeEffect()
             }
             
             // Close Button
@@ -1505,11 +1507,12 @@ struct CoachingDetailView: View {
     
     func generateInitialTip() async {
         do {
-            let tip = try await DreamAnalyzer.shared.GenerateCoachingTip(
+            let tip = try await DreamAnalyzer.shared.GenerateCoachingTipWithContext(
                 metric: metric.rawValue,
                 description: metric.description,
                 statsContext: context,
-                trendStatus: trendStatus
+                trendStatus: trendStatus,
+                searcher: DreamStore.shared
             )
             withAnimation {
                 self.initialTip = tip
@@ -1533,11 +1536,12 @@ struct CoachingDetailView: View {
         
         Task {
             do {
-                let answer = try await DreamAnalyzer.shared.TrendQuestion(
+                let answer = try await DreamAnalyzer.shared.TrendQuestionWithContext(
                     metric: metric.rawValue,
                     statsContext: context,
                     trendStatus: trendStatus,
-                    question: questionText
+                    question: questionText,
+                    searcher: DreamStore.shared
                 )
                 withAnimation {
                     self.answerText = answer

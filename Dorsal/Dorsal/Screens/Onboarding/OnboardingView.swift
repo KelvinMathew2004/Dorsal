@@ -10,6 +10,7 @@ enum OnboardingStep {
     case welcome     // New: Just the logo and welcome text
     case profile     // Name and Photo
     case permissions
+    case healthKit
     case notifications
     case allSet
 }
@@ -21,6 +22,7 @@ extension OnboardingStep {
         case .welcome: return Color(red: 220/255, green: 210/255, blue: 255/255) // Light Lavender
         case .profile: return Color(red: 255/255, green: 210/255, blue: 210/255) // Light Pink
         case .permissions: return Color(red: 210/255, green: 230/255, blue: 255/255) // Light Blue
+        case .healthKit: return Color(red: 255/255, green: 220/255, blue: 220/255)
         case .notifications: return Color(red: 255/255, green: 230/255, blue: 200/255) // Light Peach
         case .allSet: return Color(red: 210/255, green: 255/255, blue: 230/255) // Light Mint
         }
@@ -31,6 +33,7 @@ extension OnboardingStep {
         case .welcome: return Color(red: 60/255, green: 40/255, blue: 120/255) // Dark Purple
         case .profile: return Color(red: 120/255, green: 20/255, blue: 40/255) // Dark Red
         case .permissions: return Color(red: 0/255, green: 50/255, blue: 140/255) // Dark Blue
+        case .healthKit: return Color(red: 140/255, green: 20/255, blue: 20/255)
         case .notifications: return Color(red: 160/255, green: 60/255, blue: 0/255) // Dark Orange
         case .allSet: return Color(red: 0/255, green: 100/255, blue: 40/255) // Dark Green
         }
@@ -78,8 +81,13 @@ struct OnboardingView: View {
                     case .permissions:
                         PermissionsView(store: store, onNext: {
                             // Warp to Notifications: Red-Orange
+                            triggerWarp(to: .healthKit, color: Color(red: 0.8, green: 0.1, blue: 0.1))
+                        })
+                    case .healthKit:
+                        HealthKitOnboardingView(store: store, onNext: {
                             triggerWarp(to: .notifications, color: Color(red: 1.0, green: 0.3, blue: 0.0))
                         })
+                        .transition(.warpContent)
                         .transition(.warpContent)
                     case .notifications:
                         NotificationOnboardingView(store: store, onNext: {
@@ -519,16 +527,26 @@ struct OnboardingProgressView: View {
             StepIcon(
                 icon: "person.fill",
                 isActive: currentStep == .profile,
-                isCompleted: currentStep == .permissions || currentStep == .notifications || currentStep == .allSet
+                isCompleted: currentStep != .profile && currentStep != .welcome
             )
             .zIndex(1)
             
-            Connector(isActive: currentStep == .permissions || currentStep == .notifications || currentStep == .allSet)
+            Connector(isActive: currentStep != .profile && currentStep != .welcome)
                 .zIndex(0)
             
             StepIcon(
                 icon: "mic.fill",
                 isActive: currentStep == .permissions,
+                isCompleted: currentStep == .healthKit || currentStep == .notifications || currentStep == .allSet
+            )
+            .zIndex(1)
+
+            Connector(isActive: currentStep == .healthKit || currentStep == .notifications || currentStep == .allSet)
+                .zIndex(0)
+
+            StepIcon(
+                icon: "heart.fill",
+                isActive: currentStep == .healthKit,
                 isCompleted: currentStep == .notifications || currentStep == .allSet
             )
             .zIndex(1)
@@ -575,5 +593,68 @@ struct StepIcon: View {
         .glassEffect(.clear.tint(isActive || isCompleted ? Color.white.opacity(0.5) : Color.clear), in: Circle())
         .scaleEffect(isActive ? 1.1 : 1.0)
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isActive)
+    }
+}
+
+
+// MARK: - Step 3.5: HealthKit
+struct HealthKitOnboardingView: View {
+    @ObservedObject var store: DreamStore
+    var onNext: () -> Void
+    @State private var animate = false
+
+    var body: some View {
+        VStack(spacing: 32) {
+            Spacer()
+
+            Image(systemName: "heart.text.square.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 120, height: 120)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .red)
+                .symbolColorRenderingMode(.gradient)
+                .symbolEffect(.drawOn.wholeSymbol, options: .nonRepeating, isActive: !animate)
+
+            VStack(spacing: 12) {
+                Text("Sleep Integration")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.white)
+                    .fontDesign(.rounded)
+
+                Text("Optionally connect Apple Health to view available sleep information beside a dream or ask about it. Sleep data is read only when you choose this feature and is not added to your saved dream analysis.")
+                    .multilineTextAlignment(.center)
+                    .font(.body)
+                    .foregroundStyle(OnboardingStep.healthKit.textColor)
+                    .padding(.horizontal, 32)
+            }
+
+            Spacer()
+
+            VStack(spacing: 16) {
+                OnboardingActionButton(
+                    title: "Connect Apple Health",
+                    action: {
+                        Task {
+                            await store.requestSleepAccess()
+                            await MainActor.run { onNext() }
+                        }
+                    }
+                )
+
+                Button("Skip") {
+                    onNext()
+                }
+                .font(.headline)
+                .foregroundStyle(.white.opacity(0.6))
+                .padding(.bottom, 24)
+            }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                animate = true
+            }
+        }
     }
 }

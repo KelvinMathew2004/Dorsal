@@ -2,11 +2,17 @@ import SwiftUI
 import Photos
 import PhotosUI
 import AVFoundation
+import ImagePlayground
 
 struct DreamDetailView: View {
     @ObservedObject var store: DreamStore
     let dream: Dream
     
+    @Environment(\.supportsImagePlayground) private var supportsImagePlayground
+    @State private var showImagePlayground = false
+    @State private var illustrationRequest: DreamIllustrationRequest?
+    @State private var preparedImagePlaygroundPrompt: String?
+    @State private var sleepSummary: SleepSummary?
     @Namespace private var namespace
     
     @State private var activeEntity: EntityIdentifier?
@@ -85,6 +91,16 @@ struct DreamDetailView: View {
         store.isAnalyzingFatigue && liveDream.id == store.currentDreamID
     }
     
+    private func presentImagePlayground() {
+        guard #available(iOS 27, *), supportsImagePlayground else { return }
+        illustrationRequest = DreamIllustrationRequest(
+            promptTags: preparedImagePlaygroundPrompt.map { [$0] }
+                ?? DreamIllustrationPrompt.styled(liveDream.core?.summary ?? liveDream.rawTranscript),
+            profileImageData: store.profileImageData
+        )
+        showImagePlayground = true
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             Group {
@@ -138,44 +154,77 @@ struct DreamDetailView: View {
                 .zIndex(300)
             }
         }
-        .navigationTitle(liveDream.core?.title ?? liveDream.date.formatted(date: .abbreviated, time: .shortened))
+        .navigationTitle(liveDream.core?.title ?? DreamDateLabel.string(liveDream.date))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                store.toggleBookmark(id: liveDream.id)
+                            } label: {
+                                Image(systemName: liveDream.isBookmarked ? "bookmark.fill" : "bookmark")
+                            }
+
+                        }
+            if #available(iOS 27, *) {
                 if !store.isProcessing && selectedInsight == nil {
-                    Menu {
+                    ToolbarOverflowMenu {
                         if liveDream.generatedImageData != nil {
-                            Button {
+                            Button("Save Image", systemImage: "square.and.arrow.down") {
                                 saveImageToGallery()
-                            } label: {
-                                Label("Save Image", systemImage: "square.and.arrow.down")
-                                    .tint(textColor)
                             }
                         }
-                        
                         if store.isImageGenerationAvailable {
-                            Button {
+                            Button("Regenerate Image", systemImage: "sparkles") {
                                 store.regenerateDreamImage(liveDream)
-                            } label: {
-                                Label("Regenerate Image", systemImage: "sparkles")
-                                    .tint(textColor)
                             }
                         }
-                        
-                        Button {
+                        Button("Regenerate Analysis", systemImage: "arrow.clockwise") {
                             store.regenerateDream(liveDream)
-                        } label: {
-                            Label("Regenerate Analysis", systemImage: "arrow.clockwise")
-                                .tint(textColor)
                         }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .foregroundStyle(textColor)
+                    }
+                }
+            } else {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if !store.isProcessing && selectedInsight == nil {
+                        if liveDream.generatedImageData != nil {
+                            Button("Save Image", systemImage: "square.and.arrow.down") { saveImageToGallery() }
+                        }
+                        if store.isImageGenerationAvailable {
+                            Button("Regenerate Image", systemImage: "sparkles") { store.regenerateDreamImage(liveDream) }
+                        }
+                        Button("Regenerate Analysis", systemImage: "arrow.clockwise") { store.regenerateDream(liveDream) }
                     }
                 }
             }
         }
+        .modifier(DreamIllustrationSheet(isPresented: $showImagePlayground, request: illustrationRequest) { url in
+            store.keepCreatedImage(for: liveDream, from: url)
+        })
+
         .task { await store.refreshAvailability() }
+        .task(id: liveDream.id) {
+            guard #available(iOS 27, *), supportsImagePlayground,
+                  liveDream.generatedImageData == nil, !liveDream.rawTranscript.isEmpty else { return }
+            do {
+                let prompt = try await DreamAnalyzer.shared.generateVisualPrompt(
+                    transcript: liveDream.rawTranscript,
+                    allowsCharacters: true,
+                    includeMyself: store.imageIncludeMyself
+                )
+                guard !Task.isCancelled else { return }
+                preparedImagePlaygroundPrompt = prompt
+            } catch {
+                // The sheet opens immediately with a styled summary if prompt
+                // preparation is slow or Apple Intelligence is unavailable.
+            }
+        }
+        .task(id: store.usesSleepData) {
+            sleepSummary = nil
+            guard store.usesSleepData else { return }
+            let summary = try? await store.sleepSummary(for: liveDream.date)
+            guard !Task.isCancelled, store.usesSleepData else { return }
+            sleepSummary = summary
+        }
         .onAppear {
             if let data = liveDream.generatedImageData, let uiImage = UIImage(data: data) {
                 self.dominantColor = uiImage.dominantColor
@@ -268,8 +317,14 @@ struct DreamDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Illustration Unavailable", systemImage: "photo")
                 Text(message).font(.subheadline)
-                Button("Retry Illustration") { store.regenerateDreamImage(liveDream) }
-                    .disabled(store.isProcessing || store.isRecording || store.recordingIsBusy || store.transcribingDreamID != nil)
+                if #available(iOS 27, *) {
+                    if supportsImagePlayground {
+                        Button("Create in Image Playground") { presentImagePlayground() }
+                    }
+                } else {
+                    Button("Retry Illustration") { store.regenerateDreamImage(liveDream) }
+                        .disabled(store.isProcessing || store.isRecording || store.recordingIsBusy || store.transcribingDreamID != nil)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -297,6 +352,7 @@ struct DreamDetailView: View {
                     .padding()
                 }
                 
+                
                 if let interp = liveDream.core?.interpretation {
                     insightCardRow(
                         type: .interpretation,
@@ -315,6 +371,7 @@ struct DreamDetailView: View {
                 
                 metricsSection
                 
+                sleepArchitectureSection
                 DreamTranscriptSection(transcript: liveDream.rawTranscript, secondary: secondaryColor)
 
                 if let url = RecordingFiles.url(for: liveDream.recordingFileName) {
@@ -327,6 +384,7 @@ struct DreamDetailView: View {
             .animation(.default, value: liveDream.extras)
         }
         .scrollIndicators(.hidden)
+        .upgradeScrollEdgeEffect()
         .scrollDisabled(isProcessingThisDream || selectedInsight != nil)
         .blur(radius: selectedInsight != nil ? 10 : 0)
         .overlay {
@@ -414,7 +472,7 @@ struct DreamDetailView: View {
             return nil
         }()
         
-        if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) || liveDream.core?.summary != nil {
+        if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) || liveDream.core?.summary != nil || !liveDream.rawTranscript.isEmpty {
             VStack(spacing: 20) {
                 if image != nil || (isGeneratingImage && store.isImageGenerationAvailable) {
                     LensView(
@@ -425,6 +483,19 @@ struct DreamDetailView: View {
                     .frame(maxWidth: 400)
                 }
                 
+                if #available(iOS 27, *), supportsImagePlayground,
+                   image == nil, liveDream.imageError == nil,
+                   !isProcessingThisDream, !liveDream.rawTranscript.isEmpty {
+                    Button {
+                        presentImagePlayground()
+                    } label: {
+                        Label("Create Illustration", systemImage: "apple.image.playground")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    }
+                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+                }
+
                 if let summary = liveDream.core?.summary {
                     Text("\(Text("Summary: ").bold())\(summary)")
                         .font(.caption)
@@ -437,6 +508,59 @@ struct DreamDetailView: View {
             }
             .padding(.horizontal)
             .frame(maxWidth: 500)
+        }
+    }
+    
+    @ViewBuilder
+    var sleepArchitectureSection: some View {
+        if store.usesSleepData, let sleep = sleepSummary {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Sleep Architecture", systemImage: "bed.double.fill")
+                    .font(.headline)
+                    .foregroundStyle(store.themeAccentColor)
+                
+                HStack(spacing: 24) {
+                    let totalMinutes = sleep.totalSleepMinutes
+                    let hours = totalMinutes / 60
+                    let minutes = totalMinutes % 60
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(hours)h \(minutes)m")
+                            .font(.title2.bold())
+                            .foregroundStyle(.white)
+                        Text("Total Sleep")
+                            .font(.caption)
+                            .foregroundStyle(secondaryColor)
+                    }
+                    
+                    Spacer()
+                    
+                    if let efficiency = sleep.sleepEfficiency {
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("\(efficiency)%")
+                                .font(.title2.bold())
+                                .foregroundStyle(.green)
+                            Text("Recorded Asleep")
+                                .font(.caption)
+                                .foregroundStyle(secondaryColor)
+                        }
+                    }
+                }
+                
+                if sleep.hasStageData {
+                    SleepStageBar(
+                        rem: Double(sleep.remMinutes), deep: Double(sleep.deepSleepMinutes),
+                        core: Double(sleep.coreSleepMinutes), awake: Double(sleep.awakeMinutes),
+                        total: Double(sleep.totalSleepMinutes + sleep.awakeMinutes)
+                    )
+                }
+                Text("Based on available Health samples.")
+                    .font(.caption)
+                    .foregroundStyle(secondaryColor)
+            }
+            .padding(24)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+            .padding(.horizontal)
         }
     }
     
@@ -560,6 +684,7 @@ struct InsightDetailView: View {
                 .padding(.top, 60)
             }
             .scrollIndicators(.hidden)
+            .upgradeScrollEdgeEffect()
             .safeAreaInset(edge: .bottom) {
                 if showContent {
                     Button {
@@ -688,10 +813,13 @@ struct InsightDetailView: View {
         
         Task {
             do {
-                let answer = try await DreamAnalyzer.shared.DreamQuestion(
+                let answer = try await DreamAnalyzer.shared.DreamQuestionWithContext(
                     transcript: dream.rawTranscript,
                     analysis: rawText,
-                    question: questionText
+                    question: questionText,
+                    searcher: store,
+                    dreamDate: dream.date,
+                    includeSleep: store.usesSleepData
                 )
                 withAnimation {
                     self.answerText = answer

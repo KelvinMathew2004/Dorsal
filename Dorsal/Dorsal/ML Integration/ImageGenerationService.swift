@@ -7,12 +7,19 @@ actor ImageGenerationService {
     static let shared = ImageGenerationService()
     
     private(set) var isAvailable: Bool = false
+
+    nonisolated static var supportsAutomaticGeneration: Bool {
+        if #available(iOS 27, *) { return false }
+        return true
+    }
     
     init() {
         Task { await checkAvailability() }
     }
     
     func checkAvailability() async {
+        // ImageCreator was discontinued in iOS 27; the detail view offers the system sheet.
+        guard Self.supportsAutomaticGeneration else { isAvailable = false; return }
         do {
             _ = try await ImageCreator()
             isAvailable = true
@@ -21,10 +28,11 @@ actor ImageGenerationService {
         }
     }
     
-    func generate(prompt: String, places: [String] = [], emotions: [String] = []) async throws -> Data {
+    func generate(prompt: String, places: [String] = [], emotions: [String] = [], profileImageData: Data? = nil) async throws -> Data {
+        guard Self.supportsAutomaticGeneration else { throw DreamError.imageNotSupported }
         try Task.checkCancellation()
         do {
-            return try await performGeneration(prompt: prompt)
+            return try await performGeneration(prompt: prompt, profileImageData: profileImageData)
         } catch {
             guard !Task.isCancelled, DreamFailure.shouldRetryImageWithSimplerPrompt(error) else { throw error }
             var fallbackPrompt = ""
@@ -36,14 +44,14 @@ actor ImageGenerationService {
             }
             
             if !fallbackPrompt.isEmpty && fallbackPrompt != prompt {
-                return try await performGeneration(prompt: fallbackPrompt)
+                return try await performGeneration(prompt: fallbackPrompt, profileImageData: profileImageData)
             }
             
             throw error
         }
     }
     
-    private func performGeneration(prompt: String) async throws -> Data {
+    private func performGeneration(prompt: String, profileImageData: Data?) async throws -> Data {
         let creator = try await ImageCreator()
         
         guard !creator.availableStyles.isEmpty else { throw DreamError.imageUnavailable }
@@ -51,7 +59,14 @@ actor ImageGenerationService {
             ? .animation
             : (creator.availableStyles.first ?? .illustration)
         
-        let stream = creator.images(for: [.text(prompt)], style: style, limit: 1)
+        var concepts: [ImagePlaygroundConcept] = [.text(prompt)]
+        if ImageScenePreference.includesPeople,
+           let profileImageData,
+           let profileImage = UIImage(data: profileImageData)?.cgImage {
+            concepts.append(.image(profileImage))
+            concepts.append(.text("Use this image as a reference for the dreamer's facial identity only. Preserve the face, but freely change clothing and outfit to fit the dream scene. Do not copy the source outfit by default, and do not use the photo as the setting."))
+        }
+        let stream = creator.images(for: concepts, style: style, limit: 1)
         
         for try await image in stream {
             if let uiImage = UIImage(cgImage: image.cgImage).pngData() {

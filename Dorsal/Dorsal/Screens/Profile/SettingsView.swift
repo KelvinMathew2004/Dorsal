@@ -18,12 +18,14 @@ struct SettingsView: View {
                         headerSection
                         appearanceSection
                         notificationsSection
+                        if store.isHealthDataAvailable { sleepSection }
                         dataSection
                         Spacer(minLength: 50)
                     }
                     .padding(.horizontal)
                 }
                 .scrollIndicators(.hidden)
+                .upgradeScrollEdgeEffect()
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -96,13 +98,54 @@ struct SettingsView: View {
                 .font(.headline)
                 .foregroundStyle(Theme.secondary)
             
-            // Replaced the variable with this extracted View
             ThemeWheelSelector(currentThemeID: $store.currentThemeID)
             
             // NEW: Visualizer Toggle
             Toggle(isOn: $store.isComplexVisualizerEnabled) {
                 Text("Immersive Recording")
                     .foregroundStyle(.white)
+            }
+            .padding()
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+
+            Label("Image Generation", systemImage: "sparkles")
+                .font(.headline)
+                .foregroundStyle(Theme.secondary)
+                .padding(.top, 16)
+
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text("Style").foregroundStyle(.white)
+                    Spacer()
+                    Picker("Style", selection: $store.imageGenerationStyle) {
+                        Text("Animation").tag("pixar")
+                        Text("Cinematic").tag("cinematic")
+                        Text("Dreamlike").tag("warm")
+                        Text("Comic").tag("comic")
+                        Text("Anime").tag("ghibli")
+                        Text("Sci-Fi").tag("cyberpunk")
+                        Text("Painterly Animation").tag("arcane")
+                        Text("Lofi").tag("lofi")
+                        Text("Watercolor").tag("watercolor")
+                        Text("Noir").tag("noir")
+                    }
+                    .pickerStyle(.menu)
+                    .colorScheme(.dark)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Scene")
+                        .foregroundStyle(.white)
+                    Picker("Scene", selection: $store.imageSceneMode) {
+                        Text("Setting only").tag(ImageScenePreference.settingOnly)
+                        Text("Setting with people + me").tag(ImageScenePreference.dreamScene)
+                    }
+                    .pickerStyle(.menu)
+                    .colorScheme(.dark)
+                    Text("Choose an environment without people, or a dream scene that can include people and you.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding()
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
@@ -148,6 +191,50 @@ struct SettingsView: View {
         }
     }
     
+    private var sleepSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Sleep", systemImage: "bed.double.fill")
+                .font(.headline)
+                .foregroundStyle(Theme.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                if store.usesSleepData {
+                    Toggle(isOn: $store.usesSleepData) {
+                        Text("Show Sleep Data")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .tint(Theme.accent)
+                    Button {
+                        Task { await store.requestSleepAccess() }
+                    } label: {
+                        Text("Refresh Sleep Data")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else {
+                    Text("View sleep recorded in Health alongside your dreams. Sleep readings stay on this device and can inform answers to your questions.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        Task { await store.requestSleepAccess() }
+                    } label: {
+                        Text("Continue")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if store.requestingSleepAccess { ProgressView() }
+                if let message = store.sleepAccessMessage {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .disabled(store.requestingSleepAccess)
+            .padding()
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+        }
+    }
+
+
     private var dataSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Data & Storage", systemImage: "internaldrive.fill")
@@ -191,6 +278,11 @@ struct ThemeWheelSelector: View {
     
     // Local State (Updates fast, doesn't redraw screen)
     @State private var scrollPosition: String?
+
+    init(currentThemeID: Binding<String>) {
+        self._currentThemeID = currentThemeID
+        self._scrollPosition = State(initialValue: "10-\(currentThemeID.wrappedValue)")
+    }
     
     // Joystick State
     @State private var dragDirection: Int = 0
@@ -207,22 +299,31 @@ struct ThemeWheelSelector: View {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: spacing) {
-                            ForEach(0..<20, id: \.self) { loopIndex in
-                                ForEach(Theme.availableThemes) { option in
-                                    themeItem(option: option, loopIndex: loopIndex, proxy: proxy)
-                                }
+                            // Each swatch must be a direct scroll target. Nested
+                            // ForEach groups can align a whole cycle to the lens.
+                            ForEach(0..<(20 * Theme.availableThemes.count), id: \.self) { index in
+                                let count = Theme.availableThemes.count
+                                themeItem(option: Theme.availableThemes[index % count], loopIndex: index / count, proxy: proxy)
                             }
                         }
                         .scrollTargetLayout()
                     }
                     .scrollPosition(id: $scrollPosition, anchor: .center)
-                    .scrollTargetBehavior(.viewAligned)
+                    .scrollTargetBehavior(.viewAligned(anchor: .center))
                     .contentMargins(.horizontal, margin, for: .scrollContent)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { _, _ in
+                        proxy.scrollTo("10-\(currentThemeID)", anchor: .center)
+                    }
                     
                     // 1. Handle NORMAL swipes (Snap updates when idle)
                     .onScrollPhaseChange { oldPhase, newPhase in
                         if newPhase == .idle, let position = scrollPosition {
                             updateStore(with: position)
+                            if let loop = Int(position.split(separator: "-").first ?? ""), loop < 2 || loop > 17 {
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) { scrollPosition = "10-\(currentThemeID)" }
+                            }
                         }
                     }
                 }

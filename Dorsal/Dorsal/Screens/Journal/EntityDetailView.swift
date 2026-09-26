@@ -4,6 +4,7 @@ import CoreImage
 import Contacts
 import ContactsUI
 import ImagePlayground
+import MapKit
 
 struct EntityDetailView: View {
     @ObservedObject var store: DreamStore
@@ -17,6 +18,7 @@ struct EntityDetailView: View {
     @State private var showingPhotoPicker = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isGenerating = false
+    @State private var isEditingDescription = false
     
     @Environment(\.supportsImagePlayground) private var supportsImagePlayground
     
@@ -25,6 +27,9 @@ struct EntityDetailView: View {
     @State private var resolvedContact: CNContact?
     @State private var showingContactPicker = false
     @State private var showingContactDetail = false
+    @State private var linkedPlace: LinkedPlace?
+    @State private var showingPlacePicker = false
+    @State private var showingMapError = false
     
     @FocusState private var isDescriptionFocused: Bool
     
@@ -169,25 +174,33 @@ struct EntityDetailView: View {
                                 .foregroundStyle(textColor.opacity(0.8))
                                 .padding(.leading, 4)
                             
-                            ZStack(alignment: .topLeading) {
-                                // Placeholder
-                                if descriptionText.isEmpty && !isDescriptionFocused {
-                                    Text("Add a description for \(name)...")
-                                        .foregroundStyle(textColor.opacity(0.5))
-                                        .allowsHitTesting(false)
+                            Group {
+                                if isEditingDescription {
+                                    ZStack(alignment: .topLeading) {
+                                        // Placeholder
+                                        if descriptionText.isEmpty && !isDescriptionFocused {
+                                            Text("Add a description for \(name)...")
+                                                .foregroundStyle(textColor.opacity(0.5))
+                                                .allowsHitTesting(false)
+                                        }
+
+                                        // Standard Vertical TextField
+                                        TextField("", text: $descriptionText, axis: .vertical)
+                                            .focused($isDescriptionFocused)
+                                            .lineLimit(4...15)
+                                            .foregroundStyle(textColor)
+                                    }
+                                } else {
+                                    Text(descriptionText.isEmpty ? "No description provided." : descriptionText)
+                                        .foregroundStyle(textColor)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                
-                                // Standard Vertical TextField
-                                TextField("", text: $descriptionText, axis: .vertical)
-                                    .focused($isDescriptionFocused)
-                                    .lineLimit(4...15)
-                                    .foregroundStyle(textColor)
                             }
                             .padding(16)
                             .frame(minHeight: 120, alignment: .topLeading)
                             .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24))
                             .onTapGesture {
-                                isDescriptionFocused = true
+                                if isEditingDescription { isDescriptionFocused = true }
                             }
                         }
                         .padding(.horizontal)
@@ -311,10 +324,13 @@ struct EntityDetailView: View {
                             }
                         }
 
+                        if type == "place" { placeLinkSection.padding(.horizontal) }
+
                         Spacer()
                     }
                 }
                 .scrollIndicators(.hidden)
+                .upgradeScrollEdgeEffect()
                 
                 VStack {
                     Spacer()
@@ -339,6 +355,14 @@ struct EntityDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: {
+                        withAnimation { isEditingDescription.toggle() }
+                    }) {
+                        Text(isEditingDescription ? "Done" : "Edit")
+                    }
+                    .tint(textColor)
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
                         dismiss()
@@ -377,6 +401,17 @@ struct EntityDetailView: View {
                     }
                     saveData()
                 }
+            }
+            .sheet(isPresented: $showingPlacePicker) {
+                PlaceLinkPicker(name: name) { place in
+                    linkedPlace = place
+                    saveData()
+                }
+            }
+            .alert("Maps Unavailable", isPresented: $showingMapError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("This place couldn’t be opened in Maps. The link is still saved.")
             }
             .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhoto, matching: .images)
             .onChange(of: selectedPhoto) {
@@ -502,6 +537,7 @@ struct EntityDetailView: View {
             self.descriptionText = entity.details
             self.imageData = entity.imageData
             self.contactId = entity.contactId
+            self.linkedPlace = entity.linkedPlaceData.flatMap { try? JSONDecoder().decode(LinkedPlace.self, from: $0) }
             
             if let id = self.contactId {
                 fetchContact()
@@ -510,7 +546,46 @@ struct EntityDetailView: View {
     }
     
     private func saveData() {
-        store.updateEntity(name: name, type: type, description: descriptionText, image: imageData, contactId: contactId)
+        store.updateEntity(name: name, type: type, description: descriptionText, image: imageData, contactId: contactId, linkedPlace: linkedPlace)
+    }
+
+    private var placeLinkSection: some View {
+        HStack(spacing: 16) {
+            if let place = linkedPlace {
+                Button {
+                    if !place.mapItem.openInMaps() { showingMapError = true }
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(place.name).font(.headline)
+                            Text(place.address.isEmpty ? "Linked Place · Open in Maps" : place.address)
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } icon: { Image(systemName: "mappin.circle.fill").font(.title2) }
+                }
+                .buttonStyle(.plain)
+                Menu {
+                    Button("Change Place", systemImage: "map") { showingPlacePicker = true }
+                    Button("Unlink", systemImage: "personalhotspot.slash", role: .destructive) {
+                        linkedPlace = nil
+                        saveData()
+                    }
+                } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+            } else {
+                Button {
+                    showingPlacePicker = true
+                } label: {
+                    Label("Link to Maps", systemImage: "mappin.and.ellipse")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .foregroundStyle(textColor.opacity(0.9))
+        .padding()
+        .glassEffect(.clear.interactive(), in: RoundedRectangle(cornerRadius: 24))
     }
     
     private func generateAutoImage() {

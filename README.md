@@ -1,7 +1,5 @@
 # Dorsal
 
-## Swift Student Challenge 2026 Submission
-
 **Dorsal** is an intelligent, privacy-first dream journaling app that goes beyond simple memory retention. By analyzing dream content and the user's vocal fatigue during recording, Dorsal bridges the gap between abstract dreams and actionable mental and physical health metrics.
 
 ---

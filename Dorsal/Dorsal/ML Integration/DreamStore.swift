@@ -9,6 +9,7 @@ import NaturalLanguage
 import UserNotifications
 import CloudKit
 import PhotosUI
+import HealthKit
 
 struct DreamFilter: Equatable {
     var people: Set<String> = []
@@ -21,6 +22,8 @@ struct DreamFilter: Equatable {
 
 @MainActor
 class DreamStore: NSObject, ObservableObject {
+    static let shared = DreamStore()
+    
     @Published var dreams: [Dream] = []
     @Published var currentDreamID: UUID?
     
@@ -32,7 +35,40 @@ class DreamStore: NSObject, ObservableObject {
     @Published var recordingError: String?
     @Published var persistenceError: String?
     @Published var transcribingDreamID: UUID?
+    @Published var usesSleepData = UserDefaults.standard.bool(forKey: "usesSleepData") {
+        didSet { UserDefaults.standard.set(usesSleepData, forKey: "usesSleepData") }
+    }
+    @Published var requestingSleepAccess = false
+    @Published var sleepAccessMessage: String?
+
+    var isHealthDataAvailable: Bool { SleepDataManager.shared.isAvailable }
+
+    func requestSleepAccess() async {
+        guard !requestingSleepAccess, isHealthDataAvailable else { return }
+        requestingSleepAccess = true
+        sleepAccessMessage = nil
+        defer { requestingSleepAccess = false }
+        do {
+            try await SleepDataManager.shared.requestAuthorization()
+            // Successful presentation does not reveal whether read permission was granted.
+            usesSleepData = true
+            if try await sleepSummary(for: Date()) == nil {
+                sleepAccessMessage = "No sleep data is available to Dorsal. You can review sharing in the Health app."
+            }
+        } catch is CancellationError {
+        } catch let error as HKError where error.code == .errorUserCanceled {
+        } catch {
+            sleepAccessMessage = "Sleep data couldn’t be opened. You can continue using Dorsal and try again later."
+        }
+    }
     private var unsavedDreamIDs: Set<UUID> = []
+    private struct PendingEntityUpdate {
+        let name: String, type: String, details: String
+        let image: Data?
+        let contactID: String?
+        let place: LinkedPlace?
+    }
+    private var pendingEntityUpdates: [String: PendingEntityUpdate] = [:]
     private let recoveryStore = DreamRecoveryStore()
     var recordingIsBusy: Bool { isStartingRecording || isFinishingRecording }
 
@@ -77,6 +113,20 @@ class DreamStore: NSObject, ObservableObject {
         didSet { objectWillChange.send() }
     }
     
+    @AppStorage("imageGenerationStyle") var imageGenerationStyle: String = "pixar" {
+        didSet { objectWillChange.send() }
+    }
+
+    @AppStorage("imageSceneMode") var imageSceneMode: String = ImageScenePreference.dreamScene {
+        didSet { objectWillChange.send() }
+    }
+
+    /// Compatibility for image-generation paths and stored preferences from earlier builds.
+    var imageIncludeMyself: Bool {
+        get { imageSceneMode == ImageScenePreference.dreamScene }
+        set { imageSceneMode = newValue ? ImageScenePreference.dreamScene : ImageScenePreference.settingOnly }
+    }
+
     @AppStorage("profileColorComponents") var profileColorComponents: String = ""
 
     var cachedProfileColor: Color? {
@@ -123,6 +173,47 @@ class DreamStore: NSObject, ObservableObject {
     
     @Published var selectedTab: Int = 0
     @Published var navigationPath = NavigationPath()
+    private var pendingIntentDream: UUID?
+    private var hasPendingDreamIntent = false
+
+    func openSectionFromIntent(_ section: DorsalSection) {
+        // A newer navigation action supersedes any deferred entry request.
+        pendingIntentDream = nil
+        hasPendingDreamIntent = false
+        switch section {
+        case .recorder:
+            selectedTab = 0
+        case .journal:
+            clearFilter()
+            searchQuery = ""
+            navigationPath = NavigationPath()
+            selectedTab = 1
+        case .insights: selectedTab = 2
+        case .profile: selectedTab = 3
+        }
+    }
+
+    func openDreamFromIntent(id: UUID? = nil) {
+        pendingIntentDream = id
+        hasPendingDreamIntent = true
+        selectedTab = 1
+        resolvePendingDreamIntent()
+    }
+
+    func searchDreamsFromIntent(_ query: String) {
+        openSectionFromIntent(.journal)
+        searchQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func resolvePendingDreamIntent() {
+        guard hasPendingDreamIntent, modelContext != nil else { return }
+        hasPendingDreamIntent = false
+        let dream = pendingIntentDream.flatMap { id in dreams.first { $0.id == id } }
+            ?? (pendingIntentDream == nil ? dreams.max { $0.date < $1.date } : nil)
+        pendingIntentDream = nil
+        navigationPath = NavigationPath()
+        if let dream { navigationPath.append(dream) }
+    }
     
     @Published var isProcessing: Bool = false
     @Published var isAnalyzingFatigue: Bool = false
@@ -225,6 +316,10 @@ class DreamStore: NSObject, ObservableObject {
         self.lastName = kvs.string(forKey: "userLastName") ?? UserDefaults.standard.string(forKey: "userLastName") ?? ""
         
         super.init()
+        if UserDefaults.standard.object(forKey: "imageSceneMode") == nil,
+           let oldPreference = UserDefaults.standard.object(forKey: "imageIncludeMyself") as? Bool {
+            imageSceneMode = oldPreference ? ImageScenePreference.dreamScene : ImageScenePreference.settingOnly
+        }
         guard prepareServices else { setupObservers(); return }
 
         // Initial Theme Pull
@@ -491,6 +586,7 @@ class DreamStore: NSObject, ObservableObject {
         self.modelContext = context
         fetchAllData()
         recoverUnsavedDreams()
+        resolvePendingDreamIntent()
     }
     
     func fetchAllData() {
@@ -596,24 +692,35 @@ class DreamStore: NSObject, ObservableObject {
         self.entityUpdateTrigger += 1
     }
     
-    func updateEntity(name: String, type: String, description: String, image: Data?, contactId: String? = nil) {
-        guard let context = modelContext else { return }
+    func updateEntity(name: String, type: String, description: String, image: Data?, contactId: String? = nil, linkedPlace: LinkedPlace? = nil) {
         let id = "\(type):\(name)"
+        pendingEntityUpdates[id] = PendingEntityUpdate(name: name, type: type, details: description, image: image, contactID: contactId, place: linkedPlace)
+        guard let context = modelContext else {
+            persistenceError = "Profile changes are waiting to save. Keep Dorsal open and retry saving."
+            return
+        }
         do {
             let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.id == id })
             if let existing = try context.fetch(descriptor).first {
                 existing.details = description
                 existing.imageData = image
                 existing.contactId = contactId
+                existing.linkedPlaceData = try linkedPlace.map { try JSONEncoder().encode($0) }
                 existing.lastUpdated = Date()
             } else {
                 let newEntity = SavedEntity(name: name, type: type, details: description, imageData: image)
                 newEntity.contactId = contactId
+                newEntity.linkedPlaceData = try linkedPlace.map { try JSONEncoder().encode($0) }
                 context.insert(newEntity)
             }
             try context.save()
+            pendingEntityUpdates.removeValue(forKey: id)
+            if pendingEntityUpdates.isEmpty && unsavedDreamIDs.isEmpty { persistenceError = nil }
             self.entityUpdateTrigger += 1
-        } catch { print("Entity Save Error: \(error)") }
+        } catch {
+            context.rollback()
+            persistenceError = "Profile changes couldn’t be saved. They are kept in memory; keep Dorsal open and retry saving."
+        }
     }
     
     func deleteEntity(name: String, type: String) {
@@ -626,6 +733,7 @@ class DreamStore: NSObject, ObservableObject {
             }
             try context.delete(model: SavedEntity.self, where: #Predicate { $0.id == id })
             try context.save()
+            pendingEntityUpdates.removeValue(forKey: id)
             self.entityUpdateTrigger += 1
         } catch { print("Entity Delete Error: \(error)") }
     }
@@ -635,9 +743,9 @@ class DreamStore: NSObject, ObservableObject {
         isImageGenerationAvailable = await ImageGenerationService.shared.isAvailable
     }
 
-    func generateImageFromPrompt(prompt: String, places: [String] = [], emotions: [String] = []) async throws -> Data {
+    func generateImageFromPrompt(prompt: String, places: [String] = [], emotions: [String] = [], profileImageData: Data? = nil) async throws -> Data {
         // Recheck at the point of use: a failed launch-time probe isn't permanent.
-        return try await ImageGenerationService.shared.generate(prompt: prompt, places: places, emotions: emotions)
+        return try await ImageGenerationService.shared.generate(prompt: prompt, places: places, emotions: emotions, profileImageData: profileImageData)
     }
     
     private func resolveAliases(for names: Set<String>, type: String) -> Set<String> {
@@ -710,6 +818,17 @@ class DreamStore: NSObject, ObservableObject {
     
     var allPeople: [String] { getRootEntities(type: "person").map { $0.name } }
     var allPlaces: [String] { getRootEntities(type: "place").map { $0.name } }
+    private var linkedPeople: [String] {
+        guard let modelContext else { return [] }
+        let descriptor = FetchDescriptor<SavedEntity>(predicate: #Predicate { $0.type == "person" && $0.contactId != nil })
+        return ((try? modelContext.fetch(descriptor)) ?? []).map(\.name).sorted()
+    }
+    private var analysisPeople: [String] {
+        Array((linkedPeople + allPeople).reduce(into: [String]()) { result, name in
+            if !result.contains(where: { $0.localizedCaseInsensitiveCompare(name) == .orderedSame }) { result.append(name) }
+        }.prefix(12))
+    }
+    private var analysisPlaces: [String] { Array(allPlaces.prefix(12)) }
     var allEmotions: [String] { Array(Set(dreams.flatMap { $0.core?.emotions ?? [] })).sorted() }
     var allTags: [String] { getRootEntities(type: "tag").map { $0.name } }
     
@@ -974,6 +1093,21 @@ class DreamStore: NSObject, ObservableObject {
                     audioURL: RecordingFiles.url(for: dream.recordingFileName), existingFatigue: existingFatigue)
     }
 
+    func keepCreatedImage(for dream: Dream, from url: URL) {
+        guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            guard UIImage(data: data) != nil else { throw DreamError.imageGenerationFailed }
+            withAnimation(.easeInOut(duration: 0.5)) {
+                dreams[index].generatedImageData = data
+                dreams[index].imageError = nil
+            }
+            persistDream(dreams[index])
+        } catch {
+            dreams[index].imageError = "The illustration couldn’t be saved. Your previous image and dream are still available."
+        }
+    }
+
     func regenerateDreamImage(_ dream: Dream) {
         guard !isProcessing, !isRecording, !recordingIsBusy, transcribingDreamID == nil else { return }
         guard let index = dreams.firstIndex(where: { $0.id == dream.id }) else { return }
@@ -1051,8 +1185,11 @@ class DreamStore: NSObject, ObservableObject {
             let previousCore = dreams.first(where: { $0.id == dreamID })?.core
             let previousExtras = dreams.first(where: { $0.id == dreamID })?.extras
             do {
+                let workingTranscript = try await DreamAnalyzer.shared.prepareAnalysisTranscript(transcript)
                 var generatedCore = DreamCoreAnalysis()
-                for try await partialCore in await DreamAnalyzer.shared.streamCore(transcript: transcript, userName: self.firstName) {
+                let knownPeople = analysisPeople
+                let knownPlaces = analysisPlaces
+                for try await partialCore in await DreamAnalyzer.shared.streamCore(transcript: workingTranscript, userName: self.firstName, knownPeople: knownPeople, knownPlaces: knownPlaces) {
                     if Task.isCancelled { return }
                     
                     if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
@@ -1075,7 +1212,9 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
-                let repairedCore = await DreamAnalyzer.shared.ensureCoreFields(current: generatedCore, transcript: transcript)
+                var repairedCore = await DreamAnalyzer.shared.ensureCoreFields(current: generatedCore, transcript: workingTranscript)
+                repairedCore.people = DreamEntityCanonicalizer.canonicalize(repairedCore.people ?? [], linkedNames: linkedPeople, historicalNames: knownPeople)
+                repairedCore.places = DreamEntityCanonicalizer.canonicalize(repairedCore.places ?? [], linkedNames: [], historicalNames: knownPlaces)
                 try Task.checkCancellation()
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
                     dreams[index].core = repairedCore
@@ -1094,10 +1233,10 @@ class DreamStore: NSObject, ObservableObject {
                         fatigueScore = try await DreamAnalyzer.shared.analyzeVocalFatigue(audioURL: url)
                     } catch {
                         print("CoreML failed, falling back to text analysis: \(error)")
-                        fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: transcript)
+                        fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: workingTranscript)
                     }
                 } else {
-                    fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: transcript)
+                    fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: workingTranscript)
                 }
 
                 await MainActor.run {
@@ -1115,10 +1254,12 @@ class DreamStore: NSObject, ObservableObject {
                         do {
                             let places = dreams[index].core?.places ?? []
                             let emotions = dreams[index].core?.emotions ?? []
-                            let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: transcript)
+                            let hasUsableProfileImage = profileImageData.flatMap(UIImage.init(data:))?.cgImage != nil
+                            let includeProfile = imageIncludeMyself && hasUsableProfileImage
+                            let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: workingTranscript, allowsCharacters: includeProfile, includeMyself: includeProfile)
                             try Task.checkCancellation()
                             
-                            let data = try await generateImageFromPrompt(prompt: sanitizedPrompt, places: places, emotions: emotions)
+                            let data = try await generateImageFromPrompt(prompt: sanitizedPrompt, places: places, emotions: emotions, profileImageData: includeProfile ? profileImageData : nil)
                             
                             await MainActor.run {
                                 if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
@@ -1141,7 +1282,7 @@ class DreamStore: NSObject, ObservableObject {
                 }
                 
                 var generatedExtras = DreamExtraAnalysis()
-                for try await partialExtra in await DreamAnalyzer.shared.streamExtras(transcript: transcript) {
+                for try await partialExtra in await DreamAnalyzer.shared.streamExtras(transcript: workingTranscript) {
                     if Task.isCancelled { return }
                     
                     if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
@@ -1157,7 +1298,7 @@ class DreamStore: NSObject, ObservableObject {
                     }
                 }
                 
-                let repairedExtras = await DreamAnalyzer.shared.ensureExtraFields(current: generatedExtras, transcript: transcript)
+                let repairedExtras = await DreamAnalyzer.shared.ensureExtraFields(current: generatedExtras, transcript: workingTranscript)
                 try Task.checkCancellation()
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }) { dreams[index].extras = repairedExtras }
                 
@@ -1202,7 +1343,7 @@ class DreamStore: NSObject, ObservableObject {
             do { try recoveryStore.remove(dream.id) }
             catch { print("Recovery cleanup deferred: \(error)") }
             unsavedDreamIDs.remove(dream.id)
-            if unsavedDreamIDs.isEmpty { persistenceError = nil }
+            if unsavedDreamIDs.isEmpty && pendingEntityUpdates.isEmpty { persistenceError = nil }
             return true
         } catch {
             print("Dream save failed: \(error)")
@@ -1215,6 +1356,10 @@ class DreamStore: NSObject, ObservableObject {
 
     func retryPendingSaves() {
         for dream in dreams where unsavedDreamIDs.contains(dream.id) { persistDream(dream) }
+        for update in Array(pendingEntityUpdates.values) {
+            updateEntity(name: update.name, type: update.type, description: update.details, image: update.image,
+                         contactId: update.contactID, linkedPlace: update.place)
+        }
     }
 
     private func recoverUnsavedDreams() {
@@ -1260,10 +1405,74 @@ class DreamStore: NSObject, ObservableObject {
                 return
             }
             
-            let insights = try await DreamAnalyzer.shared.analyzeWeeklyTrends(dreams: recentDreams, userName: self.firstName)
+            let insights = try await DreamAnalyzer.shared.analyzeWeeklyTrendsWithContext(dreams: recentDreams, userName: self.firstName, searcher: self)
             self.weeklyInsight = insights
             persistInsight(insights)
         } catch { print("Insights error: \(error)") }
         withAnimation { isGeneratingInsights = false }
+    }
+}
+
+// MARK: - DreamSearchable Conformance (Foundation Models Tool Calling)
+extension DreamStore: DreamSearchable {
+    func sleepSummary(for date: Date) async throws -> SleepSummary? {
+        guard usesSleepData else { return nil }
+        let summary = try await SleepDataManager.shared.fetchSleepForDate(date)
+        guard usesSleepData else { return nil }
+        return summary
+    }
+
+    nonisolated func searchDreams(query: String, limit: Int) async -> [DreamSearchResult] {
+        let allDreams = await MainActor.run { self.dreams }
+        let lowerQuery = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120)).lowercased()
+        guard !lowerQuery.isEmpty else { return [] }
+        
+        let matches = allDreams.filter { dream in
+            let text = dream.rawTranscript.lowercased()
+            let title = dream.core?.title?.lowercased() ?? ""
+            let summary = dream.core?.summary?.lowercased() ?? ""
+            let tags = dream.keyEntities.map { $0.lowercased() } + dream.emotions.map { $0.lowercased() } + dream.people.map { $0.lowercased() } + dream.places.map { $0.lowercased() }
+            
+            return text.contains(lowerQuery) || title.contains(lowerQuery) || summary.contains(lowerQuery) || tags.contains { $0.contains(lowerQuery) }
+        }.sorted { $0.date > $1.date }.prefix(min(6, max(1, limit)))
+        
+        return matches.map { dream in
+            DreamSearchResult(
+                date: dream.date,
+                title: dream.core?.title ?? "Untitled",
+                summary: dream.core?.summary ?? "No summary available.",
+                people: dream.people,
+                places: dream.places,
+                emotions: dream.emotions,
+                symbols: dream.keyEntities,
+                sentimentScore: dream.extras?.sentimentScore,
+                anxietyLevel: dream.extras?.anxietyLevel,
+                vividnessScore: dream.extras?.vividnessScore,
+                lucidityScore: dream.extras?.lucidityScore
+            )
+        }
+    }
+    
+    nonisolated func fetchMetricHistory(metric: String, days: Int) async -> [MetricDataPoint] {
+        let allDreams = await MainActor.run { self.dreams }
+        let cutoff = Calendar.current.date(byAdding: .day, value: -min(365, max(1, days)), to: Date()) ?? Date()
+        
+        let recentDreams = allDreams.filter { $0.date >= cutoff }.sorted { $0.date < $1.date }
+        
+        return recentDreams.compactMap { dream in
+            let score: Int?
+            switch metric.lowercased() {
+            case "anxiety": score = dream.extras?.anxietyLevel
+            case "sentiment": score = dream.extras?.sentimentScore
+            case "lucidity": score = dream.extras?.lucidityScore
+            case "vividness": score = dream.extras?.vividnessScore
+            case "coherence": score = dream.extras?.coherenceScore
+            case "fatigue": score = dream.voiceFatigue
+            default: score = nil
+            }
+            
+            guard let finalScore = score else { return nil }
+            return MetricDataPoint(date: dream.date, score: finalScore)
+        }
     }
 }

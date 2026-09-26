@@ -1,9 +1,10 @@
 import SwiftUI
 import SwiftData
+import AppIntents
 
 @main
 struct DorsalApp: App {
-    @StateObject private var store = DreamStore()
+    @StateObject private var store = DreamStore.shared
     
     var body: some Scene {
         WindowGroup {
@@ -19,6 +20,9 @@ struct DorsalApp: App {
                 }
             }
             .animation(.easeInOut, value: store.isOnboardingComplete)
+            .onAppIntentExecution(OpenDorsalIntent.self) { intent in
+                store.openSectionFromIntent(intent.target)
+            }
         }
     }
 }
@@ -91,7 +95,7 @@ struct ContentView: View {
 
 struct iPhoneIconOnlyLabelStyle: LabelStyle {
     @Environment(\.horizontalSizeClass) var sizeClass
-    
+
     func makeBody(configuration: Configuration) -> some View {
         if sizeClass == .compact {
             configuration.icon

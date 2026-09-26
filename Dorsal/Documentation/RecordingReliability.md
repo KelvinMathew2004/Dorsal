@@ -31,7 +31,9 @@ It did not represent the completion status of `prewarm()`.
   are not prompt problems. Only content-related failures use a simpler prompt.
   Failure of an illustration never hides the transcript or successful analysis.
   [ImageCreator errors](https://developer.apple.com/documentation/imageplayground/imagecreator/error).
-
+- Apple discontinued ImageCreator in iOS 27. Automatic illustrations remain on
+  iOS 26; the supported Image Playground sheet is available from the dream menu.
+  [Apple's deprecation announcement](https://developer.apple.com/news/?id=dz9wvq0r).
 
 Signatures were also checked against the installed Xcode 27 SDK interfaces.
 The application's minimum OS remains iOS 26.0.
@@ -54,22 +56,20 @@ The application's minimum OS remains iOS 26.0.
 
 ## Automated validation
 
-This branch contains only the App Review error-handling work and its regression
-suite and the earlier App Review permission-screen fix. Microphone and notification
-onboarding use a single Continue action to request permission through the system.
-HealthKit, tool calling, Shortcuts, and iOS 27 image migration remain on
-`ios-27-upgrades`. Automatic ImageCreator generation is unchanged on iOS 26.
-The submission build number is 3.
+Verified on September 23, 2026 with Xcode 27.0:
 
-Verified after removing the upgrade dependencies on September 23, 2026:
-
-- All 16 regression tests passed on the iPhone 17 Pro Max simulator (iOS 26.5).
-- The unsigned Release build for a generic iOS device succeeded with Xcode 27.
-- Migration is tested against the original `main` journal schema.
+- `DorsalReliability`: **16 tests passed** on an iPhone 17 Pro Max simulator,
+  iOS 26.5, including real local-file audio writes and an on-disk schema migration.
+- Normal main-screen launch on the same simulator: successful; the Record screen
+  rendered with its microphone control and existing visual design intact.
+- `Dorsal`, Release, generic iOS device: **build succeeded**, signing disabled.
+  This is a compilation/link/resource check, not an archive/upload or device run.
+- The simulator build included Metal shaders and asset catalogs. Xcode's missing
+  Metal toolchain was installed before successful verification.
 
 Run the shared `DorsalReliability` scheme, which uses `DorsalReliabilityTests`.
-The broader development branch also contains older loose test files; they are
-not included in this submission branch or counted as passing tests.
+The older loose `DorsalTests` files are not part of that scheme and reference
+obsolete models; they have not been counted as passing tests.
 
 Coverage includes availability/error classifications, speech buffer ownership,
 final/partial transcript assembly, audio capture without speech, unique filenames,
@@ -92,7 +92,7 @@ Apple's device-managed downloads. Test on an actual supported iPhone/iPad:
 5. Deny/re-enable microphone access; test repeated fast taps and pause/resume.
 6. Interrupt with a call/audio route change; check paused state, recovery, and save.
 7. Background during image creation: transcript and analysis stay accessible;
-   return and retry. Verify illustration failures stay within the illustration section.
+   return and retry. Cancel Image Playground without creating an error notice.
 8. Retry unavailable analysis on an existing fully analyzed dream: old text/image
    remain. Test a long transcript and a model refusal without losing source text.
 9. Upgrade over the previous installed build with real journal/iCloud data.

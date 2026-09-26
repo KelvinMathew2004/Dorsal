@@ -585,3 +585,68 @@ struct ShimmerEffect: ViewModifier {
 extension View {
     func shimmering() -> some View { modifier(ShimmerEffect()) }
 }
+
+struct SleepStageBar: View {
+    let rem: Double
+    let deep: Double
+    let core: Double
+    let awake: Double
+    let total: Double
+
+    private var denominator: Double { max(1, total, rem + deep + core + awake) }
+    private var unspecified: Double { max(0, total - rem - deep - core - awake) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GeometryReader { proxy in
+                HStack(spacing: 0) {
+                    if awake > 0 {
+                        Rectangle()
+                            .fill(Color.orange)
+                            .frame(width: proxy.size.width * (awake / denominator))
+                    }
+                    if rem > 0 {
+                        Rectangle()
+                            .fill(Color.teal)
+                            .frame(width: proxy.size.width * (rem / denominator))
+                    }
+                    if core > 0 {
+                        Rectangle()
+                            .fill(Color.blue)
+                            .frame(width: proxy.size.width * (core / denominator))
+                    }
+                    if deep > 0 {
+                        Rectangle()
+                            .fill(Color.indigo)
+                            .frame(width: proxy.size.width * (deep / denominator))
+                    }
+                    if unspecified > 0 {
+                        Rectangle().fill(Color.gray)
+                            .frame(width: proxy.size.width * (unspecified / denominator))
+                    }
+                }
+                .clipShape(Capsule())
+            }
+            .frame(height: 12)
+            
+            HStack(spacing: 16) {
+                legendItem(color: .orange, label: "Awake")
+                legendItem(color: .teal, label: "REM")
+                legendItem(color: .blue, label: "Core")
+                legendItem(color: .indigo, label: "Deep")
+                if unspecified > 0 { legendItem(color: .gray, label: "Other") }
+            }
+            .font(.caption)
+        }
+    }
+    
+    private func legendItem(color: Color, label: String) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
