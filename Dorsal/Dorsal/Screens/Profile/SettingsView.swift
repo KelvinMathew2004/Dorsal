@@ -131,6 +131,10 @@ struct SettingsView: View {
                     }
                 }
             ))
+            Text("Gold is free. Other themes unlock with Customization.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
             
             // NEW: Visualizer Toggle
             Toggle(isOn: $store.isComplexVisualizerEnabled) {
@@ -177,7 +181,7 @@ struct SettingsView: View {
                         .pickerStyle(.menu)
                         .colorScheme(.dark)
                     }
-                    Text("Animation and the Gold theme are free. Other image styles and themes unlock with Customization.")
+                    Text("Animation is free. Other image styles unlock with Customization.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -341,12 +345,17 @@ struct SettingsView: View {
 // MARK: - ISOLATED THEME SELECTOR
 struct ThemeWheelSelector: View {
     @Binding var currentThemeID: String
+    let canSelectTheme: (String) -> Bool
+    let onLockedTheme: (String) -> Void
     
     // Local State (Updates fast, doesn't redraw screen)
     @State private var scrollPosition: String?
 
-    init(currentThemeID: Binding<String>) {
+    init(currentThemeID: Binding<String>, canSelectTheme: @escaping (String) -> Bool = { _ in true },
+         onLockedTheme: @escaping (String) -> Void = { _ in }) {
         self._currentThemeID = currentThemeID
+        self.canSelectTheme = canSelectTheme
+        self.onLockedTheme = onLockedTheme
         self._scrollPosition = State(initialValue: "10-\(currentThemeID.wrappedValue)")
     }
     
@@ -458,6 +467,13 @@ struct ThemeWheelSelector: View {
             let themeID = String(components[1])
             // Only update the heavy binding if it's different
             if currentThemeID != themeID {
+                guard canSelectTheme(themeID) else {
+                    onLockedTheme(themeID)
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                        scrollPosition = "10-\(currentThemeID)"
+                    }
+                    return
+                }
                 currentThemeID = themeID
             }
         }
@@ -543,6 +559,14 @@ struct ThemeWheelSelector: View {
         ThemeOptionRectangle(option: option)
             .id(viewID)
             .onTapGesture {
+                guard canSelectTheme(option.id) else {
+                    onLockedTheme(option.id)
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                        scrollPosition = "10-\(currentThemeID)"
+                        proxy.scrollTo("10-\(currentThemeID)", anchor: .center)
+                    }
+                    return
+                }
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                     scrollPosition = viewID
                     proxy.scrollTo(viewID, anchor: .center)

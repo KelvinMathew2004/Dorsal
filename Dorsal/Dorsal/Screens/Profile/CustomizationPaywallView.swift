@@ -70,7 +70,7 @@ struct CustomizationPaywallView: View {
                 .padding(28)
                 .frame(maxWidth: 480)
             }
-            .navigationTitle("Image Customization")
+            .navigationTitle("Customization")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

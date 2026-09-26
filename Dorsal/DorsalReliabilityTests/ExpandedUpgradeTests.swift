@@ -20,7 +20,7 @@ struct ExpandedUpgradeTests {
         #expect(ChecklistKeywordMatcher.match(in: "I felt thrilled", keywords: emotions) == "thrilled")
     }
 
-    @Test func customizationKeepsFreeStylesAndFailsOpenIfEntitlementCannotBeChecked() {
+    @Test func onlyAnimationAndGoldAreFreeAndCustomizationFailsOpenUntilConfigured() {
         #expect(RevenueCatManager.canUseImageStyle("pixar", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
         #expect(!RevenueCatManager.canUseImageStyle("warm", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
         #expect(!RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
@@ -28,10 +28,11 @@ struct ExpandedUpgradeTests {
         #expect(RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: true, hasLifetimePackage: true))
         #expect(RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: false))
         #expect(RevenueCatManager.canUseTheme("gold", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
-        #expect(!RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
-        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: false, isPremium: false, hasLifetimePackage: true))
-        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: true, hasLifetimePackage: true))
-        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: false))
+        #expect(!RevenueCatManager.canUseTheme("ocean", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
+        #expect(RevenueCatManager.canUseTheme("ocean", entitlementStatusKnown: false, isPremium: false, hasLifetimePackage: true))
+        #expect(RevenueCatManager.canUseTheme("ocean", entitlementStatusKnown: true, isPremium: true, hasLifetimePackage: true))
+        #expect(RevenueCatManager.canUseTheme("ocean", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: false))
+    }
     }
 
     @Test func illustrationUsesOnlyADecodableProfilePhotoAsTheDreamer() throws {

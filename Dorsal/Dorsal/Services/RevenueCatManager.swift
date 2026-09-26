@@ -45,11 +45,11 @@ final class RevenueCatManager: ObservableObject {
                 ?? (offerings.current?.identifier == Self.offeringID ? offerings.current : nil)
             lifetimePackage = selectedOffering?.availablePackages.first { $0.packageType == .lifetime }
             if lifetimePackage == nil {
-                message = "The lifetime purchase is not available yet. You can keep using the available image styles."
+                message = "Purchases are not available yet. Animation and the Gold theme remain free to use."
             }
         } catch {
             lifetimePackage = nil
-            message = "Purchases are temporarily unavailable. You can keep using the available image styles."
+            message = "Purchases are temporarily unavailable. Animation and the Gold theme remain free to use."
         }
         reconcileCustomizationIfNeeded()
     }
@@ -70,11 +70,6 @@ final class RevenueCatManager: ObservableObject {
 
     nonisolated static func isFreeTheme(_ themeID: String) -> Bool {
         themeID == "gold"
-    }
-
-    nonisolated static func canUseImageStyle(_ style: String, entitlementStatusKnown: Bool,
-                                             isPremium: Bool, hasLifetimePackage: Bool) -> Bool {
-        isFreeImageStyle(style) || !entitlementStatusKnown || isPremium || !hasLifetimePackage
     }
 
     nonisolated static func canUseTheme(_ themeID: String, entitlementStatusKnown: Bool,
