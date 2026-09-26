@@ -55,11 +55,13 @@ final class RevenueCatManager: ObservableObject {
     }
 
     func canUseImageStyle(_ style: String) -> Bool {
-        Self.canUseImageStyle(style, entitlementStatusKnown: entitlementStatusKnown, isPremium: isPremium)
+        Self.canUseImageStyle(style, entitlementStatusKnown: entitlementStatusKnown,
+                              isPremium: isPremium, hasLifetimePackage: lifetimePackage != nil)
     }
 
     func canUseTheme(_ themeID: String) -> Bool {
-        Self.canUseTheme(themeID, entitlementStatusKnown: entitlementStatusKnown, isPremium: isPremium)
+        Self.canUseTheme(themeID, entitlementStatusKnown: entitlementStatusKnown,
+                         isPremium: isPremium, hasLifetimePackage: lifetimePackage != nil)
     }
 
     nonisolated static func isFreeImageStyle(_ style: String) -> Bool {
@@ -70,12 +72,14 @@ final class RevenueCatManager: ObservableObject {
         themeID == "gold"
     }
 
-    nonisolated static func canUseImageStyle(_ style: String, entitlementStatusKnown: Bool, isPremium: Bool) -> Bool {
-        isFreeImageStyle(style) || !entitlementStatusKnown || isPremium
+    nonisolated static func canUseImageStyle(_ style: String, entitlementStatusKnown: Bool,
+                                             isPremium: Bool, hasLifetimePackage: Bool) -> Bool {
+        isFreeImageStyle(style) || !entitlementStatusKnown || isPremium || !hasLifetimePackage
     }
 
-    nonisolated static func canUseTheme(_ themeID: String, entitlementStatusKnown: Bool, isPremium: Bool) -> Bool {
-        isFreeTheme(themeID) || !entitlementStatusKnown || isPremium
+    nonisolated static func canUseTheme(_ themeID: String, entitlementStatusKnown: Bool,
+                                        isPremium: Bool, hasLifetimePackage: Bool) -> Bool {
+        isFreeTheme(themeID) || !entitlementStatusKnown || isPremium || !hasLifetimePackage
     }
 
     func purchaseCustomization() async -> Bool {
@@ -118,7 +122,7 @@ final class RevenueCatManager: ObservableObject {
     }
 
     private func reconcileCustomizationIfNeeded() {
-        guard entitlementStatusKnown, !isPremium else { return }
+        guard entitlementStatusKnown, !isPremium, lifetimePackage != nil else { return }
         let selectedStyle = UserDefaults.standard.string(forKey: "imageGenerationStyle") ?? "pixar"
         if !Self.isFreeImageStyle(selectedStyle) {
             UserDefaults.standard.set("pixar", forKey: "imageGenerationStyle")

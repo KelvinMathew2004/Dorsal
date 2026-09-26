@@ -21,15 +21,17 @@ struct ExpandedUpgradeTests {
     }
 
     @Test func customizationKeepsFreeStylesAndFailsOpenIfEntitlementCannotBeChecked() {
-        #expect(RevenueCatManager.canUseImageStyle("pixar", entitlementStatusKnown: true, isPremium: false))
-        #expect(!RevenueCatManager.canUseImageStyle("warm", entitlementStatusKnown: true, isPremium: false))
-        #expect(!RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: false))
-        #expect(RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: false, isPremium: false))
-        #expect(RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: true))
-        #expect(RevenueCatManager.canUseTheme("gold", entitlementStatusKnown: true, isPremium: false))
-        #expect(!RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: false))
-        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: false, isPremium: false))
-        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: true))
+        #expect(RevenueCatManager.canUseImageStyle("pixar", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
+        #expect(!RevenueCatManager.canUseImageStyle("warm", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
+        #expect(!RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
+        #expect(RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: false, isPremium: false, hasLifetimePackage: true))
+        #expect(RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: true, hasLifetimePackage: true))
+        #expect(RevenueCatManager.canUseImageStyle("cinematic", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: false))
+        #expect(RevenueCatManager.canUseTheme("gold", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
+        #expect(!RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: true))
+        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: false, isPremium: false, hasLifetimePackage: true))
+        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: true, hasLifetimePackage: true))
+        #expect(RevenueCatManager.canUseTheme("midnight", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: false))
     }
 
     @Test func illustrationUsesOnlyADecodableProfilePhotoAsTheDreamer() throws {
