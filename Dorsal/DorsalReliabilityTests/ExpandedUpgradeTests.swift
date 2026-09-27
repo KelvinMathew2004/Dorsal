@@ -33,7 +33,6 @@ struct ExpandedUpgradeTests {
         #expect(RevenueCatManager.canUseTheme("ocean", entitlementStatusKnown: true, isPremium: true, hasLifetimePackage: true))
         #expect(RevenueCatManager.canUseTheme("ocean", entitlementStatusKnown: true, isPremium: false, hasLifetimePackage: false))
     }
-    }
 
     @Test func illustrationUsesOnlyADecodableProfilePhotoAsTheDreamer() throws {
         let preferences = UserDefaults.standard

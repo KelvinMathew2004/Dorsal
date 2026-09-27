@@ -72,6 +72,11 @@ final class RevenueCatManager: ObservableObject {
         themeID == "gold"
     }
 
+    nonisolated static func canUseImageStyle(_ style: String, entitlementStatusKnown: Bool,
+                                             isPremium: Bool, hasLifetimePackage: Bool) -> Bool {
+        isFreeImageStyle(style) || !entitlementStatusKnown || isPremium || !hasLifetimePackage
+    }
+
     nonisolated static func canUseTheme(_ themeID: String, entitlementStatusKnown: Bool,
                                         isPremium: Bool, hasLifetimePackage: Bool) -> Bool {
         isFreeTheme(themeID) || !entitlementStatusKnown || isPremium || !hasLifetimePackage
