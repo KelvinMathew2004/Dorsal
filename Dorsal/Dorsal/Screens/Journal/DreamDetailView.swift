@@ -93,9 +93,13 @@ struct DreamDetailView: View {
     
     private func presentImagePlayground() {
         guard #available(iOS 27, *), supportsImagePlayground else { return }
+        let basePrompt = preparedImagePlaygroundPrompt
+            ?? liveDream.imagePrompt
+            ?? liveDream.core?.imagePrompt
+        guard let basePrompt,
+              !basePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         illustrationRequest = DreamIllustrationRequest(
-            promptTags: preparedImagePlaygroundPrompt.map { [$0] }
-                ?? DreamIllustrationPrompt.styled(liveDream.core?.summary ?? liveDream.rawTranscript),
+            promptTags: DreamIllustrationPrompt.styled(basePrompt),
             profileImageData: store.profileImageData
         )
         showImagePlayground = true
@@ -157,17 +161,31 @@ struct DreamDetailView: View {
         .navigationTitle(liveDream.core?.title ?? DreamDateLabel.string(liveDream.date))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                store.toggleBookmark(id: liveDream.id)
-                            } label: {
-                                Image(systemName: liveDream.isBookmarked ? "bookmark.fill" : "bookmark")
-                            }
+            // Bookmark — highest priority: never gets truncated by iOS 27 overflow
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    store.toggleBookmark(id: liveDream.id)
+                } label: {
+                    Image(systemName: liveDream.isBookmarked ? "bookmark.fill" : "bookmark")
+                }
+                .accessibilityLabel(liveDream.isBookmarked ? "Remove Bookmark" : "Bookmark")
+            }
 
-                        }
             if #available(iOS 27, *) {
                 if !store.isProcessing && selectedInsight == nil {
                     ToolbarOverflowMenu {
+                        // Illustration — shown when Image Playground is supported
+                        if supportsImagePlayground, !liveDream.rawTranscript.isEmpty {
+                            if liveDream.generatedImageData != nil {
+                                Button("Regenerate Illustration", systemImage: "apple.image.playground") {
+                                    presentImagePlayground()
+                                }
+                            } else {
+                                Button("Create Illustration", systemImage: "apple.image.playground") {
+                                    presentImagePlayground()
+                                }
+                            }
+                        }
                         if liveDream.generatedImageData != nil {
                             Button("Save Image", systemImage: "square.and.arrow.down") {
                                 saveImageToGallery()
@@ -186,6 +204,13 @@ struct DreamDetailView: View {
             } else {
                 ToolbarItemGroup(placement: .primaryAction) {
                     if !store.isProcessing && selectedInsight == nil {
+                        if supportsImagePlayground, !liveDream.rawTranscript.isEmpty {
+                            Button {
+                                presentImagePlayground()
+                            } label: {
+                                Image(systemName: "apple.image.playground")
+                            }
+                        }
                         if liveDream.generatedImageData != nil {
                             Button("Save Image", systemImage: "square.and.arrow.down") { saveImageToGallery() }
                         }
@@ -203,19 +228,23 @@ struct DreamDetailView: View {
 
         .task { await store.refreshAvailability() }
         .task(id: liveDream.id) {
-            guard #available(iOS 27, *), supportsImagePlayground,
-                  liveDream.generatedImageData == nil, !liveDream.rawTranscript.isEmpty else { return }
+            if let savedPrompt = liveDream.imagePrompt ?? liveDream.core?.imagePrompt,
+               !savedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                preparedImagePlaygroundPrompt = savedPrompt
+                return
+            }
+            guard !liveDream.rawTranscript.isEmpty else { return }
             do {
                 let prompt = try await DreamAnalyzer.shared.generateVisualPrompt(
                     transcript: liveDream.rawTranscript,
-                    allowsCharacters: true,
-                    includeMyself: store.imageIncludeMyself
+                    people: liveDream.people,
+                    places: liveDream.places
                 )
                 guard !Task.isCancelled else { return }
                 preparedImagePlaygroundPrompt = prompt
+                store.updateImagePrompt(for: liveDream.id, prompt: prompt)
             } catch {
-                // The sheet opens immediately with a styled summary if prompt
-                // preparation is slow or Apple Intelligence is unavailable.
+                // Backfill the prompt when the on-device model is available.
             }
         }
         .task(id: store.usesSleepData) {

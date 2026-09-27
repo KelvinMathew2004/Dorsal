@@ -596,7 +596,8 @@ struct EntityDetailView: View {
             
             do {
                 let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: entityContext)
-                let data = try await store.generateImageFromPrompt(prompt: sanitizedPrompt)
+                let styledPrompt = DreamIllustrationPrompt.styled(sanitizedPrompt).joined(separator: ". ")
+                let data = try await store.generateImageFromPrompt(prompt: styledPrompt)
                 
                 withAnimation(.easeInOut(duration: 0.5)) {
                     self.imageData = data

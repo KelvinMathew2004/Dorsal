@@ -204,8 +204,8 @@ struct ShootingStarSystem: View {
             while !Task.isCancelled {
                 spawnStar()
                 
-                // Frequency: 10 to 20 seconds
-                try? await Task.sleep(for: .seconds(Double.random(in: 10.0...20.0)))
+                // Leave a little more quiet space between shooting stars.
+                try? await Task.sleep(for: .seconds(Double.random(in: 12.0...18.0)))
             }
         }
     }
@@ -213,23 +213,16 @@ struct ShootingStarSystem: View {
     private func spawnStar() {
         let width = containerSize.width
         let height = containerSize.height
-        
         guard width > 0 && height > 0 else { return }
-        
+
+        // Start in the upper half and send the streak well beyond the bottom edge.
         let startX = CGFloat.random(in: 0...width)
         let startY = CGFloat.random(in: 0...(height * 0.5))
         let start = CGPoint(x: startX, y: startY)
-        
-        // Go far off screen (3x distance)
         let deltaX = CGFloat.random(in: 100...300) * (Bool.random() ? 1 : -1)
         let deltaY = CGFloat.random(in: 200...500)
-        let distanceMultiplier = 3.0
-        
-        let end = CGPoint(x: startX + (deltaX * distanceMultiplier), y: startY + (deltaY * distanceMultiplier))
-        
-        withAnimation {
-            activeStar = StarConfig(start: start, end: end)
-        }
+        let end = CGPoint(x: startX + deltaX * 3, y: startY + deltaY * 3)
+        activeStar = StarConfig(start: start, end: end)
     }
 }
 
@@ -257,7 +250,7 @@ struct ShootingStar: View {
             )
             .onAppear {
                 // Linear animation ensures constant speed, no pause at end
-                withAnimation(.linear(duration: 2.0)) {
+                withAnimation(.linear(duration: 1.5)) {
                     progress = 1.0
                 }
             }

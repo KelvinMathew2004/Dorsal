@@ -3,6 +3,9 @@ import AVFoundation
 import ImagePlayground
 import FoundationModels
 import SwiftData
+import AppIntents
+import ActivityKit
+import CoreSpotlight
 import Combine
 import Speech
 import NaturalLanguage
@@ -10,6 +13,7 @@ import UserNotifications
 import CloudKit
 import PhotosUI
 import HealthKit
+import WidgetKit
 
 struct DreamFilter: Equatable {
     var people: Set<String> = []
@@ -18,6 +22,25 @@ struct DreamFilter: Equatable {
     var tags: Set<String> = []
     var showBookmarksOnly: Bool = false
     var isEmpty: Bool { people.isEmpty && places.isEmpty && emotions.isEmpty && tags.isEmpty && !showBookmarksOnly }
+}
+
+nonisolated enum ChecklistKeywordMatcher {
+    static func match(in text: String, keywords: [String]) -> String? {
+        let words = text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        var best: (index: Int, length: Int, keyword: String)?
+
+        for keyword in keywords {
+            let phrase = keyword.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+            guard !phrase.isEmpty, phrase.count <= words.count else { continue }
+            for start in 0...(words.count - phrase.count) where Array(words[start..<(start + phrase.count)]) == phrase {
+                if best == nil || start < best!.index || (start == best!.index && phrase.count > best!.length) {
+                    best = (start, phrase.count, keyword)
+                }
+                break
+            }
+        }
+        return best?.keyword
+    }
 }
 
 @MainActor
@@ -71,6 +94,7 @@ class DreamStore: NSObject, ObservableObject {
     private var pendingEntityUpdates: [String: PendingEntityUpdate] = [:]
     private let recoveryStore = DreamRecoveryStore()
     var recordingIsBusy: Bool { isStartingRecording || isFinishingRecording }
+    private var pendingRecordingIntentContinuation: CheckedContinuation<Dream?, Never>?
 
     func refreshAvailability() async {
         analysisAvailability = availabilityProvider()
@@ -110,15 +134,24 @@ class DreamStore: NSObject, ObservableObject {
     }
     
     @AppStorage("isComplexVisualizerEnabled") var isComplexVisualizerEnabled: Bool = false {
-        didSet { objectWillChange.send() }
+        didSet {
+            objectWillChange.send()
+            NSUbiquitousKeyValueStore.default.set(isComplexVisualizerEnabled, forKey: "isComplexVisualizerEnabled")
+        }
     }
-    
-    @AppStorage("imageGenerationStyle") var imageGenerationStyle: String = "pixar" {
-        didSet { objectWillChange.send() }
+
+    @AppStorage("imageGenerationStyle") var imageGenerationStyle: String = "warm" {
+        didSet {
+            objectWillChange.send()
+            NSUbiquitousKeyValueStore.default.set(imageGenerationStyle, forKey: "imageGenerationStyle")
+        }
     }
 
     @AppStorage("imageSceneMode") var imageSceneMode: String = ImageScenePreference.dreamScene {
-        didSet { objectWillChange.send() }
+        didSet {
+            objectWillChange.send()
+            NSUbiquitousKeyValueStore.default.set(imageSceneMode, forKey: "imageSceneMode")
+        }
     }
 
     /// Compatibility for image-generation paths and stored preferences from earlier builds.
@@ -200,6 +233,27 @@ class DreamStore: NSObject, ObservableObject {
         resolvePendingDreamIntent()
     }
 
+    func recordDreamForIntent() async -> Dream? {
+        guard pendingRecordingIntentContinuation == nil,
+              !isRecording, !recordingIsBusy, !isProcessing, transcribingDreamID == nil else { return nil }
+
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                pendingRecordingIntentContinuation = continuation
+                openSectionFromIntent(.recorder)
+                startRecording(requiresActivity: true)
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.resolvePendingRecordingIntent(with: nil) }
+        }
+    }
+
+    private func resolvePendingRecordingIntent(with dream: Dream?) {
+        guard let continuation = pendingRecordingIntentContinuation else { return }
+        pendingRecordingIntentContinuation = nil
+        continuation.resume(returning: dream)
+    }
+
     func searchDreamsFromIntent(_ query: String) {
         openSectionFromIntent(.journal)
         searchQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -262,49 +316,76 @@ class DreamStore: NSObject, ObservableObject {
     @Published var isQuestionSatisfied: Bool = false
     @Published var answeredQuestions: Set<UUID> = []
     private var recommendationCache: [UUID: [String]] = [:]
-    
+    private var lastTranscriptForDetection: String = ""
+    private var questionDetectionTask: Task<Void, Never>?
+
+    // Word-embedding is kept only as a last-resort semantic fallback for unusual phrasing.
     private let embedding = NLEmbedding.wordEmbedding(for: .english)
-    
+
     struct ChecklistItem: Identifiable, Hashable {
         let id = UUID()
-        let question: String
-        let keywords: [String]
+        var question: String          // mutable — adapts to transcript content
+        let baseQuestion: String      // original fallback
+        let keywords: [String]        // broad list scanned over full transcript
         let contextType: String
-        let semanticConcepts: [String]
+        let semanticConcepts: [String] // tight list for embedding fallback
     }
-    
-    private let questions: [ChecklistItem] = [
+
+    // Base question templates. `question` is updated live as the user speaks.
+    private var questions: [ChecklistItem] = [
         ChecklistItem(
             question: "Who was in the dream with you?",
-            keywords: ["mom", "dad", "friend", "brother", "sister", "he", "she", "they", "someone", "person", "man", "woman", "grandma", "grandpa", "teacher", "celebrity", "bear", "octopus", "librarian", "taylor", "dad"],
+            baseQuestion: "Who was in the dream with you?",
+            keywords: ["mom", "mother", "dad", "father", "friend", "brother", "sister", "he", "she", "they",
+                       "someone", "person", "man", "woman", "grandmother", "grandma", "nan", "nana",
+                       "grandfather", "grandpa", "teacher",
+                       "celebrity", "bear", "dog", "cat", "stranger", "boss", "colleague",
+                       "partner", "husband", "wife", "kid", "child", "baby", "ghost"],
             contextType: "person",
-            semanticConcepts: ["relative", "friend", "stranger", "animal", "person", "family", "actor", "musician"]
+            semanticConcepts: ["person", "relative", "animal", "friend", "stranger"]
         ),
         ChecklistItem(
             question: "Where did it take place?",
-            keywords: ["home", "school", "work", "outside", "inside", "room", "forest", "city", "water", "place", "house", "building", "kitchen", "hallway", "mountain", "underwater", "library", "party", "car", "downtown"],
+            baseQuestion: "Where did it take place?",
+            keywords: ["home", "school", "work", "outside", "inside", "room", "forest",
+                       "city", "water", "house", "building", "kitchen", "hallway", "mountain",
+                       "underwater", "library", "party", "car", "downtown", "beach", "hospital",
+                       "office", "rooftop", "alley", "station", "train", "mall", "park"],
             contextType: "place",
-            semanticConcepts: ["location", "place", "building", "nature", "landscape", "room", "city", "structure", "area", "environment"]
+            semanticConcepts: ["place", "location", "building", "landscape", "room"]
         ),
         ChecklistItem(
             question: "How did you feel?",
-            keywords: ["happy", "sad", "scared", "anxious", "excited", "confused", "calm", "angry", "felt", "feeling", "joyful", "terrified", "empowered", "lonely", "relief", "curious", "starstruck"],
+            baseQuestion: "How did you feel?",
+            keywords: ["happy", "happier", "sad", "scared", "afraid", "anxious", "excited",
+                       "exhilarated", "exhilarating", "thrilled", "euphoric", "confused", "calm",
+                       "angry", "joyful", "terrified", "empowered", "lonely", "relief", "relieved",
+                       "curious", "nervous", "proud", "embarrassed", "frustrated", "peaceful",
+                       "unsettled", "hopeful", "overwhelmed", "elated", "exultant"],
             contextType: "emotion",
-            semanticConcepts: ["emotion", "feeling", "mood", "fear", "joy", "anger", "sadness", "surprise"]
+            semanticConcepts: ["emotion", "feeling", "mood", "fear", "joy", "anger"]
         ),
         ChecklistItem(
             question: "How long did the dream feel?",
-            keywords: ["minute", "minutes", "hour", "hours", "second", "seconds", "long", "short", "forever", "quick", "brief", "time", "eternity", "instant", "while", "lasted"],
+            baseQuestion: "How long did the dream feel?",
+            keywords: ["minute", "minutes", "hour", "hours", "second", "seconds", "long",
+                       "short", "forever", "quick", "brief", "time", "eternity", "instant",
+                       "while", "lasted", "moment"],
             contextType: "duration",
-            semanticConcepts: ["duration", "time", "length", "span"]
+            semanticConcepts: ["duration", "time", "length"]
         ),
         ChecklistItem(
             question: "Any recent events that might have triggered this?",
-            keywords: ["yesterday", "today", "recently", "watched", "saw", "movie", "show", "read", "book", "talked", "news", "happened", "because", "reminded", "trigger", "context", "real life", "work"],
+            baseQuestion: "Any recent events that might have triggered this?",
+            keywords: ["yesterday", "today", "recently", "watched", "saw", "movie", "show",
+                       "read", "book", "talked", "news", "happened", "because", "reminded",
+                       "trigger", "real life", "work", "argument", "meeting", "stressful",
+                       "exam", "deadline", "breakup", "travel"],
             contextType: "context",
-            semanticConcepts: ["cause", "reason", "event", "memory", "media", "day"]
+            semanticConcepts: ["cause", "event", "memory", "media", "day"]
         )
     ]
+
     private var updateStateTask: Task<Void, Never>?
     
     init(prepareServices: Bool = true,
@@ -324,6 +405,17 @@ class DreamStore: NSObject, ObservableObject {
 
         // Initial Theme Pull
         self.currentThemeID = kvs.string(forKey: "themeID") ?? UserDefaults.standard.string(forKey: "themeID") ?? "gold"
+
+        // Seed appearance/generation settings from iCloud (wins over local AppStorage on fresh install)
+        if let cloudStyle = kvs.string(forKey: "imageGenerationStyle"), !cloudStyle.isEmpty {
+            self.imageGenerationStyle = cloudStyle
+        }
+        if let cloudScene = kvs.string(forKey: "imageSceneMode"), !cloudScene.isEmpty {
+            self.imageSceneMode = cloudScene
+        }
+        if kvs.object(forKey: "isComplexVisualizerEnabled") != nil {
+            self.isComplexVisualizerEnabled = kvs.bool(forKey: "isComplexVisualizerEnabled")
+        }
 
         self.profileImageData = loadProfileImageFromDisk()
         
@@ -364,16 +456,33 @@ class DreamStore: NSObject, ObservableObject {
         Task { @MainActor in
             let newFirst = kvs.string(forKey: "userFirstName") ?? ""
             if !newFirst.isEmpty && self.firstName != newFirst { self.firstName = newFirst }
-            
+
             let newLast = kvs.string(forKey: "userLastName") ?? ""
             if !newLast.isEmpty && self.lastName != newLast { self.lastName = newLast }
-            
+
             // Sync theme changes pulled from iCloud
             let newTheme = kvs.string(forKey: "themeID") ?? "gold"
             if self.currentThemeID != newTheme { self.currentThemeID = newTheme }
+
+            // Sync appearance & generation settings
+            if let newStyle = kvs.string(forKey: "imageGenerationStyle"),
+               !newStyle.isEmpty, self.imageGenerationStyle != newStyle {
+                self.imageGenerationStyle = newStyle
+            }
+            if let newScene = kvs.string(forKey: "imageSceneMode"),
+               !newScene.isEmpty, self.imageSceneMode != newScene {
+                self.imageSceneMode = newScene
+            }
+            // Bool: only update if key exists in iCloud (object(forKey:) returns nil if never set)
+            if kvs.object(forKey: "isComplexVisualizerEnabled") != nil {
+                let newVisualizer = kvs.bool(forKey: "isComplexVisualizerEnabled")
+                if self.isComplexVisualizerEnabled != newVisualizer {
+                    self.isComplexVisualizerEnabled = newVisualizer
+                }
+            }
         }
     }
-    
+
     private func setupObservers() {
         audioRecorder.$transcriptionMessage
             .sink { [weak self] in self?.transcriptionNotice = $0 }
@@ -747,6 +856,17 @@ class DreamStore: NSObject, ObservableObject {
         // Recheck at the point of use: a failed launch-time probe isn't permanent.
         return try await ImageGenerationService.shared.generate(prompt: prompt, places: places, emotions: emotions, profileImageData: profileImageData)
     }
+
+    func updateImagePrompt(for dreamID: UUID, prompt: String) {
+        guard let index = dreams.firstIndex(where: { $0.id == dreamID }) else { return }
+        let cleanPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanPrompt.isEmpty else { return }
+        dreams[index].imagePrompt = cleanPrompt
+        if dreams[index].core != nil {
+            dreams[index].core?.imagePrompt = cleanPrompt
+        }
+        persistDream(dreams[index])
+    }
     
     private func resolveAliases(for names: Set<String>, type: String) -> Set<String> {
         guard let context = modelContext else { return names }
@@ -767,7 +887,11 @@ class DreamStore: NSObject, ObservableObject {
         let tagsFilter = resolveAliases(for: activeFilter.tags, type: "tag")
         
         return dreams.filter { dream in
-            let matchesSearch = searchQuery.isEmpty || dream.rawTranscript.localizedCaseInsensitiveContains(searchQuery)
+            let searchFields = [dream.rawTranscript, dream.core?.title ?? "", dream.core?.summary ?? ""]
+                + (dream.core?.people ?? []) + (dream.core?.places ?? []) + (dream.core?.symbols ?? [])
+            let matchesSearch = searchQuery.isEmpty || searchFields.contains {
+                $0.localizedCaseInsensitiveContains(searchQuery)
+            }
             if !matchesSearch { return false }
             
             if activeFilter.showBookmarksOnly && !dream.isBookmarked { return false }
@@ -860,70 +984,154 @@ class DreamStore: NSObject, ObservableObject {
     
     private func updateQuestionState() {
         if isQuestionSatisfied { return }
-        
+
+        questionDetectionTask?.cancel()
         updateStateTask?.cancel()
-        updateStateTask = Task {
-            try? await Task.sleep(nanoseconds: 200_000_000)
+        updateStateTask = Task { [self] in
+            // Briefly let partial speech updates settle before checking new words.
+            try? await Task.sleep(nanoseconds: 140_000_000)
             if Task.isCancelled { return }
-            
+
             let transcriptSnapshot = await MainActor.run { self.currentTranscript }
             guard !transcriptSnapshot.isEmpty else { return }
-            
+
+            // Recheck any changed transcript, including speech recognizer corrections to a word.
+            let previousTranscript = await MainActor.run { self.lastTranscriptForDetection }
+            guard transcriptSnapshot != previousTranscript else { return }
+            await MainActor.run { self.lastTranscriptForDetection = transcriptSnapshot }
+
             let unansweredQuestions = await MainActor.run {
                 self.questions.filter { !self.answeredQuestions.contains($0.id) }
             }
-            
             guard !unansweredQuestions.isEmpty else { return }
-            
-            let transcriptLower = transcriptSnapshot.lowercased()
+
+            // Recency window: last 30 words for satisfaction detection
+            let allWords = transcriptSnapshot.split(separator: " ")
+            let recentWords = allWords.suffix(30).joined(separator: " ")
             let embeddingRef = self.embedding
-            
-            Task.detached(priority: .userInitiated) { [weak self] in
-                let tagger = NLTagger(tagSchemes: [.tokenType])
-                let words = transcriptSnapshot.split(separator: " ")
-                let recentText = words.suffix(15).joined(separator: " ")
-                tagger.string = recentText
-                
-                for question in unansweredQuestions {
-                    var isSatisfied = false
-                    
-                    if question.keywords.contains(where: { transcriptLower.contains($0.lowercased()) }) {
-                        isSatisfied = true
+
+            // Build a snapshot of already-answered context types → detected keyword
+            let answeredContext = await MainActor.run { () -> [String: String] in
+                var map: [String: String] = [:]
+                for q in self.questions where self.answeredQuestions.contains(q.id) {
+                    if let kw = ChecklistKeywordMatcher.match(in: transcriptSnapshot, keywords: q.keywords) {
+                        map[q.contextType] = kw
                     }
-                    else if let embedding = embeddingRef {
-                        tagger.enumerateTags(in: recentText.startIndex..<recentText.endIndex, unit: .word, scheme: .tokenType, options: [.omitPunctuation, .omitWhitespace]) { _, tokenRange in
-                            let word = String(recentText[tokenRange]).lowercased()
-                            if word.count < 3 { return true }
-                            
+                }
+                return map
+            }
+
+            self.questionDetectionTask = Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self else { return }
+
+                let tagger = NLTagger(tagSchemes: [.tokenType, .lexicalClass])
+                tagger.string = recentWords
+
+                for question in unansweredQuestions {
+                    if Task.isCancelled { return }
+                    var isSatisfied = false
+                    var matchedKeyword: String? = nil
+
+                    // PRIMARY: keyword must appear in the recent 30 words
+                    if let keyword = ChecklistKeywordMatcher.match(in: recentWords, keywords: question.keywords) {
+                        isSatisfied = true
+                        matchedKeyword = keyword
+                    }
+
+                    // FALLBACK: tight embedding against recent window only
+                    if !isSatisfied, let embedding = embeddingRef {
+                        tagger.enumerateTags(in: recentWords.startIndex..<recentWords.endIndex,
+                                             unit: .word, scheme: .lexicalClass,
+                                             options: [.omitPunctuation, .omitWhitespace]) { tag, tokenRange in
+                            let word = String(recentWords[tokenRange]).lowercased()
+                            guard word.count >= 3,
+                                  tag == .noun || tag == .verb || tag == .adjective else { return true }
                             for concept in question.semanticConcepts {
-                                let distance = embedding.distance(between: word, and: concept)
-                                if distance < 0.65 {
-                                    isSatisfied = true; return false
-                                }
-                            }
-                            for keyword in question.keywords {
-                                let distance = embedding.distance(between: word, and: keyword)
-                                if distance < 0.4 {
-                                    isSatisfied = true; return false
+                                if embedding.distance(between: word, and: concept) < 0.45 {
+                                    isSatisfied = true
+                                    return false
                                 }
                             }
                             return true
                         }
                     }
-                    
+
                     if isSatisfied {
+                        // Build the full context map including the just-answered question
+                        var context = answeredContext
+                        if let kw = matchedKeyword { context[question.contextType] = kw }
+                        let resolvedContext = context
+
+                        // Rewrite ALL remaining questions using cross-question context.
+                        // This makes later questions feel like natural follow-ups to what
+                        // was already mentioned rather than generic standalone prompts.
                         await MainActor.run {
-                            self?.handleSatisfiedQuestion(questionID: question.id)
+                            guard self.currentTranscript == transcriptSnapshot else { return }
+                            for i in self.questions.indices {
+                                let q = self.questions[i]
+                                // Skip already-answered questions
+                                guard !self.answeredQuestions.contains(q.id), q.id != question.id else { continue }
+                                self.questions[i].question = Self.adaptedQuestion(
+                                    for: q.contextType,
+                                    baseQuestion: q.baseQuestion,
+                                    context: resolvedContext
+                                )
+                            }
+                            self.handleSatisfiedQuestion(questionID: question.id)
                         }
                     }
                 }
             }
         }
     }
-    
+
+    /// Returns a contextually adapted question string that references prior dream details.
+    /// Falls back to the base question when there is not enough context to personalise.
+    private static func adaptedQuestion(for contextType: String, baseQuestion: String, context: [String: String]) -> String {
+        let person = context["person"].flatMap { term -> String? in
+            switch term {
+            case "mother", "mom", "father", "dad", "grandmother", "grandma", "nan", "nana",
+                 "grandfather", "grandpa", "brother", "sister", "friend", "husband", "wife", "partner":
+                return "your \(term)"
+            case "he", "she", "they", "someone", "person":
+                return nil
+            default:
+                return term
+            }
+        }
+        let place   = context["place"]
+        let emotion = context["emotion"]
+
+        switch contextType {
+        case "place":
+            if let p = person { return "Where were you with \(p)?" }
+            return baseQuestion
+
+        case "emotion":
+            if let pl = place, let p = person { return "How did you feel being at \(pl) with \(p)?" }
+            if let p = person  { return "How did you feel being with \(p)?" }
+            if let pl = place  { return "How did you feel at \(pl)?" }
+            return baseQuestion
+
+        case "duration":
+            if let e = emotion, let pl = place { return "How long did that \(e) feeling at \(pl) last?" }
+            if let e = emotion { return "How long did that \(e) feeling last?" }
+            if let pl = place  { return "How long did you spend at \(pl) in the dream?" }
+            return baseQuestion
+
+        case "context":
+            if let p = person  { return "Was there anything in real life that might have brought \(p) into your dream?" }
+            if let e = emotion { return "Was anything happening recently that might explain that \(e) feeling?" }
+            return "Did anything happen recently that might have triggered this dream?"
+
+        default:
+            return baseQuestion
+        }
+    }
+
     private func handleSatisfiedQuestion(questionID: UUID) {
         if answeredQuestions.contains(questionID) { return }
-        
+
         if activeQuestion?.id == questionID {
             withAnimation { self.isQuestionSatisfied = true }
             Task {
@@ -941,7 +1149,7 @@ class DreamStore: NSObject, ObservableObject {
             self.answeredQuestions.insert(questionID)
         }
     }
-    
+
     func deleteDream(_ dream: Dream) {
         guard let context = modelContext else { return }
         do {
@@ -994,7 +1202,7 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
 
-    func startRecording() {
+    func startRecording(requiresActivity: Bool = false) {
         guard !isRecording, !recordingIsBusy, !isProcessing, transcribingDreamID == nil else { return }
         isStartingRecording = true
         recordingError = nil
@@ -1005,33 +1213,56 @@ class DreamStore: NSObject, ObservableObject {
             } else {
                 checkPermissions()
             }
-            guard hasMicAccess else { showPermissionAlert = true; return }
+            guard hasMicAccess else {
+                showPermissionAlert = true
+                resolvePendingRecordingIntent(with: nil)
+                return
+            }
             currentTranscript = ""
+            lastTranscriptForDetection = ""
+            questionDetectionTask?.cancel()
+            questionDetectionTask = nil
             answeredQuestions = []
             isQuestionSatisfied = false
             recommendationCache = [:]
+            // Reset adaptive question text back to base prompts for a fresh session
+            for i in questions.indices { questions[i].question = questions[i].baseQuestion }
             activeQuestion = questions.first
             do {
+                if requiresActivity { try DreamRecordingActivityCoordinator.shared.start() }
                 try await audioRecorder.startRecording(keywords: questions.flatMap { $0.keywords })
                 withAnimation { isRecording = true; isPaused = false }
             } catch {
+                await DreamRecordingActivityCoordinator.shared.end()
                 recordingError = (error as? LiveAudioRecorder.RecordingError)?.localizedDescription
                     ?? "Recording couldn’t start. Check your microphone connection and available storage, then try again."
+                resolvePendingRecordingIntent(with: nil)
             }
         }
     }
 
-    func pauseRecording() { audioRecorder.pauseRecording() }
-    func resumeRecording() { audioRecorder.resumeRecording() }
+    func pauseRecording() {
+        audioRecorder.pauseRecording()
+        Task { await DreamRecordingActivityCoordinator.shared.setPaused(true) }
+    }
+    func resumeRecording() {
+        audioRecorder.resumeRecording()
+        Task { await DreamRecordingActivityCoordinator.shared.setPaused(false) }
+    }
 
     func stopRecording(save: Bool) {
         guard isRecording, !isFinishingRecording else { return }
         isFinishingRecording = true
         Task {
             let result = await audioRecorder.stopRecording(discard: !save)
+            await DreamRecordingActivityCoordinator.shared.end()
             withAnimation { isRecording = false; isPaused = false }
             isFinishingRecording = false
-            guard save, let result else { currentTranscript = ""; return }
+            guard save, let result else {
+                currentTranscript = ""
+                resolvePendingRecordingIntent(with: nil)
+                return
+            }
             currentTranscript = result.transcript
             processDream(transcript: result.transcript, audioURL: result.url,
                          transcriptionMessage: result.transcriptionMessage)
@@ -1055,7 +1286,8 @@ class DreamStore: NSObject, ObservableObject {
         newDream.needsAnalysis = true
         dreams.insert(newDream, at: 0)
         
-        persistDream(newDream)
+        let wasPersisted = persistDream(newDream)
+        resolvePendingRecordingIntent(with: wasPersisted ? newDream : nil)
         
         selectedTab = 1
         navigationPath = NavigationPath()
@@ -1117,8 +1349,17 @@ class DreamStore: NSObject, ObservableObject {
         currentAnalysisTask = Task {
             defer { isProcessing = false }
             do {
-                // An existing summary is enough to retry the picture independently of text AI.
-                let prompt = dream.core?.summary ?? dream.rawTranscript
+                let basePrompt: String
+                if let storedPrompt = dream.imagePrompt ?? dream.core?.imagePrompt,
+                   !storedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    basePrompt = storedPrompt
+                } else {
+                    basePrompt = try await DreamAnalyzer.shared.generateVisualPrompt(
+                        transcript: dream.rawTranscript, people: dream.people, places: dream.places
+                    )
+                    updateImagePrompt(for: dream.id, prompt: basePrompt)
+                }
+                let prompt = DreamIllustrationPrompt.styled(basePrompt).joined(separator: ". ")
                 let data = try await generateImageFromPrompt(prompt: prompt, places: dream.places, emotions: dream.emotions)
                 try Task.checkCancellation()
                 if let idx = dreams.firstIndex(where: { $0.id == dream.id }) {
@@ -1196,6 +1437,7 @@ class DreamStore: NSObject, ObservableObject {
                         var currentCore = generatedCore
                         if let t = partialCore.title { currentCore.title = t }
                         if let s = partialCore.summary { currentCore.summary = s }
+                        if let imagePrompt = partialCore.imagePrompt { currentCore.imagePrompt = imagePrompt }
                         if let e = partialCore.emotion { currentCore.emotion = e }
                         if let p = partialCore.people { currentCore.people = p }
                         if let pl = partialCore.places { currentCore.places = pl }
@@ -1218,6 +1460,7 @@ class DreamStore: NSObject, ObservableObject {
                 try Task.checkCancellation()
                 if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
                     dreams[index].core = repairedCore
+                    dreams[index].imagePrompt = repairedCore.imagePrompt ?? dreams[index].imagePrompt
                     persistDream(dreams[index])
                 }
                 
@@ -1256,10 +1499,19 @@ class DreamStore: NSObject, ObservableObject {
                             let emotions = dreams[index].core?.emotions ?? []
                             let hasUsableProfileImage = profileImageData.flatMap(UIImage.init(data:))?.cgImage != nil
                             let includeProfile = imageIncludeMyself && hasUsableProfileImage
-                            let sanitizedPrompt = try await DreamAnalyzer.shared.generateVisualPrompt(transcript: workingTranscript, allowsCharacters: includeProfile, includeMyself: includeProfile)
+                            let basePrompt: String
+                            if let storedPrompt = dreams[index].imagePrompt,
+                               !storedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                basePrompt = storedPrompt
+                            } else {
+                                basePrompt = try await DreamAnalyzer.shared.generateVisualPrompt(
+                                    transcript: workingTranscript, people: dreams[index].people, places: places
+                                )
+                                updateImagePrompt(for: dreamID, prompt: basePrompt)
+                            }
                             try Task.checkCancellation()
-                            
-                            let data = try await generateImageFromPrompt(prompt: sanitizedPrompt, places: places, emotions: emotions, profileImageData: includeProfile ? profileImageData : nil)
+                            let styledPrompt = DreamIllustrationPrompt.styled(basePrompt).joined(separator: ". ")
+                            let data = try await generateImageFromPrompt(prompt: styledPrompt, places: places, emotions: emotions, profileImageData: includeProfile ? profileImageData : nil)
                             
                             await MainActor.run {
                                 if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
@@ -1339,6 +1591,8 @@ class DreamStore: NSObject, ObservableObject {
                 throw NSError(domain: "Dorsal.Persistence", code: 1, userInfo: [NSLocalizedDescriptionKey: "The journal is not open yet."])
             }
             try DreamPersistence.save(dream, in: context) { try context.save() }
+            publishLatestDreamForWidget(dream)
+            indexDreamInSpotlight(dream)
             // A cleanup failure does not mean the committed journal entry failed to save.
             do { try recoveryStore.remove(dream.id) }
             catch { print("Recovery cleanup deferred: \(error)") }
@@ -1351,6 +1605,34 @@ class DreamStore: NSObject, ObservableObject {
                 ? "The journal couldn’t finish saving. A recovery copy is kept on this device. Retry saving."
                 : "Your latest changes couldn’t be saved. Keep Dorsal open, check available storage, and retry saving."
             return false
+        }
+    }
+
+    private func publishLatestDreamForWidget(_ dream: Dream) {
+        let values = NSUbiquitousKeyValueStore.default
+        let existingDate = values.double(forKey: "latestDreamWidget.date")
+        guard dream.date.timeIntervalSince1970 >= existingDate else { return }
+        let generatedTitle = dream.core?.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let title = generatedTitle.isEmpty ? "Saved Dream" : generatedTitle
+        values.set(title, forKey: "latestDreamWidget.title")
+        values.set(dream.emotions.first, forKey: "latestDreamWidget.emotion")
+        values.set(dream.date.timeIntervalSince1970, forKey: "latestDreamWidget.date")
+        values.set(dream.id.uuidString, forKey: "latestDreamWidget.id")
+        WidgetCenter.shared.reloadTimelines(ofKind: "com.kelvinmathew.dorsal.LatestDream")
+    }
+
+    private func indexDreamInSpotlight(_ dream: Dream) {
+        let entity = DreamEntryEntity(
+            id: dream.id,
+            title: dream.core?.title ?? "Saved Dream",
+            summary: dream.core?.summary ?? "",
+            date: dream.date,
+            emotions: dream.emotions,
+            people: dream.people
+        )
+        Task {
+            do { try await CSSearchableIndex.default().indexAppEntities([entity]) }
+            catch { print("Spotlight dream indexing failed: \(error)") }
         }
     }
 

@@ -114,35 +114,52 @@ struct SettingsView: View {
                 .padding(.top, 16)
 
             VStack(alignment: .leading, spacing: 16) {
+                // Style picker — works on iOS 26 too (drives the LLM prompt and tag list)
                 HStack {
                     Text("Style").foregroundStyle(.white)
                     Spacer()
                     Picker("Style", selection: $store.imageGenerationStyle) {
-                        Text("Animation").tag("pixar")
-                        Text("Cinematic").tag("cinematic")
                         Text("Dreamlike").tag("warm")
+                        Text("Animation").tag("pixar")
+                        Text("Lofi").tag("lofi")
                         Text("Comic").tag("comic")
                         Text("Anime").tag("ghibli")
-                        Text("Sci-Fi").tag("cyberpunk")
-                        Text("Painterly Animation").tag("arcane")
-                        Text("Lofi").tag("lofi")
                         Text("Watercolor").tag("watercolor")
+                        Text("Gaming").tag("arcane")
+                        Text("Sci-Fi").tag("cyberpunk")
+                        Text("Realistic").tag("cinematic")
                         Text("Noir").tag("noir")
                     }
                     .pickerStyle(.menu)
                     .colorScheme(.dark)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Scene")
-                        .foregroundStyle(.white)
-                    Picker("Scene", selection: $store.imageSceneMode) {
-                        Text("Setting only").tag(ImageScenePreference.settingOnly)
-                        Text("Setting with people + me").tag(ImageScenePreference.dreamScene)
+                // Scene picker — iOS 26 locks to "Setting only" because Image Playground
+                // on iOS 26 has content guardrails that reject images containing people.
+                // "With people" is only reliable on iOS 27 where the guardrails are lifted.
+                if #available(iOS 27, *) {
+                    HStack {
+                        Text("Scene").foregroundStyle(.white)
+                        Spacer()
+                        Picker("Scene", selection: $store.imageSceneMode) {
+                            Text("Setting only").tag(ImageScenePreference.settingOnly)
+                            Text("With people").tag(ImageScenePreference.dreamScene)
+                        }
+                        .pickerStyle(.menu)
+                        .colorScheme(.dark)
                     }
-                    .pickerStyle(.menu)
-                    .colorScheme(.dark)
-                    Text("Choose an environment without people, or a dream scene that can include people and you.")
+                    Text("Choose an environment without people, or a dream scene that can include the people from your dream.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    HStack {
+                        Text("Scene").foregroundStyle(.white)
+                        Spacer()
+                        Text("Setting only")
+                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                    }
+                    Text("Scene with people requires iOS 27 — upgrade to unlock this option.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -151,6 +168,7 @@ struct SettingsView: View {
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         }
     }
+
     
     private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 16) {

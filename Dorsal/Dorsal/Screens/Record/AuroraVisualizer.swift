@@ -83,32 +83,46 @@ private struct NativeWaterView: View {
     
     var body: some View {
         ZStack {
-            // 1. REFLECTION (Flipped Sky)
-            // Sits behind the texture.
+            // 1. REFLECTION — flipped Metal aurora pass
             MetalAuroraView(
                 power: isPaused ? 0 : power,
                 color: color,
                 isPaused: isPaused,
                 isRecording: isRecording
             )
-            .scaleEffect(y: -1) // Flip vertically
-            .offset(y: screenSize.height * 0.4) // Re-align horizon
-            .blur(radius: 2.0)
-            .opacity(isRecording ? 0.3 : 0.1)
+            .scaleEffect(y: -1)                          // flip vertically
+            .offset(y: screenSize.height * 0.38)          // align to horizon
+            .blur(radius: 3.0)
+            .opacity(isRecording ? 0.28 : 0.10)
             .mask(
-                // FADE IN MASK
                 LinearGradient(
                     stops: [
-                        .init(color: .clear, location: 0.65),
-                        .init(color: .black, location: 0.8),
-                        .init(color: .black, location: 1.0)
+                        .init(color: .clear,           location: 0.62),
+                        .init(color: .black.opacity(0.5), location: 0.72),
+                        .init(color: .black,           location: 1.0)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
-            
-            // 2. WATER TEXTURE (Bottom 30%)
+            .allowsHitTesting(false)
+
+            // 2. SUBTLE VIGNETTE — very faint centre-light → dark-edge bloom
+            // Gives a gentle luminous centre without the harsh bright-white glow.
+            RadialGradient(
+                colors: [
+                    color.opacity(isRecording ? 0.07 : 0.03),
+                    Color.black.opacity(isRecording ? 0.18 : 0.10)
+                ],
+                center: .center,
+                startRadius: screenSize.width * 0.1,
+                endRadius: screenSize.width * 0.9
+            )
+            .offset(y: screenSize.height * 0.72)
+            .frame(width: screenSize.width, height: screenSize.height * 0.35)
+            .allowsHitTesting(false)
+
+            // 3. WATER TEXTURE (Bottom 30%)
             VStack(spacing: 0) {
                 // Clear top part
                 Color.clear.frame(height: screenSize.height * horizonYRatio)

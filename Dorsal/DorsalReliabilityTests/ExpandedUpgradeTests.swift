@@ -11,6 +11,15 @@ import ImagePlayground
 @MainActor
 @Suite("Adaptive journal and integration tests", .serialized)
 struct ExpandedUpgradeTests {
+    @Test func checklistMatchesWholeWordsAndRecognizesCommonRelationshipAndEmotionTerms() {
+        let people = ["he", "she", "grandmother", "grandma", "friend"]
+        #expect(ChecklistKeywordMatcher.match(in: "I was walking with my grandmother", keywords: people) == "grandmother")
+        #expect(ChecklistKeywordMatcher.match(in: "I saw her", keywords: people) == nil)
+        let emotions = ["exhilarated", "thrilled"]
+        #expect(ChecklistKeywordMatcher.match(in: "I was feeling exhilarated", keywords: emotions) == "exhilarated")
+        #expect(ChecklistKeywordMatcher.match(in: "I felt thrilled", keywords: emotions) == "thrilled")
+    }
+
     @Test func illustrationUsesOnlyADecodableProfilePhotoAsTheDreamer() throws {
         let preferences = UserDefaults.standard
         let priorPreference = preferences.object(forKey: "imageIncludeMyself")

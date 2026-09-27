@@ -23,6 +23,16 @@ struct DorsalApp: App {
             .onAppIntentExecution(OpenDorsalIntent.self) { intent in
                 store.openSectionFromIntent(intent.target)
             }
+            .onOpenURL { url in
+                guard url.scheme == "dorsal" else { return }
+                if url.host == "latest-dream" {
+                    store.openDreamFromIntent()
+                } else if url.host == "dream",
+                          let idString = url.pathComponents.dropFirst().first,
+                          let id = UUID(uuidString: idString) {
+                    store.openDreamFromIntent(id: id)
+                }
+            }
         }
     }
 }

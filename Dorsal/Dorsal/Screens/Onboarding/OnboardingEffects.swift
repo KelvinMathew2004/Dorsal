@@ -1,69 +1,48 @@
 import SwiftUI
 import MetalKit
 
-// MARK: - GALAXY BACKGROUND (Simulated Mesh Gradient)
+// MARK: - GALAXY BACKGROUND (MeshGradient — smooth on all screen sizes)
 struct GalaxyMeshGradient: View {
     var color: Color
-    @State private var animate = false
-    
+    // A slow time-drive shifts mesh colors so the background subtly breathes.
+    @State private var phase: Double = 0
+
     var body: some View {
-        ZStack {
-            // Base Deep Space
-            Color(red: 0.02, green: 0.0, blue: 0.05).ignoresSafeArea()
-            
-            GeometryReader { proxy in
-                ZStack {
-                    // Blob 1: Top Left Rotating
-                    Circle()
-                        .fill(color.opacity(0.4))
-                        .frame(width: proxy.size.width * 1.5)
-                        .blur(radius: 100)
-                        .offset(x: -proxy.size.width * 0.5, y: -proxy.size.height * 0.5)
-                        .rotationEffect(.degrees(animate ? 360 : 0))
-                        .animation(.linear(duration: 40).repeatForever(autoreverses: false), value: animate)
-                    
-                    // Blob 2: Bottom Right Counter-Rotating
-                    Circle()
-                        .fill(Color(red: 0.1, green: 0.0, blue: 0.2).opacity(0.5))
-                        .frame(width: proxy.size.width * 1.2)
-                        .blur(radius: 80)
-                        .offset(x: proxy.size.width * 0.4, y: proxy.size.height * 0.4)
-                        .rotationEffect(.degrees(animate ? -360 : 0))
-                        .animation(.linear(duration: 50).repeatForever(autoreverses: false), value: animate)
-                    
-                    // Blob 3: Center Pulse
-                    RadialGradient(
-                        colors: [color.opacity(0.3), .clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: proxy.size.width * 0.8
-                    )
-                    .scaleEffect(animate ? 1.1 : 0.9)
-                    .animation(.easeInOut(duration: 4).repeatForever(autoreverses: true), value: animate)
-                    
-                    // Overlay Texture (Noise-like)
-                    AngularGradient(
-                        colors: [
-                            color.opacity(0.2),
-                            .clear,
-                            color.opacity(0.1),
-                            .clear,
-                            color.opacity(0.2)
-                        ],
-                        center: .center
-                    )
-                    .rotationEffect(.degrees(animate ? 180 : 0))
-                    .scaleEffect(1.5)
-                    .blur(radius: 50)
-                    .animation(.linear(duration: 60).repeatForever(autoreverses: false), value: animate)
-                }
-            }
-        }
-        .onAppear {
-            animate = true
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            // Slow, smooth oscillation — no jumps.
+            let s = Float(sin(t * 0.15) * 0.5 + 0.5)   // 0…1
+            let c = Float(cos(t * 0.11) * 0.5 + 0.5)
+
+            MeshGradient(
+                width: 3,
+                height: 3,
+                points: [
+                    // Fixed corner positions
+                    [0, 0], [0.5, 0], [1, 0],
+                    [0, 0.5], [0.5, 0.5], [1, 0.5],
+                    [0, 1], [0.5, 1], [1, 1]
+                ],
+                colors: [
+                    // Top row: deep space → accent tint → dark
+                    Color(red: 0.02, green: 0.0, blue: 0.05),
+                    color.opacity(Double(0.25 + s * 0.15)),
+                    Color(red: 0.04, green: 0.0, blue: 0.10),
+                    // Middle row: accent bloom left, near-black center, subtle right
+                    color.opacity(Double(0.15 + c * 0.12)),
+                    Color(red: Double(0.06 + s * 0.04), green: 0.01, blue: Double(0.14 + c * 0.06)),
+                    color.opacity(Double(0.10 + s * 0.08)),
+                    // Bottom row: dark base
+                    Color(red: 0.03, green: 0.0, blue: 0.07),
+                    Color(red: Double(0.05 + c * 0.03), green: 0.01, blue: Double(0.12 + s * 0.04)),
+                    Color(red: 0.02, green: 0.0, blue: 0.05)
+                ]
+            )
+            .ignoresSafeArea()
         }
     }
 }
+
 
 // MARK: - WARP DRIVE VIEW
 struct WarpDriveView: View {

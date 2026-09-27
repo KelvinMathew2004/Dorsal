@@ -101,6 +101,25 @@ struct ReliabilityTests {
         #expect(restored.imageError != nil)
     }
 
+    @Test func visualPromptSurvivesPersistenceAndFeedsImageAnalysis() throws {
+        let context = try makeContext()
+        let prompt = "The dreamer walks beside their grandmother through a sunlit garden."
+        let dream = Dream(
+            rawTranscript: "I was walking with my grandmother through a garden.",
+            core: DreamCoreAnalysis(title: "Garden Walk", summary: "A walk through a garden."),
+            imagePrompt: prompt
+        )
+
+        try DreamPersistence.save(dream, in: context) { try context.save() }
+        let saved = try #require(context.fetch(FetchDescriptor<SavedDream>()).first)
+        let restored = Dream(from: saved)
+
+        #expect(saved.imagePrompt == prompt)
+        #expect(restored.imagePrompt == prompt)
+        #expect(restored.core?.imagePrompt == prompt)
+        #expect(restored.analysis.imagePrompt == prompt)
+    }
+
     @Test func audioOnlyDreamCanBeSavedAndRetried() throws {
         let context = try makeContext()
         var dream = Dream(rawTranscript: "")

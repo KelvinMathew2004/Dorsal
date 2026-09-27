@@ -55,6 +55,9 @@ struct DreamCoreAnalysis: Codable, Sendable, Hashable {
     @Guide(description: "A 1-2 sentence summary of the dream's narrative flow.")
     var summary: String?
 
+    @Guide(description: "A concise, image-ready description of one visual moment: what the dreamer and other described people are doing, the main setting, and the important visible objects. Identify the narrator as 'the dreamer' and other people by their stated relationship or role (for example, 'the dreamer's grandmother'), not by personal name. Keep it to 1-2 short sentences, about as concise as the dream summary. Do not tell a story, explain symbolism, invent appearance or events, or include words meant to appear in the image.")
+    var imagePrompt: String?
+
     @Guide(description: "List of people, characters, or animals. Keep names intact. If an adjective is tied to a noun, extract the full modifier and noun together (e.g. 'old man', 'shady figure').")
     var people: [String]?
 
@@ -220,6 +223,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
     
     var core: DreamCoreAnalysis?
     var extras: DreamExtraAnalysis?
+    var imagePrompt: String?
     
     var voiceFatigue: Int?
     
@@ -269,7 +273,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
             anxietyLevel: extras?.anxietyLevel ?? 0,
             coherenceScore: extras?.coherenceScore ?? 0,
             isNightmare: extras?.isNightmare ?? false,
-            imagePrompt: core?.summary ?? ""
+            imagePrompt: imagePrompt ?? core?.imagePrompt ?? ""
         )
     }
     
@@ -279,6 +283,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         rawTranscript: String,
         core: DreamCoreAnalysis? = nil,
         extras: DreamExtraAnalysis? = nil,
+        imagePrompt: String? = nil,
         voiceFatigue: Int? = nil,
         generatedImageData: Data? = nil,
         isBookmarked: Bool = false,
@@ -289,6 +294,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.rawTranscript = rawTranscript
         self.core = core
         self.extras = extras
+        self.imagePrompt = imagePrompt ?? core?.imagePrompt
         self.voiceFatigue = voiceFatigue
         self.generatedImageData = generatedImageData
         self.isBookmarked = isBookmarked
@@ -301,6 +307,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.date = saved.date
         self.rawTranscript = saved.rawText
         self.generatedImageData = saved.generatedImageData
+        self.imagePrompt = saved.imagePrompt.isEmpty ? nil : saved.imagePrompt
         self.isBookmarked = saved.isBookmarked
         self.voiceFatigue = saved.voiceFatigue
         
@@ -308,6 +315,7 @@ struct Dream: Identifiable, Codable, Hashable, Sendable {
         self.core = DreamCoreAnalysis(
             title: saved.title,
             summary: saved.summary,
+            imagePrompt: saved.imagePrompt.isEmpty ? nil : saved.imagePrompt,
             people: saved.people,
             places: saved.places,
             emotion: saved.emotions.first,

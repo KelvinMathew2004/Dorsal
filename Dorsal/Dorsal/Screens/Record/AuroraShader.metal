@@ -73,16 +73,19 @@ float4 aurora_render(float3 ro, float3 rd, float2 fragCoord, float time, float4 
     
     float dropOffset = (1.0 - entrance_factor) * 5.0;
     
-    for(float i=0.0; i<50.0; i++) {
-        float of = 0.006 * aurora_hash21(fragCoord) * smoothstep(0.0, 15.0, i);
-        float pt = ((0.8 + pow(i, 1.4) * 0.002) - ro.y) / (rd.y * 2.0 + 0.4);
+    // 28 iterations (was 50) — ~44% fewer fragment instructions.
+    // Tighter exp2 decay (-0.10 vs -0.065) compensates so far-field layers
+    // still contribute at roughly the same visual weight.
+    for(float i=0.0; i<28.0; i++) {
+        float of = 0.006 * aurora_hash21(fragCoord) * smoothstep(0.0, 10.0, i);
+        float pt = ((0.8 + pow(i, 1.4) * 0.003) - ro.y) / (rd.y * 2.0 + 0.4);
         pt -= of;
         float3 bpos = ro + pt * rd;
         
         bpos.y += dropOffset;
         
         float2 p = bpos.zx * 0.4;
-        p.x -= time * 0.08; 
+        p.x -= time * 0.08;
         
         float rzt = aurora_triNoise2d(p, 0.06, time);
         float4 col2 = float4(0, 0, 0, rzt);
@@ -91,12 +94,12 @@ float4 aurora_render(float3 ro, float3 rd, float2 fragCoord, float time, float4 
         col2.rgb = aurora_color.rgb * color_variation * rzt;
 
         avgCol = mix(avgCol, col2, 0.5);
-        col += avgCol * exp2(-i * 0.065 - 2.5) * smoothstep(0.0, 5.0, i);
+        col += avgCol * exp2(-i * 0.10 - 2.5) * smoothstep(0.0, 4.0, i);
     }
     col *= (clamp(rd.y * 15.0 + 0.4, 0.0, 1.0));
     
-    float baseIntensity = 0.15; 
-    float finalIntensity = baseIntensity + power_input; 
+    float baseIntensity = 0.15;
+    float finalIntensity = baseIntensity + power_input;
     
     return col * (1.2 + finalIntensity) * entrance_factor;
 }

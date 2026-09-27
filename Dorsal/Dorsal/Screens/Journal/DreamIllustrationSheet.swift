@@ -17,7 +17,7 @@ struct DreamIllustrationRequest {
         }
     }
 
-        var conceptText: [String] {
+    var conceptText: [String] {
         var result = promptTags
         let includesPeople = ImageScenePreference.includesPeople
         if includesPeople && profileImage != nil {
@@ -27,6 +27,10 @@ struct DreamIllustrationRequest {
         } else {
             result.append("Create the dream scene with people and animals when the dream describes them. Include a generic dreamer only when supported by the scene.")
         }
+        // Explicit suppression — Image Playground responds to these as direct concept tags
+        result.append("No speech bubbles")
+        result.append("No text overlays")
+        result.append("No captions or labels")
         return result
     }
 
@@ -45,20 +49,9 @@ struct DreamIllustrationSheet: ViewModifier {
     let request: DreamIllustrationRequest?
     let onCompletion: (URL) -> Void
 
-    @AppStorage("imageGenerationStyle") var imageGenerationStyle: String = "pixar"
-
-    @available(iOS 27, *)
-    var dynamicStyle: ImagePlaygroundStyle? {
-        switch imageGenerationStyle {
-        case "warm", "pixar", "lofi": .animation
-        case "watercolor", "comic", "noir", "cinematic", "cyberpunk", "ghibli", "arcane": .illustration
-        default: nil
-        }
-    }
-
     func body(content: Content) -> some View {
         if #available(iOS 27, *) {
-            let base = content
+            content
                 .imagePlaygroundSheet(
                     isPresented: $isPresented,
                     concepts: (request?.conceptText ?? []).map(ImagePlaygroundConcept.text),
@@ -66,12 +59,11 @@ struct DreamIllustrationSheet: ViewModifier {
                     onCompletion: onCompletion
                 )
                 .imagePlaygroundOptions(request?.options ?? ImagePlaygroundOptions())
-
-            if let style = dynamicStyle {
-                base.imagePlaygroundGenerationStyle(style)
-            } else {
-                base
-            }
+            // Note: No imagePlaygroundGenerationStyle() call intentionally.
+            // Passing a style preset (.animation/.illustration) locks the model into
+            // a rendering pipeline and overrides the concept-based aesthetic direction.
+            // Without a preset the concept tags (style descriptors, "painterly", etc.)
+            // have full influence over the final image look.
         } else {
             content
         }

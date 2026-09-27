@@ -27,6 +27,7 @@ enum DreamPersistence {
         saved.hasVoiceFatigue = dream.voiceFatigue != nil
         saved.date = dream.date
         saved.rawText = dream.rawTranscript
+        saved.imagePrompt = dream.imagePrompt ?? dream.core?.imagePrompt ?? ""
         saved.generatedImageData = dream.generatedImageData
         saved.isBookmarked = dream.isBookmarked
         saved.voiceFatigue = dream.voiceFatigue ?? 0

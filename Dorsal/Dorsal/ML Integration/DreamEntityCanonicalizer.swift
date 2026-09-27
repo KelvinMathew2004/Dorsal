@@ -1,15 +1,18 @@
 import Foundation
 
-/// Corrects high-confidence transcription variants against linked contacts and
-/// merges generic aliases only when one known label is unambiguous.
+/// Corrects transcription variants against contacts the user has explicitly linked.
+/// Historical dream names are intentionally excluded — the model already receives
+/// them as spelling hints in the prompt; re-applying them as post-processing caused
+/// names from unrelated past dreams to bleed into the current dream's people list.
 nonisolated enum DreamEntityCanonicalizer {
     static func canonicalize(_ detected: [String], linkedNames: [String], historicalNames: [String]) -> [String] {
         var result: [String] = []
         for raw in detected {
             let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
+            // Only canonicalize against explicitly linked contacts (high threshold + token matching).
+            // historicalNames are intentionally ignored to prevent cross-dream contamination.
             let match = uniqueMatch(for: name, in: linkedNames, threshold: 0.78, allowContainingToken: true)
-                ?? uniqueMatch(for: name, in: historicalNames, threshold: 0.88, allowContainingToken: false)
             let canonical = match ?? name
             if !result.contains(where: { normalized($0) == normalized(canonical) }) { result.append(canonical) }
         }

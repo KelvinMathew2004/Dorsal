@@ -5,5 +5,7 @@ import SwiftUI
 struct DorsalControlBundle: WidgetBundle {
     var body: some Widget {
         RecordDreamControl()
+        LatestDreamWidget()
+        DreamRecordingActivityWidget()
     }
 }

@@ -11,6 +11,8 @@
 		D027C000000000000000000C /* RecordDreamControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000003 /* RecordDreamControl.swift */; };
 		D027C000000000000000000D /* OpenDorsalIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000004 /* OpenDorsalIntent.swift */; };
 		D027C000000000000000000E /* DorsalControl.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000001 /* DorsalControl.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D027C000000000000000000F /* LatestDreamWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000020 /* LatestDreamWidget.swift */; };
+		D027C0000000000000000021 /* DreamRecordingActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000022 /* DreamRecordingActivity.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +53,8 @@
 		D027C0000000000000000003 /* RecordDreamControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordDreamControl.swift; sourceTree = "<group>"; };
 		D027C0000000000000000004 /* OpenDorsalIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OpenDorsalIntent.swift; path = ../Dorsal/Intents/OpenDorsalIntent.swift; sourceTree = "<group>"; };
 		D027C0000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D027C0000000000000000020 /* LatestDreamWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatestDreamWidget.swift; sourceTree = "<group>"; };
+		D027C0000000000000000022 /* DreamRecordingActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DreamRecordingActivity.swift; path = ../Dorsal/Intents/DreamRecordingActivity.swift; sourceTree = "<group>"; };
 		D052A1000000000000000001 /* DorsalReliabilityTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = DorsalReliabilityTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -132,6 +136,8 @@
 				D027C0000000000000000003 /* RecordDreamControl.swift */,
 				D027C0000000000000000004 /* OpenDorsalIntent.swift */,
 				D027C0000000000000000005 /* Info.plist */,
+				D027C0000000000000000020 /* LatestDreamWidget.swift */,
+				D027C0000000000000000022 /* DreamRecordingActivity.swift */,
 			);
 			path = DorsalControl;
 			sourceTree = "<group>";
@@ -278,6 +284,8 @@
 				D027C000000000000000000B /* DorsalControlBundle.swift in Sources */,
 				D027C000000000000000000C /* RecordDreamControl.swift in Sources */,
 				D027C000000000000000000D /* OpenDorsalIntent.swift in Sources */,
+				D027C000000000000000000F /* LatestDreamWidget.swift in Sources */,
+				D027C0000000000000000021 /* DreamRecordingActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -513,6 +521,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = DorsalControl/DorsalControl.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 879HFN9R93;
@@ -542,6 +551,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = DorsalControl/DorsalControl.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 879HFN9R93;
