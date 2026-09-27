@@ -4,3 +4,9 @@
 Dorsal.swiftpm/.swiftpm/xcode/package.xcworkspace/xcuserdata/kelvinmathew.xcuserdatad/UserInterfaceState.xcuserstate
 
 Dorsal/Dorsal.xcodeproj/project.xcworkspace/xcuserdata/kelvinmathew.xcuserdatad/UserInterfaceState.xcuserstate
+
+# Xcode per-user state and generated build data
+**/xcuserdata/
+**/*.xcuserstate
+**/DerivedData/
+**/*.xccheckout
