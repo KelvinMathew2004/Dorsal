@@ -12,6 +12,7 @@
 		D027C000000000000000000D /* OpenDorsalIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000004 /* OpenDorsalIntent.swift */; };
 		D027C000000000000000000E /* DorsalControl.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000001 /* DorsalControl.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D027C000000000000000000F /* LatestDreamWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000020 /* LatestDreamWidget.swift */; };
+		D027C0000000000000000030 /* DorsalActivityIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000031 /* DorsalActivityIcon.png */; };
 		D027C0000000000000000021 /* DreamRecordingActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000022 /* DreamRecordingActivity.swift */; };
 /* End PBXBuildFile section */
 
@@ -54,6 +55,7 @@
 		D027C0000000000000000004 /* OpenDorsalIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OpenDorsalIntent.swift; path = ../Dorsal/Intents/OpenDorsalIntent.swift; sourceTree = "<group>"; };
 		D027C0000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D027C0000000000000000020 /* LatestDreamWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatestDreamWidget.swift; sourceTree = "<group>"; };
+		D027C0000000000000000031 /* DorsalActivityIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = DorsalActivityIcon.png; sourceTree = "<group>"; };
 		D027C0000000000000000022 /* DreamRecordingActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DreamRecordingActivity.swift; path = ../Dorsal/Intents/DreamRecordingActivity.swift; sourceTree = "<group>"; };
 		D052A1000000000000000001 /* DorsalReliabilityTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = DorsalReliabilityTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -138,6 +140,7 @@
 				D027C0000000000000000005 /* Info.plist */,
 				D027C0000000000000000020 /* LatestDreamWidget.swift */,
 				D027C0000000000000000022 /* DreamRecordingActivity.swift */,
+				D027C0000000000000000031 /* DorsalActivityIcon.png */,
 			);
 			path = DorsalControl;
 			sourceTree = "<group>";
@@ -257,6 +260,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D027C0000000000000000030 /* DorsalActivityIcon.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -541,6 +545,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DORSAL_WIDGET_EXTENSION $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -571,6 +576,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DORSAL_WIDGET_EXTENSION $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

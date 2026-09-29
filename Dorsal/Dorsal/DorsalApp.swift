@@ -1,10 +1,15 @@
 import SwiftUI
 import SwiftData
 import AppIntents
+import VisualIntelligence
 
 @main
 struct DorsalApp: App {
     @StateObject private var store = DreamStore.shared
+
+    init() {
+        DorsalShortcuts.updateAppShortcutParameters()
+    }
     
     var body: some Scene {
         WindowGroup {
@@ -23,6 +28,9 @@ struct DorsalApp: App {
             .onAppIntentExecution(OpenDorsalIntent.self) { intent in
                 store.openSectionFromIntent(intent.target)
             }
+            .onAppIntentExecution(SearchDreamsVisualIntelligenceIntent.self) { intent in
+                store.searchDreamsFromIntent(intent.semanticContent.labels.first ?? "")
+            }
             .onOpenURL { url in
                 guard url.scheme == "dorsal" else { return }
                 if url.host == "latest-dream" {
@@ -31,6 +39,10 @@ struct DorsalApp: App {
                           let idString = url.pathComponents.dropFirst().first,
                           let id = UUID(uuidString: idString) {
                     store.openDreamFromIntent(id: id)
+                } else if url.host == "insights" {
+                    store.openSectionFromIntent(.insights)
+                } else if url.host == "record" {
+                    store.openSectionFromIntent(.recorder)
                 }
             }
         }

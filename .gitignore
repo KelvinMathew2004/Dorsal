@@ -10,3 +10,7 @@ Dorsal/Dorsal.xcodeproj/project.xcworkspace/xcuserdata/kelvinmathew.xcuserdatad/
 **/*.xcuserstate
 **/DerivedData/
 **/*.xccheckout
+
+# Local Apple sample project and Xcode reference skills
+/AdoptingAppIntentsToSupportSystemExperiences/
+/xcode-skills/

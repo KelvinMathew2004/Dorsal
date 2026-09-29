@@ -76,10 +76,13 @@ enum DreamIntentRepository {
     }
 
     static func entities(for identifiers: [UUID]) throws -> [DreamEntryEntity] {
+        let ids = Array(identifiers.prefix(50))
+        guard !ids.isEmpty else { return [] }
         let context = try makeContext()
-        return try identifiers.prefix(50).compactMap { id -> DreamEntryEntity? in
-            let descriptor = FetchDescriptor<SavedDream>(predicate: #Predicate { $0.id == id })
-            guard let saved = try context.fetch(descriptor).first else { return nil }
+        let descriptor = FetchDescriptor<SavedDream>(predicate: #Predicate { ids.contains($0.id) })
+        let savedByID = Dictionary(uniqueKeysWithValues: try context.fetch(descriptor).map { ($0.id, $0) })
+        return ids.compactMap { id in
+            guard let saved = savedByID[id] else { return nil }
             return DreamEntryEntity(id: saved.id, title: saved.title, summary: saved.summary,
                                     date: saved.date, emotions: saved.emotions, people: saved.people)
         }

@@ -100,7 +100,8 @@ struct DreamDetailView: View {
               !basePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         illustrationRequest = DreamIllustrationRequest(
             promptTags: DreamIllustrationPrompt.styled(basePrompt),
-            profileImageData: store.profileImageData
+            profileImageData: store.profileImageData,
+            styleChoice: DreamIllustrationPrompt.activeStyleChoice
         )
         showImagePlayground = true
     }

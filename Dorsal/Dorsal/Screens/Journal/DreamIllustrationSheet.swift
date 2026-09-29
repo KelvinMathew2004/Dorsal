@@ -6,9 +6,11 @@ import ImagePlayground
 struct DreamIllustrationRequest {
     let promptTags: [String]
     let profileImage: UIImage?
+    let usesFixedIllustrationStyle: Bool
 
-    init(promptTags: [String], profileImageData: Data?) {
+    init(promptTags: [String], profileImageData: Data?, styleChoice: String = "custom") {
         self.promptTags = promptTags
+        self.usesFixedIllustrationStyle = styleChoice == "warm"
         let includesMyself = ImageScenePreference.includesPeople
         if includesMyself {
             self.profileImage = profileImageData.flatMap(UIImage.init(data:))
@@ -51,7 +53,7 @@ struct DreamIllustrationSheet: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(iOS 27, *) {
-            content
+            let sheet = content
                 .imagePlaygroundSheet(
                     isPresented: $isPresented,
                     concepts: (request?.conceptText ?? []).map(ImagePlaygroundConcept.text),
@@ -59,11 +61,12 @@ struct DreamIllustrationSheet: ViewModifier {
                     onCompletion: onCompletion
                 )
                 .imagePlaygroundOptions(request?.options ?? ImagePlaygroundOptions())
-            // Note: No imagePlaygroundGenerationStyle() call intentionally.
-            // Passing a style preset (.animation/.illustration) locks the model into
-            // a rendering pipeline and overrides the concept-based aesthetic direction.
-            // Without a preset the concept tags (style descriptors, "painterly", etc.)
-            // have full influence over the final image look.
+
+            if request?.usesFixedIllustrationStyle == true {
+                sheet.imagePlaygroundGenerationStyle(.illustration, in: [.illustration])
+            } else {
+                sheet
+            }
         } else {
             content
         }

@@ -39,7 +39,7 @@ struct RecordDreamIntentError: Error, CustomLocalizedStringResourceConvertible {
     static let notSaved = RecordDreamIntentError()
 
     var localizedStringResource: LocalizedStringResource {
-        "The recording wasn’t saved, so no dream entry was created. Check that microphone and Live Activity access are available, then try again."
+        "The recording wasn’t saved, so no dream entry was created. Check microphone access, then try again."
     }
 }
 
@@ -196,7 +196,7 @@ struct SearchDreamsIntent: AppIntent {
 
 @available(iOS 26.0, *)
 @AppIntent(schema: .visualIntelligence.semanticContentSearch)
-struct SearchDreamsVisualIntelligenceIntent {
+struct SearchDreamsVisualIntelligenceIntent: TargetContentProvidingIntent {
     static let title: LocalizedStringResource = "Search in Dorsal"
     static let description = IntentDescription("See more dreams related to what Visual Intelligence recognized.")
     static let supportedModes: IntentModes = .foreground(.immediate)
@@ -206,8 +206,6 @@ struct SearchDreamsVisualIntelligenceIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        let query = semanticContent.labels.first ?? ""
-        DreamStore.shared.searchDreamsFromIntent(query)
         return .result()
     }
 }

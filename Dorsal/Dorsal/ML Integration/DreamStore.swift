@@ -14,6 +14,7 @@ import CloudKit
 import PhotosUI
 import HealthKit
 import WidgetKit
+import UIKit
 
 struct DreamFilter: Equatable {
     var people: Set<String> = []
@@ -241,7 +242,7 @@ class DreamStore: NSObject, ObservableObject {
             await withCheckedContinuation { continuation in
                 pendingRecordingIntentContinuation = continuation
                 openSectionFromIntent(.recorder)
-                startRecording(requiresActivity: true)
+                startRecording()
             }
         } onCancel: {
             Task { @MainActor [weak self] in self?.resolvePendingRecordingIntent(with: nil) }
@@ -707,17 +708,23 @@ class DreamStore: NSObject, ObservableObject {
             self.dreams = savedDreams.filter { !unsavedDreamIDs.contains($0.id) }.map { Dream(from: $0) } + unsaved
             self.dreams.sort { $0.date > $1.date }
         } catch { print("Fetch error: \(error)") }
+
+        if let latestDream = dreams.first {
+            publishLatestDreamForWidget(latestDream)
+        }
         
         do {
             var descriptor = FetchDescriptor<SavedWeeklyInsight>(sortBy: [SortDescriptor(\.dateGenerated, order: .reverse)])
             descriptor.fetchLimit = 1
             if let latest = try context.fetch(descriptor).first {
-                self.weeklyInsight = WeeklyInsightResult(
+                let insight = WeeklyInsightResult(
                     periodOverview: latest.periodOverview,
                     dominantTheme: latest.dominantTheme,
                     mentalHealthTrend: latest.mentalHealthTrend,
                     strategicAdvice: latest.strategicAdvice
                 )
+                self.weeklyInsight = insight
+                publishWeeklyInsightForWidget(insight)
             }
         } catch { print("Insight fetch error: \(error)") }
     }
@@ -1202,7 +1209,7 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
 
-    func startRecording(requiresActivity: Bool = false) {
+    func startRecording() {
         guard !isRecording, !recordingIsBusy, !isProcessing, transcribingDreamID == nil else { return }
         isStartingRecording = true
         recordingError = nil
@@ -1229,7 +1236,7 @@ class DreamStore: NSObject, ObservableObject {
             for i in questions.indices { questions[i].question = questions[i].baseQuestion }
             activeQuestion = questions.first
             do {
-                if requiresActivity { try DreamRecordingActivityCoordinator.shared.start() }
+                DreamRecordingActivityCoordinator.shared.startIfAvailable()
                 try await audioRecorder.startRecording(keywords: questions.flatMap { $0.keywords })
                 withAnimation { isRecording = true; isPaused = false }
             } catch {
@@ -1251,28 +1258,78 @@ class DreamStore: NSObject, ObservableObject {
     }
 
     func stopRecording(save: Bool) {
+        Task { await finishRecording(save: save, navigateToDream: true) }
+    }
+
+    func stopRecordingFromLiveActivity() async {
+        await finishRecording(save: true, navigateToDream: false)
+    }
+
+    private func finishRecording(save: Bool, navigateToDream: Bool) async {
         guard isRecording, !isFinishingRecording else { return }
         isFinishingRecording = true
-        Task {
-            let result = await audioRecorder.stopRecording(discard: !save)
-            await DreamRecordingActivityCoordinator.shared.end()
-            withAnimation { isRecording = false; isPaused = false }
-            isFinishingRecording = false
-            guard save, let result else {
-                currentTranscript = ""
-                resolvePendingRecordingIntent(with: nil)
-                return
-            }
-            currentTranscript = result.transcript
-            processDream(transcript: result.transcript, audioURL: result.url,
-                         transcriptionMessage: result.transcriptionMessage)
-            if result.audioWriteFailed {
-                recordingError = "Some audio couldn’t be saved. Any recognized text has been kept. Check your device’s available storage."
-            }
+        defer { isFinishingRecording = false }
+
+        let result = await audioRecorder.stopRecording(discard: !save)
+        await DreamRecordingActivityCoordinator.shared.end()
+        withAnimation { isRecording = false; isPaused = false }
+        guard save, let result else {
+            currentTranscript = ""
+            resolvePendingRecordingIntent(with: nil)
+            return
+        }
+
+        currentTranscript = result.transcript
+        processDream(transcript: result.transcript, audioURL: result.url,
+                     transcriptionMessage: result.transcriptionMessage,
+                     navigateToDream: navigateToDream)
+        if result.audioWriteFailed {
+            recordingError = "Some audio couldn’t be saved. Any recognized text has been kept. Check your device’s available storage."
         }
     }
 
-    private func processDream(transcript: String, audioURL: URL, transcriptionMessage: String?) {
+    func stopRecordingAndAnalyzeInBackground(progress: Progress) async -> Bool {
+        guard isRecording, !isFinishingRecording else {
+            progress.completedUnitCount = progress.totalUnitCount
+            progress.localizedDescription = "Recording already stopped"
+            progress.localizedAdditionalDescription = "Open Dorsal to check its status"
+            return false
+        }
+        isFinishingRecording = true
+        let result = await audioRecorder.stopRecording(discard: false)
+        await DreamRecordingActivityCoordinator.shared.end()
+        withAnimation { isRecording = false; isPaused = false }
+        isFinishingRecording = false
+
+        guard let result else {
+            currentTranscript = ""
+            return false
+        }
+
+        currentTranscript = result.transcript
+        if result.audioWriteFailed {
+            recordingError = "Some audio couldn’t be saved. Any recognized text has been kept. Check your device’s available storage."
+        }
+
+        let dreamID = processDream(transcript: result.transcript, audioURL: result.url,
+                                   transcriptionMessage: result.transcriptionMessage,
+                                   startAnalysis: false, navigateToDream: false)
+        guard !result.transcript.isEmpty else {
+            progress.completedUnitCount = progress.totalUnitCount
+            progress.localizedDescription = "Dream recording saved"
+            progress.localizedAdditionalDescription = "Open Dorsal to retry transcription"
+            return false
+        }
+
+        await performAnalysis(for: dreamID, transcript: result.transcript, audioURL: result.url,
+                              existingFatigue: nil, generateIllustration: false, progress: progress)
+        guard let dream = dreams.first(where: { $0.id == dreamID }) else { return false }
+        return dream.needsAnalysis != true && dream.analysisError == nil
+    }
+
+    @discardableResult
+    private func processDream(transcript: String, audioURL: URL, transcriptionMessage: String?,
+                              startAnalysis: Bool = true, navigateToDream: Bool = true) -> UUID {
         currentAnalysisTask?.cancel()
         
         isProcessing = true
@@ -1288,16 +1345,19 @@ class DreamStore: NSObject, ObservableObject {
         
         let wasPersisted = persistDream(newDream)
         resolvePendingRecordingIntent(with: wasPersisted ? newDream : nil)
-        
-        selectedTab = 1
-        navigationPath = NavigationPath()
-        navigationPath.append(newDream)
+
+        if navigateToDream {
+            selectedTab = 1
+            navigationPath = NavigationPath()
+            navigationPath.append(newDream)
+        }
         
         if transcript.isEmpty {
             isProcessing = false
-        } else {
+        } else if startAnalysis {
             runAnalysis(for: newID, transcript: transcript, audioURL: audioURL, existingFatigue: nil)
         }
+        return newID
     }
     
     func regenerateDream(_ dream: Dream) {
@@ -1413,173 +1473,206 @@ class DreamStore: NSObject, ObservableObject {
 
     private func runAnalysis(for dreamID: UUID, transcript: String, audioURL: URL?, existingFatigue: Int?) {
         currentAnalysisTask = Task {
-            defer { isProcessing = false; isAnalyzingFatigue = false }
-            analysisAvailability = availabilityProvider()
-            guard analysisAvailability == .available else {
-                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                    dreams[index].analysisError = analysisAvailability.message
-                    dreams[index].needsAnalysis = true
-                    persistDream(dreams[index])
-                }
-                return
-            }
-            let previousCore = dreams.first(where: { $0.id == dreamID })?.core
-            let previousExtras = dreams.first(where: { $0.id == dreamID })?.extras
-            do {
-                let workingTranscript = try await DreamAnalyzer.shared.prepareAnalysisTranscript(transcript)
-                var generatedCore = DreamCoreAnalysis()
-                let knownPeople = analysisPeople
-                let knownPlaces = analysisPlaces
-                for try await partialCore in await DreamAnalyzer.shared.streamCore(transcript: workingTranscript, userName: self.firstName, knownPeople: knownPeople, knownPlaces: knownPlaces) {
-                    if Task.isCancelled { return }
-                    
-                    if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                        var currentCore = generatedCore
-                        if let t = partialCore.title { currentCore.title = t }
-                        if let s = partialCore.summary { currentCore.summary = s }
-                        if let imagePrompt = partialCore.imagePrompt { currentCore.imagePrompt = imagePrompt }
-                        if let e = partialCore.emotion { currentCore.emotion = e }
-                        if let p = partialCore.people { currentCore.people = p }
-                        if let pl = partialCore.places { currentCore.places = pl }
-                        if let em = partialCore.emotions { currentCore.emotions = em }
-                        if let sym = partialCore.symbols { currentCore.symbols = sym }
-                        if let i = partialCore.interpretation { currentCore.interpretation = i }
-                        if let a = partialCore.actionableAdvice { currentCore.actionableAdvice = a }
-                        
-                        if let toneLabel = partialCore.tone?.label {
-                            currentCore.tone = ToneAnalysis(label: toneLabel, confidence: partialCore.tone?.confidence)
-                        }
-                        generatedCore = currentCore
-                        if previousCore == nil { dreams[index].core = currentCore }
-                    }
-                }
-                
-                var repairedCore = await DreamAnalyzer.shared.ensureCoreFields(current: generatedCore, transcript: workingTranscript)
-                repairedCore.people = DreamEntityCanonicalizer.canonicalize(repairedCore.people ?? [], linkedNames: linkedPeople, historicalNames: knownPeople)
-                repairedCore.places = DreamEntityCanonicalizer.canonicalize(repairedCore.places ?? [], linkedNames: [], historicalNames: knownPlaces)
-                try Task.checkCancellation()
-                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                    dreams[index].core = repairedCore
-                    dreams[index].imagePrompt = repairedCore.imagePrompt ?? dreams[index].imagePrompt
-                    persistDream(dreams[index])
-                }
-                
-                var fatigueScore = 0
-                await MainActor.run {
-                     withAnimation { self.isAnalyzingFatigue = true }
-                }
-
-                if let existing = existingFatigue, existing > 0 {
-                    fatigueScore = existing
-                } else if let url = audioURL {
-                    do {
-                        fatigueScore = try await DreamAnalyzer.shared.analyzeVocalFatigue(audioURL: url)
-                    } catch {
-                        print("CoreML failed, falling back to text analysis: \(error)")
-                        fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: workingTranscript)
-                    }
-                } else {
-                    fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: workingTranscript)
-                }
-
-                await MainActor.run {
-                    if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                        dreams[index].voiceFatigue = fatigueScore
-                        persistDream(dreams[index])
-                    }
-                    withAnimation { self.isAnalyzingFatigue = false }
-                }
-                
-                await checkImageGenerationSupport()
-                if let index = dreams.firstIndex(where: { $0.id == dreamID }),
-                   let _ = dreams[index].core?.summary {
-                    if isImageGenerationAvailable && dreams[index].generatedImageData == nil {
-                        do {
-                            let places = dreams[index].core?.places ?? []
-                            let emotions = dreams[index].core?.emotions ?? []
-                            let hasUsableProfileImage = profileImageData.flatMap(UIImage.init(data:))?.cgImage != nil
-                            let includeProfile = imageIncludeMyself && hasUsableProfileImage
-                            let basePrompt: String
-                            if let storedPrompt = dreams[index].imagePrompt,
-                               !storedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                basePrompt = storedPrompt
-                            } else {
-                                basePrompt = try await DreamAnalyzer.shared.generateVisualPrompt(
-                                    transcript: workingTranscript, people: dreams[index].people, places: places
-                                )
-                                updateImagePrompt(for: dreamID, prompt: basePrompt)
-                            }
-                            try Task.checkCancellation()
-                            let styledPrompt = DreamIllustrationPrompt.styled(basePrompt).joined(separator: ". ")
-                            let data = try await generateImageFromPrompt(prompt: styledPrompt, places: places, emotions: emotions, profileImageData: includeProfile ? profileImageData : nil)
-                            
-                            await MainActor.run {
-                                if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
-                                    dreams[idx].generatedImageData = data
-                                    dreams[idx].imageError = nil
-                                }
-                            }
-                        } catch {
-                            print("Image generation error: \(error)")
-                            await MainActor.run {
-                                if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
-                                    if !DreamFailure.isCancellation(error) {
-                                        dreams[idx].imageError = DreamFailure.imageMessage(for: error)
-                                    }
-                                    persistDream(dreams[idx])
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                var generatedExtras = DreamExtraAnalysis()
-                for try await partialExtra in await DreamAnalyzer.shared.streamExtras(transcript: workingTranscript) {
-                    if Task.isCancelled { return }
-                    
-                    if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                        var currentExtras = generatedExtras
-                        if let s = partialExtra.sentimentScore { currentExtras.sentimentScore = s }
-                        if let nm = partialExtra.isNightmare { currentExtras.isNightmare = nm }
-                        if let l = partialExtra.lucidityScore { currentExtras.lucidityScore = l }
-                        if let v = partialExtra.vividnessScore { currentExtras.vividnessScore = v }
-                        if let c = partialExtra.coherenceScore { currentExtras.coherenceScore = c }
-                        if let a = partialExtra.anxietyLevel { currentExtras.anxietyLevel = a }
-                        generatedExtras = currentExtras
-                        if previousExtras == nil { dreams[index].extras = currentExtras }
-                    }
-                }
-                
-                let repairedExtras = await DreamAnalyzer.shared.ensureExtraFields(current: generatedExtras, transcript: workingTranscript)
-                try Task.checkCancellation()
-                if let index = dreams.firstIndex(where: { $0.id == dreamID }) { dreams[index].extras = repairedExtras }
-                
-                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                    dreams[index].analysisError = nil
-                    dreams[index].needsAnalysis = false
-                    persistDream(dreams[index])
-                }
-                
-                isProcessing = false
-                isAnalyzingFatigue = false
-                Task { await refreshWeeklyInsights() }
-                
-            } catch {
-                if Task.isCancelled { return }
-                print("Analysis failed: \(error)")
-                
-                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
-                    dreams[index].analysisError = DreamFailure.analysisMessage(for: error)
-                    dreams[index].needsAnalysis = true
-                    persistDream(dreams[index])
-                }
-                
-                isProcessing = false
-                isAnalyzingFatigue = false
-            }
+            await performAnalysis(for: dreamID, transcript: transcript, audioURL: audioURL,
+                                  existingFatigue: existingFatigue, generateIllustration: true, progress: nil)
         }
     }
-    
+
+    private func performAnalysis(for dreamID: UUID, transcript: String, audioURL: URL?, existingFatigue: Int?,
+                                 generateIllustration: Bool, progress: Progress?) async {
+        defer { isProcessing = false; isAnalyzingFatigue = false }
+        if let progress {
+            progress.totalUnitCount = 100
+            progress.completedUnitCount = 0
+            progress.localizedDescription = "Analyzing your dream"
+            progress.localizedAdditionalDescription = "Preparing the transcript"
+        }
+        func updateProgress(_ amount: Int64, detail: String) {
+            guard let progress else { return }
+            progress.completedUnitCount = max(progress.completedUnitCount, amount)
+            progress.localizedDescription = "Analyzing your dream"
+            progress.localizedAdditionalDescription = detail
+        }
+        analysisAvailability = availabilityProvider()
+        guard analysisAvailability == .available else {
+            if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                dreams[index].analysisError = analysisAvailability.message
+                dreams[index].needsAnalysis = true
+                persistDream(dreams[index])
+            }
+            updateProgress(100, detail: "Open Dorsal to check analysis availability")
+            return
+        }
+        let previousCore = dreams.first(where: { $0.id == dreamID })?.core
+        let previousExtras = dreams.first(where: { $0.id == dreamID })?.extras
+        do {
+            let workingTranscript = try await DreamAnalyzer.shared.prepareAnalysisTranscript(transcript)
+            updateProgress(5, detail: "Understanding the dream")
+            var generatedCore = DreamCoreAnalysis()
+            let knownPeople = analysisPeople
+            let knownPlaces = analysisPlaces
+            var coreUpdateCount: Int64 = 0
+            for try await partialCore in await DreamAnalyzer.shared.streamCore(transcript: workingTranscript, userName: self.firstName, knownPeople: knownPeople, knownPlaces: knownPlaces) {
+                if Task.isCancelled { return }
+                coreUpdateCount += 1
+                updateProgress(min(35, 5 + coreUpdateCount * 3), detail: "Understanding the dream")
+
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                    var currentCore = generatedCore
+                    if let t = partialCore.title { currentCore.title = t }
+                    if let s = partialCore.summary { currentCore.summary = s }
+                    if let imagePrompt = partialCore.imagePrompt { currentCore.imagePrompt = imagePrompt }
+                    if let e = partialCore.emotion { currentCore.emotion = e }
+                    if let p = partialCore.people { currentCore.people = p }
+                    if let pl = partialCore.places { currentCore.places = pl }
+                    if let em = partialCore.emotions { currentCore.emotions = em }
+                    if let sym = partialCore.symbols { currentCore.symbols = sym }
+                    if let i = partialCore.interpretation { currentCore.interpretation = i }
+                    if let a = partialCore.actionableAdvice { currentCore.actionableAdvice = a }
+
+                    if let toneLabel = partialCore.tone?.label {
+                        currentCore.tone = ToneAnalysis(label: toneLabel, confidence: partialCore.tone?.confidence)
+                    }
+                    generatedCore = currentCore
+                    if previousCore == nil { dreams[index].core = currentCore }
+                }
+            }
+
+            var repairedCore = await DreamAnalyzer.shared.ensureCoreFields(current: generatedCore, transcript: workingTranscript)
+            repairedCore.people = DreamEntityCanonicalizer.canonicalize(repairedCore.people ?? [], linkedNames: linkedPeople, historicalNames: knownPeople)
+            repairedCore.places = DreamEntityCanonicalizer.canonicalize(repairedCore.places ?? [], linkedNames: [], historicalNames: knownPlaces)
+            try Task.checkCancellation()
+            updateProgress(40, detail: "Analyzing voice and emotions")
+            if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                dreams[index].core = repairedCore
+                dreams[index].imagePrompt = repairedCore.imagePrompt ?? dreams[index].imagePrompt
+                persistDream(dreams[index])
+            }
+
+            var fatigueScore = 0
+            await MainActor.run {
+                 withAnimation { self.isAnalyzingFatigue = true }
+            }
+
+            if let existing = existingFatigue, existing > 0 {
+                fatigueScore = existing
+            } else if let url = audioURL {
+                do {
+                    fatigueScore = try await DreamAnalyzer.shared.analyzeVocalFatigue(audioURL: url)
+                } catch {
+                    print("CoreML failed, falling back to text analysis: \(error)")
+                    fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: workingTranscript)
+                }
+            } else {
+                fatigueScore = await DreamAnalyzer.shared.estimateFallbackFatigue(transcript: workingTranscript)
+            }
+
+            await MainActor.run {
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                    dreams[index].voiceFatigue = fatigueScore
+                    persistDream(dreams[index])
+                }
+                withAnimation { self.isAnalyzingFatigue = false }
+            }
+
+            if generateIllustration { await checkImageGenerationSupport() }
+            if generateIllustration,
+               let index = dreams.firstIndex(where: { $0.id == dreamID }),
+               let _ = dreams[index].core?.summary {
+                if isImageGenerationAvailable && dreams[index].generatedImageData == nil {
+                    do {
+                        let places = dreams[index].core?.places ?? []
+                        let emotions = dreams[index].core?.emotions ?? []
+                        let hasUsableProfileImage = profileImageData.flatMap(UIImage.init(data:))?.cgImage != nil
+                        let includeProfile = imageIncludeMyself && hasUsableProfileImage
+                        let basePrompt: String
+                        if let storedPrompt = dreams[index].imagePrompt,
+                           !storedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            basePrompt = storedPrompt
+                        } else {
+                            basePrompt = try await DreamAnalyzer.shared.generateVisualPrompt(
+                                transcript: workingTranscript, people: dreams[index].people, places: places
+                            )
+                            updateImagePrompt(for: dreamID, prompt: basePrompt)
+                        }
+                        try Task.checkCancellation()
+                        let styledPrompt = DreamIllustrationPrompt.styled(basePrompt).joined(separator: ". ")
+                        let data = try await generateImageFromPrompt(prompt: styledPrompt, places: places, emotions: emotions, profileImageData: includeProfile ? profileImageData : nil)
+
+                        await MainActor.run {
+                            if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
+                                dreams[idx].generatedImageData = data
+                                dreams[idx].imageError = nil
+                            }
+                        }
+                    } catch {
+                        print("Image generation error: \(error)")
+                        await MainActor.run {
+                            if let idx = dreams.firstIndex(where: { $0.id == dreamID }) {
+                                if !DreamFailure.isCancellation(error) {
+                                    dreams[idx].imageError = DreamFailure.imageMessage(for: error)
+                                }
+                                persistDream(dreams[idx])
+                            }
+                        }
+                    }
+                }
+            }
+
+            updateProgress(60, detail: "Finding recurring themes")
+            var generatedExtras = DreamExtraAnalysis()
+            var extrasUpdateCount: Int64 = 0
+            for try await partialExtra in await DreamAnalyzer.shared.streamExtras(transcript: workingTranscript) {
+                if Task.isCancelled { return }
+                extrasUpdateCount += 1
+                updateProgress(min(95, 60 + extrasUpdateCount * 4), detail: "Finding recurring themes")
+
+                if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                    var currentExtras = generatedExtras
+                    if let s = partialExtra.sentimentScore { currentExtras.sentimentScore = s }
+                    if let nm = partialExtra.isNightmare { currentExtras.isNightmare = nm }
+                    if let l = partialExtra.lucidityScore { currentExtras.lucidityScore = l }
+                    if let v = partialExtra.vividnessScore { currentExtras.vividnessScore = v }
+                    if let c = partialExtra.coherenceScore { currentExtras.coherenceScore = c }
+                    if let a = partialExtra.anxietyLevel { currentExtras.anxietyLevel = a }
+                    generatedExtras = currentExtras
+                    if previousExtras == nil { dreams[index].extras = currentExtras }
+                }
+            }
+
+            let repairedExtras = await DreamAnalyzer.shared.ensureExtraFields(current: generatedExtras, transcript: workingTranscript)
+            try Task.checkCancellation()
+            if let index = dreams.firstIndex(where: { $0.id == dreamID }) { dreams[index].extras = repairedExtras }
+
+            if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                dreams[index].analysisError = nil
+                dreams[index].needsAnalysis = false
+                persistDream(dreams[index])
+            }
+            updateProgress(100, detail: "Your dream is ready in Dorsal")
+
+            isProcessing = false
+            isAnalyzingFatigue = false
+            if progress == nil {
+                Task { await refreshWeeklyInsights() }
+            }
+
+        } catch {
+            if Task.isCancelled { return }
+            print("Analysis failed: \(error)")
+
+            if let index = dreams.firstIndex(where: { $0.id == dreamID }) {
+                dreams[index].analysisError = DreamFailure.analysisMessage(for: error)
+                dreams[index].needsAnalysis = true
+                persistDream(dreams[index])
+            }
+            updateProgress(100, detail: "Your saved dream is ready to retry in Dorsal")
+
+            isProcessing = false
+            isAnalyzingFatigue = false
+        }
+    }
+
     @discardableResult
     func persistDream(_ dream: Dream) -> Bool {
         unsavedDreamIDs.insert(dream.id)
@@ -1612,6 +1705,7 @@ class DreamStore: NSObject, ObservableObject {
         let values = NSUbiquitousKeyValueStore.default
         let existingDate = values.double(forKey: "latestDreamWidget.date")
         guard dream.date.timeIntervalSince1970 >= existingDate else { return }
+        cacheLatestDreamWidgetImage(dream.generatedImageData)
         let generatedTitle = dream.core?.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let title = generatedTitle.isEmpty ? "Saved Dream" : generatedTitle
         values.set(title, forKey: "latestDreamWidget.title")
@@ -1619,6 +1713,41 @@ class DreamStore: NSObject, ObservableObject {
         values.set(dream.date.timeIntervalSince1970, forKey: "latestDreamWidget.date")
         values.set(dream.id.uuidString, forKey: "latestDreamWidget.id")
         WidgetCenter.shared.reloadTimelines(ofKind: "com.kelvinmathew.dorsal.LatestDream")
+        WidgetCenter.shared.reloadTimelines(ofKind: "com.kelvinmathew.dorsal.LatestDreamImage")
+    }
+
+    private func cacheLatestDreamWidgetImage(_ imageData: Data?) {
+        let groupIdentifier = "group.com.kelvinmathew.dorsal"
+        guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupIdentifier) else {
+            return
+        }
+        let imageURL = container.appendingPathComponent("latest-dream-widget.jpg")
+        guard let imageData, let image = UIImage(data: imageData) else {
+            try? FileManager.default.removeItem(at: imageURL)
+            return
+        }
+
+        let sourceWidth = CGFloat(image.cgImage?.width ?? Int(image.size.width * image.scale))
+        let sourceHeight = CGFloat(image.cgImage?.height ?? Int(image.size.height * image.scale))
+        let resizeFactor = min(1, 512 / max(sourceWidth, sourceHeight))
+        let targetSize = CGSize(width: max(1, (sourceWidth * resizeFactor).rounded()),
+                                height: max(1, (sourceHeight * resizeFactor).rounded()))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let thumbnail = UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+
+        guard let thumbnailData = thumbnail.jpegData(compressionQuality: 0.72), thumbnailData.count < 450_000 else {
+            try? FileManager.default.removeItem(at: imageURL)
+            return
+        }
+        do {
+            try thumbnailData.write(to: imageURL, options: .atomic)
+        } catch {
+            print("Latest dream widget image cache failed: \(error)")
+        }
     }
 
     private func indexDreamInSpotlight(_ dream: Dream) {
@@ -1666,7 +1795,21 @@ class DreamStore: NSObject, ObservableObject {
             strategicAdvice: insight.strategicAdvice ?? ""
         )
         context.insert(saved)
-        try? context.save()
+        do {
+            try context.save()
+            publishWeeklyInsightForWidget(insight)
+        } catch {
+            print("Weekly insight save failed: \(error)")
+        }
+    }
+
+    private func publishWeeklyInsightForWidget(_ insight: WeeklyInsightResult) {
+        let values = NSUbiquitousKeyValueStore.default
+        values.set(insight.periodOverview ?? "", forKey: "weeklyInsightWidget.overview")
+        values.set(insight.dominantTheme ?? "", forKey: "weeklyInsightWidget.theme")
+        values.set(insight.mentalHealthTrend ?? "", forKey: "weeklyInsightWidget.trend")
+        values.set(insight.strategicAdvice ?? "", forKey: "weeklyInsightWidget.advice")
+        WidgetCenter.shared.reloadTimelines(ofKind: "com.kelvinmathew.dorsal.WeeklyInsight")
     }
     
     func refreshWeeklyInsights() async {
