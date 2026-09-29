@@ -130,8 +130,12 @@ struct SettingsView: View {
                         showingCustomizationPaywall = true
                     }
                 }
-            ))
-            Text("Gold is free. Other themes unlock with Customization.")
+            ), canSelectTheme: { purchaseManager.canUseTheme($0) }, onLockedTheme: { themeID in
+                guard !showingCustomizationPaywall else { return }
+                pendingPremiumThemeID = themeID
+                showingCustomizationPaywall = true
+            })
+            Text("Gold is free. Other themes require a subscription.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
@@ -181,7 +185,7 @@ struct SettingsView: View {
                         .pickerStyle(.menu)
                         .colorScheme(.dark)
                     }
-                    Text("Animation is free. Other image styles unlock with Customization.")
+                    Text("Dreamlike is free. Other image styles require a subscription.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -321,7 +325,7 @@ struct SettingsView: View {
             }
             .padding()
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-            
+
             Button {
                 dismiss()
                 store.resetOnboarding()
@@ -336,6 +340,33 @@ struct SettingsView: View {
                 }
                 .foregroundStyle(.white)
             }
+            .padding()
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+
+            if let message = purchaseManager.message {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            }
+
+            Button {
+                Task { _ = await purchaseManager.restorePurchases() }
+            } label: {
+                HStack {
+                    if purchaseManager.isRestoring {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text("Restore Purchases")
+                    Spacer()
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .disabled(purchaseManager.isRestoring)
             .padding()
             .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
         }

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000003 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000002 /* RevenueCat */; };
+		A10000000000000000000005 /* RevenueCatUI in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000004 /* RevenueCatUI */; };
 		D027C000000000000000000B /* DorsalControlBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000002 /* DorsalControlBundle.swift */; };
 		D027C000000000000000000C /* RecordDreamControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000003 /* RecordDreamControl.swift */; };
 		D027C000000000000000000D /* OpenDorsalIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D027C0000000000000000004 /* OpenDorsalIntent.swift */; };
@@ -93,6 +94,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000003 /* RevenueCat in Frameworks */,
+				A10000000000000000000005 /* RevenueCatUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -170,6 +172,7 @@
 			name = Dorsal;
 			packageProductDependencies = (
 				A10000000000000000000002 /* RevenueCat */,
+				A10000000000000000000004 /* RevenueCatUI */,
 			);
 			productName = Dorsal;
 			productReference = 5DC873BA2FC3F36D005A4F74 /* Dorsal.app */;
@@ -670,7 +673,7 @@
 			repositoryURL = "https://github.com/RevenueCat/purchases-ios.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 5.27.1;
+				minimumVersion = 5.91.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -680,6 +683,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A10000000000000000000001 /* XCRemoteSwiftPackageReference "purchases-ios" */;
 			productName = RevenueCat;
+		};
+		A10000000000000000000004 /* RevenueCatUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000001 /* XCRemoteSwiftPackageReference "purchases-ios" */;
+			productName = RevenueCatUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
