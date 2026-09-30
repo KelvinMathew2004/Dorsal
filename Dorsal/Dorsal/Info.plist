@@ -4,31 +4,33 @@
 <dict>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Dorsal only reads sleep information you allow it to access; it does not write or update Apple Health data.</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
 			<string>com.kelvinmathew.dorsal.widget</string>
 			<key>CFBundleURLSchemes</key>
-			<array><string>dorsal</string></array>
-		</dict>
-	</array>
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>com.KelvinMathew.Dorsal.profile-entity</string>
-			<key>UTTypeConformsTo</key>
-			<array><string>public.data</string></array>
-			<key>UTTypeDescription</key>
-			<string>Dorsal Profile Item</string>
+			<array>
+				<string>dorsal</string>
+			</array>
 		</dict>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Dorsal Profile Item</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.KelvinMathew.Dorsal.profile-entity</string>
+		</dict>
 	</array>
 </dict>
 </plist>
