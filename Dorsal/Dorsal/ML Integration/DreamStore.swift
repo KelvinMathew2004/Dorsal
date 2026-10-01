@@ -120,10 +120,24 @@ class DreamStore: NSObject, ObservableObject {
     @Published var profileImageData: Data? {
         didSet {
             saveProfileImageToDisk(data: profileImageData)
+            removeProfileSubjectCutoutFromDisk()
             if profileImageData == nil {
                 clearProfileColor()
             }
         }
+    }
+
+    /// A cached, transparent person cutout derived from the profile photo.
+    /// Created on demand for Image Playground and kept beside the source photo.
+    func profileSubjectCutoutForImagePlayground() async -> Data? {
+        guard let sourceData = profileImageData else { return nil }
+        let url = getDocumentsDirectory().appendingPathComponent("profile_subject_cutout.png")
+        if let cachedData = try? Data(contentsOf: url) { return cachedData }
+
+        guard let cutout = await ProfileSubjectCutoutService.shared.cutout(from: sourceData),
+              profileImageData == sourceData else { return nil }
+        try? cutout.write(to: url, options: .atomic)
+        return cutout
     }
     
     @AppStorage("themeID") var currentThemeID: String = "gold" {
@@ -148,7 +162,7 @@ class DreamStore: NSObject, ObservableObject {
         }
     }
 
-    @AppStorage("imageSceneMode") var imageSceneMode: String = ImageScenePreference.dreamScene {
+    @AppStorage("imageSceneMode") var imageSceneMode: String = ImageScenePreference.settingOnly {
         didSet {
             objectWillChange.send()
             NSUbiquitousKeyValueStore.default.set(imageSceneMode, forKey: "imageSceneMode")
@@ -689,6 +703,11 @@ class DreamStore: NSObject, ObservableObject {
     private func loadProfileImageFromDisk() -> Data? {
         let url = getDocumentsDirectory().appendingPathComponent("profile_image.png")
         return try? Data(contentsOf: url)
+    }
+
+    private func removeProfileSubjectCutoutFromDisk() {
+        let url = getDocumentsDirectory().appendingPathComponent("profile_subject_cutout.png")
+        try? FileManager.default.removeItem(at: url)
     }
     
     // MARK: - SwiftData CloudKit Fetching

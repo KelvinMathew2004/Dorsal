@@ -91,16 +91,21 @@ struct DreamDetailView: View {
         store.isAnalyzingFatigue && liveDream.id == store.currentDreamID
     }
     
-    private func presentImagePlayground() {
+    private func presentImagePlayground() async {
         guard #available(iOS 27, *), supportsImagePlayground else { return }
         let basePrompt = preparedImagePlaygroundPrompt
             ?? liveDream.imagePrompt
             ?? liveDream.core?.imagePrompt
         guard let basePrompt,
               !basePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        var subjectCutoutData: Data?
+        if ImageScenePreference.includesPeople {
+            subjectCutoutData = await store.profileSubjectCutoutForImagePlayground()
+        }
         illustrationRequest = DreamIllustrationRequest(
             promptTags: DreamIllustrationPrompt.styled(basePrompt),
             profileImageData: store.profileImageData,
+            profileSubjectCutoutData: subjectCutoutData,
             styleChoice: DreamIllustrationPrompt.activeStyleChoice
         )
         showImagePlayground = true
@@ -179,11 +184,11 @@ struct DreamDetailView: View {
                         if supportsImagePlayground, !liveDream.rawTranscript.isEmpty {
                             if liveDream.generatedImageData != nil {
                                 Button("Regenerate Illustration", systemImage: "apple.image.playground") {
-                                    presentImagePlayground()
+                                    Task { await presentImagePlayground() }
                                 }
                             } else {
                                 Button("Create Illustration", systemImage: "apple.image.playground") {
-                                    presentImagePlayground()
+                                    Task { await presentImagePlayground() }
                                 }
                             }
                         }
@@ -207,7 +212,7 @@ struct DreamDetailView: View {
                     if !store.isProcessing && selectedInsight == nil {
                         if supportsImagePlayground, !liveDream.rawTranscript.isEmpty {
                             Button {
-                                presentImagePlayground()
+                                Task { await presentImagePlayground() }
                             } label: {
                                 Image(systemName: "apple.image.playground")
                             }
@@ -349,7 +354,7 @@ struct DreamDetailView: View {
                 Text(message).font(.subheadline)
                 if #available(iOS 27, *) {
                     if supportsImagePlayground {
-                        Button("Create in Image Playground") { presentImagePlayground() }
+                        Button("Create in Image Playground") { Task { await presentImagePlayground() } }
                     }
                 } else {
                     Button("Retry Illustration") { store.regenerateDreamImage(liveDream) }
@@ -517,7 +522,7 @@ struct DreamDetailView: View {
                    image == nil, liveDream.imageError == nil,
                    !isProcessingThisDream, !liveDream.rawTranscript.isEmpty {
                     Button {
-                        presentImagePlayground()
+                        Task { await presentImagePlayground() }
                     } label: {
                         Label("Create Illustration", systemImage: "apple.image.playground")
                             .frame(maxWidth: .infinity)

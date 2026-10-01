@@ -8,12 +8,12 @@ struct DreamIllustrationRequest {
     let profileImage: UIImage?
     let usesFixedIllustrationStyle: Bool
 
-    init(promptTags: [String], profileImageData: Data?, styleChoice: String = "custom") {
+    init(promptTags: [String], profileImageData: Data?, profileSubjectCutoutData: Data? = nil, styleChoice: String = "custom") {
         self.promptTags = promptTags
         self.usesFixedIllustrationStyle = styleChoice == "warm"
         let includesMyself = ImageScenePreference.includesPeople
         if includesMyself {
-            self.profileImage = profileImageData.flatMap(UIImage.init(data:))
+            self.profileImage = (profileSubjectCutoutData ?? profileImageData).flatMap(UIImage.init(data:))
         } else {
             self.profileImage = nil
         }
@@ -40,6 +40,7 @@ struct DreamIllustrationRequest {
     var options: ImagePlaygroundOptions {
         var options = ImagePlaygroundOptions()
         options.creationStrategy = .generateNew
+        options.sizeSpecification = .closest(to: CGSize(width: 1024, height: 1024))
         let includesMyself = ImageScenePreference.includesPeople
         options.personalization = (includesMyself && profileImage != nil) ? .enabled : .disabled
         return options

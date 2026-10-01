@@ -9,6 +9,6 @@ enum ImageScenePreference {
             return mode == dreamScene
         }
         // Preserve the preference saved by earlier versions.
-        return UserDefaults.standard.object(forKey: "imageIncludeMyself") as? Bool ?? true
+        return UserDefaults.standard.object(forKey: "imageIncludeMyself") as? Bool ?? false
     }
 }
