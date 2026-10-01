@@ -276,39 +276,8 @@ struct WeeklyInsightsView: View {
                 PreviewChartCard(content: {
                     Chart {
                         ForEach(data) { point in
-                            // 1. ANXIETY AREA (Background)
-                            AreaMark(
-                                x: .value("Date", point.date, unit: .day),
-                                yStart: .value("Baseline", 0),
-                                yEnd: .value("Anxiety", point.anxiety),
-                                series: .value("Metric", "Anxiety")
-                            )
-                            .interpolationMethod(.linear)
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [Color.pink.opacity(0.5), Color.pink.opacity(0)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-
-                            // 2. SENTIMENT AREA (Background)
-                            AreaMark(
-                                x: .value("Date", point.date, unit: .day),
-                                yStart: .value("Baseline", 0),
-                                yEnd: .value("Sentiment", point.sentiment),
-                                series: .value("Metric", "Sentiment")
-                            )
-                            .interpolationMethod(.linear)
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [Color.green.opacity(0.5), Color.green.opacity(0)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-
-                            // 3. ANXIETY LINE (Foreground)
+                            // Keep the metrics as independent lines; filled areas from
+                            // zero overlap and can look like a stacked total.
                             LineMark(
                                 x: .value("Date", point.date, unit: .day),
                                 y: .value("Anxiety", point.anxiety),
@@ -322,7 +291,6 @@ struct WeeklyInsightsView: View {
                             }
                             .foregroundStyle(Color.pink.gradient)
 
-                            // 4. SENTIMENT LINE (Foreground)
                             LineMark(
                                 x: .value("Date", point.date, unit: .day),
                                 y: .value("Sentiment", point.sentiment),

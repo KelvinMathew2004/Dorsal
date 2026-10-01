@@ -342,7 +342,7 @@ private struct QuestionCard: View {
         .padding(24)
         .frame(maxWidth: 520)
         .glassEffect(
-            .clear.tint(isSatisfied ? Color.green.opacity(0.15) : Color.black.opacity(0.7)),
+            .clear.tint(isSatisfied ? Color.green.opacity(0.15) : Color.black.opacity(0.0)),
             in: RoundedRectangle(cornerRadius: 24)
         )
         .frame(maxWidth: .infinity)

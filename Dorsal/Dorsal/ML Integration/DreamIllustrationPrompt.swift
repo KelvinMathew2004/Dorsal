@@ -2,6 +2,8 @@ import Foundation
 
 nonisolated enum DreamIllustrationPrompt {
     static let defaultStyle = ["Whimsical stylized 3D animation", "Rounded friendly forms and expressive faces", "Soft playful proportions", "Vibrant warm colors", "Gentle storybook lighting", "Stable wide composition", "No text or lettering"]
+    // Recovered from the original animation style prompt in commit 1808bfa.
+    static let pixarStyle = ["High quality 3D animated illustration", "Detailed 3D rendering", "Stable composition", "Exceptional cinematic lighting"]
     static let cinematicStyle = ["Photorealistic cinematic shot", "Epic environmental concept art", "Ultra-detailed textures", "Cinematic framing with lighting that follows the dream's emotional tone: soft diffused light for gentle or lighthearted scenes, harder directional light and deeper contrast for tense or ominous scenes", "Deep depth of field", "Grounded realism", "No text or lettering"]
     static let warmStyle = [
         "Fantastical, luminous dream imagery with a subtly unreal atmosphere",
@@ -43,6 +45,7 @@ nonisolated enum DreamIllustrationPrompt {
         switch styleChoice {
         case "cinematic": chosenStyle = cinematicStyle
         case "warm":      chosenStyle = warmStyle
+        case "pixar":     chosenStyle = pixarStyle
         case "comic":     chosenStyle = comicStyle
         case "ghibli":    chosenStyle = ghibliStyle
         case "cyberpunk": chosenStyle = cyberpunkStyle

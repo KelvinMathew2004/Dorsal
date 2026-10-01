@@ -10,6 +10,9 @@ nonisolated enum DreamEntityCanonicalizer {
         for raw in detected {
             let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
+            // The narrator is referenced in image prompts as "the dreamer", but is
+            // not a separate person entity in the dream's people list.
+            guard !narratorAliases.contains(normalized(name)) else { continue }
             // Only canonicalize against explicitly linked contacts (high threshold + token matching).
             // historicalNames are intentionally ignored to prevent cross-dream contamination.
             let match = uniqueMatch(for: name, in: linkedNames, threshold: 0.78, allowContainingToken: true)
@@ -64,4 +67,9 @@ nonisolated enum DreamEntityCanonicalizer {
             .unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || CharacterSet.whitespaces.contains($0) }))
             .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
+
+    private static let narratorAliases: Set<String> = [
+        "dreamer", "the dreamer", "narrator", "the narrator", "i", "me", "myself",
+        "the person dreaming", "the person having the dream"
+    ]
 }

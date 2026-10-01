@@ -1003,40 +1003,6 @@ struct TrendDetailView: View {
         return DetailedChartCard {
             Chart {
                 ForEach(anxietyPoints) { point in
-                    AreaMark(
-                        x: .value("Date", point.date, unit: unit),
-                        yStart: .value("Baseline", 0),
-                        yEnd: .value("Anxiety", point.value),
-                        series: .value("Metric", "Anxiety")
-                    )
-                    .interpolationMethod(.linear)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.pink.opacity(0.5), Color.pink.opacity(0)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                }
-                
-                ForEach(sentimentPoints) { point in
-                    AreaMark(
-                        x: .value("Date", point.date, unit: unit),
-                        yStart: .value("Baseline", 0),
-                        yEnd: .value("Sentiment", point.value),
-                        series: .value("Metric", "Sentiment")
-                    )
-                    .interpolationMethod(.linear)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.green.opacity(0.5), Color.green.opacity(0)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                }
-                
-                ForEach(anxietyPoints) { point in
                     LineMark(
                         x: .value("Date", point.date, unit: unit),
                         y: .value("Anxiety", point.value),

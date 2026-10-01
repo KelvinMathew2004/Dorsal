@@ -13,9 +13,24 @@ struct DreamIllustrationRequest {
         self.usesAnimationStyle = styleChoice == "warm"
         let includesMyself = ImageScenePreference.includesPeople
         if includesMyself {
-            self.profileImage = (profileSubjectCutoutData ?? profileImageData).flatMap(UIImage.init(data:))
+            self.profileImage = (profileSubjectCutoutData ?? profileImageData)
+                .flatMap(UIImage.init(data:))
+                .map(Self.squareCanvas)
         } else {
             self.profileImage = nil
+        }
+    }
+
+    /// Gives Image Playground a square source while preserving the full subject.
+    /// Transparent padding avoids cropping the person's head or body to fill a square.
+    private static func squareCanvas(_ image: UIImage) -> UIImage {
+        let side = max(image.size.width, image.size.height)
+        guard side > 0 else { return image }
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side))
+        return renderer.image { _ in
+            let origin = CGPoint(x: (side - image.size.width) / 2, y: (side - image.size.height) / 2)
+            image.draw(in: CGRect(origin: origin, size: image.size))
         }
     }
 

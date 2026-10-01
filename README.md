@@ -1,73 +1,66 @@
 # Dorsal
 
-**Dorsal** is an intelligent, privacy-first dream journaling app that goes beyond simple memory retention. By analyzing dream content and the user's vocal fatigue during recording, Dorsal bridges the gap between abstract dreams and actionable mental and physical health metrics.
+Dorsal is a voice-first dream journal for capturing dreams soon after waking, exploring recurring themes, and reviewing changes over time. It combines on-device Apple frameworks with an optional iCloud-backed journal and optional Apple Health sleep context.
 
----
+## Features
 
-## 🌟 The Problem
+### Record and keep dream entries
 
-Most dream journaling apps are mere novelties. However, research suggests dreams act as mental simulations where humans practice confronting scenarios they fear in waking life. **Dorsal** aims to give users a glimpse into their subconscious to reveal unaddressed emotional issues, while simultaneously monitoring physical sleep deprivation.
+- Record, pause, resume, and save spoken dreams.
+- Review the transcript, listen to the recording, and export audio.
+- Keep a journal of dream entries with dates, titles, summaries, bookmarks, and generated images.
+- Search dream transcripts and organize people and places mentioned in entries.
+- Retry transcription when a recording was saved but speech recognition could not finish.
 
----
+### Explore analysis and patterns
 
-## ✨ Key Features
+- Analyze dream narratives with Apple’s on-device Foundation Models when available.
+- Review summaries, interpretations, emotions, recurring people and places, symbols, and reflective advice.
+- Track sentiment, anxiety, lucidity, vividness, coherence, nightmares, vocal fatigue, and other journal metrics over time.
+- Compare anxiety and sentiment as separate chart lines, with weekly and longer-term views.
+- Generate weekly summaries of themes and trends.
+- Treat these as reflective journaling signals, not medical assessments or diagnoses.
 
-### Intelligent Dream Analysis
-Leverages Apple’s on-device Foundational Models to analyze the transcribed dream and extract deep-rooted emotional insights and reflections.
+### Create dream images
 
-### Vocal Fatigue Detection
-Uses a custom-trained CoreML model to analyze the user’s voice during recording and assign a highly accurate, data-driven sleep fatigue score.
+- Generate images from an analyzed dream or create one from its detail screen.
+- On iOS 27, choose a prompt style: Dreamlike, Animation, Lofi, Comic, Anime, Watercolor, Gaming, Sci-Fi, Realistic, or Noir. iOS 26 keeps the Dreamlike default.
+- On iOS 27, open a prefilled Image Playground sheet and choose whether the scene should include people.
+- When a profile subject is available for a people-focused scene, Dorsal can extract the person from the profile photo and place the cutout on a square transparent canvas before passing it to Image Playground.
+- iOS 26 uses the supported automatic Image Playground generation path; iOS 27 uses the system creation sheet.
 
-### Dynamic Dream Visualization
-Integrates the Image Playground API to generate vivid, personalized visual representations of the user’s dreams based on AI-generated safe prompts.
+### Review sleep and voice trends
 
-### Immersive Metal UI
-Features custom-written Metal shaders to render fluid aurora borealis and warp star effects during onboarding and audio recording.
+- Optionally read sleep data from Apple Health and show sleep stages alongside a dream.
+- Use available sleep context in sleep-related questions without adding it to saved dream analysis.
+- Estimate vocal fatigue from the recording with the included Core ML model; when audio analysis is unavailable, Dorsal can estimate from the transcript.
+- Explore the recording screen’s audio-reactive aurora visualizer, with a mirrored aurora reflection and water texture.
 
-### Liquid Glass Aesthetics
-Utilizes a highly accessible “Liquid Glass” design to provide stunning, morphing visual transitions.
+### Use system integrations
 
----
+- Use Siri and Shortcuts to record a dream, open the latest or a selected dream, search entries, open app sections, check trends, or get a recent dream summary.
+- Use the recorder control to open Dorsal’s recording screen.
+- Sync journal data and preferences through Apple’s iCloud services when available.
 
-## 🔒 Privacy by Design
+## Privacy and data
 
-Because dreams contain highly sensitive psychological and health information, privacy is a non-negotiable cornerstone of **Dorsal**.
+- Dream recording, transcription, and analysis use Apple platform frameworks and on-device models where supported.
+- Journal persistence uses SwiftData with CloudKit synchronization when the user’s iCloud account and app configuration permit it. Dorsal does not require a separate Dorsal account.
+- Apple Health access is optional and read-only. Sleep information is fetched only when the user enables the feature; it is not included in saved dream analysis or synced journal records.
+- Image Playground is provided by Apple’s system framework. Generated images and likeness are subject to Apple’s generation behavior and restrictions.
 
-- **100% On-Device:** All analysis, transcription, and image generation runs locally.
-- **No Network Calls:** Dorsal does not route any personal health data to third-party servers.
-- **No Logins:** The app is completely free to use and requires no account creation. Your data remains entirely your own.
+## Requirements
 
----
+- iOS 26.0 or later; the iOS 27-specific scene controls and Image Playground sheet require iOS 27.
+- A device that supports Apple Intelligence and the relevant on-device models for AI analysis and image generation.
+- Optional Apple Health access for sleep data.
+- Xcode and an Apple development account to build and run the project.
 
-## 🛠️ Technical Stack
+## Build
 
-**UI Framework**
-- SwiftUI
+Open `Dorsal/Dorsal.xcodeproj` in Xcode, select the Dorsal app scheme, choose a compatible iPhone or simulator, and build. Some device capabilities, including HealthKit data, on-device model availability, Image Playground, and iCloud synchronization, depend on the selected device, OS version, account, and project signing configuration.
 
-**Graphics & Rendering**
-- Custom Metal Shaders
+## Project notes
 
-**Machine Learning**
-- CoreML  
-- Apple Foundational Models  
-- NLP Tagging  
-
-**Audio**
-- SpeechAnalyzer API  
-- AVFoundation
-
-**Visual Generation**
-- Image Playground API
-
----
-
-## 📱 System Requirements & Setup
-
-To fully experience **Dorsal**, the following environment is required:
-
-- **OS:** iOS 26 or iPadOS 26  
-- **Apple Intelligence:** Must be enabled and fully downloaded.
-
----
-
-Thank you for exploring **Dorsal**!
+- `Documentation/RecordingReliability.md` describes recording, transcription, and recovery behavior.
+- `Documentation/UpgradeStatus.md` documents iOS 26 and iOS 27 integrations and compatibility details.

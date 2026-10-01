@@ -58,7 +58,7 @@ struct DreamCoreAnalysis: Codable, Sendable, Hashable {
     @Guide(description: "A concise, image-ready description of one visual moment: what the dreamer and other described people are doing, the main setting, and the important visible objects. Choose a fitting cinematic viewpoint and arrange key elements clearly across foreground, middle ground, and background. Identify the narrator as 'the dreamer' and other people by their stated relationship or role (for example, 'the dreamer's grandmother'), not by personal name. Keep it to 1-2 short sentences, about as concise as the dream summary. Do not tell a story, explain symbolism, invent appearance or events, or include words meant to appear in the image.")
     var imagePrompt: String?
 
-    @Guide(description: "List of people, characters, or animals. Keep names intact. If an adjective is tied to a noun, extract the full modifier and noun together (e.g. 'old man', 'shady figure').")
+    @Guide(description: "List only other people, characters, or animals explicitly present in the dream. Do not include the narrator/person having the dream (the dreamer, 'I', 'me', 'myself', or narrator) as a person. Keep names intact. If an adjective is tied to another person or animal, extract the full modifier and noun together (e.g. 'old man', 'shady figure').")
     var people: [String]?
 
     @Guide(description: "List of locations or settings. Keep full names or descriptive terms together (e.g. 'high school', 'grandma house').")
