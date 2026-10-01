@@ -108,6 +108,11 @@ struct DreamDetailView: View {
             profileSubjectCutoutData: subjectCutoutData,
             styleChoice: DreamIllustrationPrompt.activeStyleChoice
         )
+        do {
+            try await Task.sleep(for: .milliseconds(250))
+        } catch {
+            return
+        }
         showImagePlayground = true
     }
 
@@ -228,9 +233,12 @@ struct DreamDetailView: View {
                 }
             }
         }
-        .modifier(DreamIllustrationSheet(isPresented: $showImagePlayground, request: illustrationRequest) { url in
-            store.keepCreatedImage(for: liveDream, from: url)
-        })
+        .background {
+            Color.clear
+                .modifier(DreamIllustrationSheet(isPresented: $showImagePlayground, request: illustrationRequest) { url in
+                    store.keepCreatedImage(for: liveDream, from: url)
+                })
+        }
 
         .task { await store.refreshAvailability() }
         .task(id: liveDream.id) {

@@ -3,7 +3,15 @@ import Foundation
 nonisolated enum DreamIllustrationPrompt {
     static let defaultStyle = ["Whimsical stylized 3D animation", "Rounded friendly forms and expressive faces", "Soft playful proportions", "Vibrant warm colors", "Gentle storybook lighting", "Stable wide composition", "No text or lettering"]
     static let cinematicStyle = ["Photorealistic cinematic shot", "Epic environmental concept art", "Ultra-detailed textures", "Cinematic framing with lighting that follows the dream's emotional tone: soft diffused light for gentle or lighthearted scenes, harder directional light and deeper contrast for tense or ominous scenes", "Deep depth of field", "Grounded realism", "No text or lettering"]
-    static let warmStyle = ["Luminous, dreamlike 2D storybook illustration with softly painted surfaces", "Rich warm colors and a gentle golden-hour glow, balanced to suit the scene", "Atmospheric depth, delicate haze, and softly radiant highlights", "Subtle dreamlike touches only where the dream describes them", "Preserve the dream's actual people, setting, action, and objects", "No text or lettering"]
+    static let warmStyle = [
+        "Fantastical, luminous dream imagery with a subtly unreal atmosphere",
+        "Dreamlike distortions of scale and perspective, with impossible transitions",
+        "Softly stylized animated forms and expressive shapes, gently unreal rather than photorealistic",
+        "Rich, expressive colors and luminous, otherworldly light balanced to the scene's mood",
+        "Atmospheric depth, delicate haze, and softly radiant highlights",
+        "Preserve the dream's actual people, setting, action, and objects; stylize them without inventing unrelated elements",
+        "No text or lettering"
+    ]
     static let comicStyle = ["Epic highly detailed modern inked illustration", "Clean sharp black ink outlines", "Deep dramatic high-contrast shadows", "Vivid cinematic digital coloring with rich gradients", "Intense ambient rim lighting", "Ultra-premium polished graphic art style", "Full of kinetic energy", "Dynamic forced perspective and foreshortening", "No text or lettering"]
     static let ghibliStyle = ["1990s Japanese cel animation", "Matte gouache background textures", "Delicate hand-drawn linework", "Color palette of mossy greens and warm earth tones", "Soft diffused daylight", "No text or lettering"]
     static let cyberpunkStyle = ["Cyberpunk sci-fi aesthetic", "Neon-lit environment", "Futuristic high-tech", "Vibrant glowing accents", "Cinematic sci-fi lighting", "No text or lettering"]

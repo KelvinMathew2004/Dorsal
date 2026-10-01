@@ -233,7 +233,8 @@ struct RecordView: View {
             }
             .safeAreaInset(edge: .top) {
                 VStack(spacing: 8) {
-                    if let notice = store.isRecording ? store.transcriptionNotice : store.analysisAvailability.message {
+                    if !store.isFinishingRecording,
+                       let notice = store.isRecording ? store.transcriptionNotice : store.analysisAvailability.message {
                         Text(notice)
                             .font(.footnote)
                             .foregroundStyle(.secondary)

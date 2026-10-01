@@ -6,11 +6,11 @@ import ImagePlayground
 struct DreamIllustrationRequest {
     let promptTags: [String]
     let profileImage: UIImage?
-    let usesFixedIllustrationStyle: Bool
+    let usesAnimationStyle: Bool
 
-    init(promptTags: [String], profileImageData: Data?, profileSubjectCutoutData: Data? = nil, styleChoice: String = "custom") {
+    init(promptTags: [String], profileImageData: Data?, profileSubjectCutoutData: Data? = nil, styleChoice: String = "warm") {
         self.promptTags = promptTags
-        self.usesFixedIllustrationStyle = styleChoice == "warm"
+        self.usesAnimationStyle = styleChoice == "warm"
         let includesMyself = ImageScenePreference.includesPeople
         if includesMyself {
             self.profileImage = (profileSubjectCutoutData ?? profileImageData).flatMap(UIImage.init(data:))
@@ -62,9 +62,8 @@ struct DreamIllustrationSheet: ViewModifier {
                     onCompletion: onCompletion
                 )
                 .imagePlaygroundOptions(request?.options ?? ImagePlaygroundOptions())
-
-            if request?.usesFixedIllustrationStyle == true {
-                sheet.imagePlaygroundGenerationStyle(.illustration, in: [.illustration])
+            if request?.usesAnimationStyle == true {
+                sheet.imagePlaygroundGenerationStyle(.animation, in: [.animation])
             } else {
                 sheet
             }
