@@ -5,6 +5,10 @@ struct SettingsView: View {
     @ObservedObject var store: DreamStore
     @Binding var showOnboarding: Bool
     @Environment(\.dismiss) var dismiss
+    @StateObject private var purchaseManager = RevenueCatManager.shared
+    @State private var showingCustomizationPaywall = false
+    @State private var pendingPremiumStyle: String?
+    @State private var pendingPremiumThemeID: String?
     
     var body: some View {
         NavigationStack {
@@ -44,6 +48,23 @@ struct SettingsView: View {
             } message: {
                 Text("Please enable notifications in Settings to set a daily reminder.")
             }
+            .sheet(isPresented: $showingCustomizationPaywall, onDismiss: {
+                pendingPremiumStyle = nil
+                pendingPremiumThemeID = nil
+            }) {
+                CustomizationPaywallView(manager: purchaseManager) {
+                    if purchaseManager.isPremium, let pendingPremiumStyle {
+                        store.imageGenerationStyle = pendingPremiumStyle
+                    }
+                    if purchaseManager.isPremium, let pendingPremiumThemeID {
+                        store.currentThemeID = pendingPremiumThemeID
+                    }
+                    pendingPremiumStyle = nil
+                    pendingPremiumThemeID = nil
+                    showingCustomizationPaywall = false
+                }
+            }
+            .task { await purchaseManager.refresh() }
         }
     }
     
@@ -98,7 +119,26 @@ struct SettingsView: View {
                 .font(.headline)
                 .foregroundStyle(Theme.secondary)
             
-            ThemeWheelSelector(currentThemeID: $store.currentThemeID)
+            ThemeWheelSelector(currentThemeID: Binding(
+                get: { store.currentThemeID },
+                set: { themeID in
+                    guard !showingCustomizationPaywall else { return }
+                    if purchaseManager.canUseTheme(themeID) {
+                        store.currentThemeID = themeID
+                    } else {
+                        pendingPremiumThemeID = themeID
+                        showingCustomizationPaywall = true
+                    }
+                }
+            ), canSelectTheme: { purchaseManager.canUseTheme($0) }, onLockedTheme: { themeID in
+                guard !showingCustomizationPaywall else { return }
+                pendingPremiumThemeID = themeID
+                showingCustomizationPaywall = true
+            })
+            Text("Gold is free. Other themes require a subscription.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
             
             // NEW: Visualizer Toggle
             Toggle(isOn: $store.isComplexVisualizerEnabled) {
@@ -115,23 +155,39 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 16) {
                 // Style picker — works on iOS 26 too (drives the LLM prompt and tag list)
-                HStack {
-                    Text("Style").foregroundStyle(.white)
-                    Spacer()
-                    Picker("Style", selection: $store.imageGenerationStyle) {
-                        Text("Dreamlike").tag("warm")
-                        Text("Animation").tag("pixar")
-                        Text("Lofi").tag("lofi")
-                        Text("Comic").tag("comic")
-                        Text("Anime").tag("ghibli")
-                        Text("Watercolor").tag("watercolor")
-                        Text("Gaming").tag("arcane")
-                        Text("Sci-Fi").tag("cyberpunk")
-                        Text("Realistic").tag("cinematic")
-                        Text("Noir").tag("noir")
+                if #available(iOS 27, *) {
+                    HStack {
+                        Text("Style").foregroundStyle(.white)
+                        Spacer()
+                        Picker("Style", selection: Binding(
+                            get: { store.imageGenerationStyle },
+                            set: { style in
+                                guard !showingCustomizationPaywall else { return }
+                                if purchaseManager.canUseImageStyle(style) {
+                                    store.imageGenerationStyle = style
+                                } else {
+                                    pendingPremiumStyle = style
+                                    showingCustomizationPaywall = true
+                                }
+                            }
+                        )) {
+                            Text("Dreamlike").tag("warm")
+                            Text("Animation").tag("pixar")
+                            Text("Lofi").tag("lofi")
+                            Text("Comic").tag("comic")
+                            Text("Anime").tag("ghibli")
+                            Text("Watercolor").tag("watercolor")
+                            Text("Gaming").tag("arcane")
+                            Text("Sci-Fi").tag("cyberpunk")
+                            Text("Realistic").tag("cinematic")
+                            Text("Noir").tag("noir")
+                        }
+                        .pickerStyle(.menu)
+                        .colorScheme(.dark)
                     }
-                    .pickerStyle(.menu)
-                    .colorScheme(.dark)
+                    Text("Dreamlike is free. Other image styles require a subscription.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 // Scene picker — iOS 26 locks to "Setting only" because Image Playground
@@ -269,7 +325,7 @@ struct SettingsView: View {
             }
             .padding()
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-            
+
             Button {
                 dismiss()
                 store.resetOnboarding()
@@ -286,6 +342,33 @@ struct SettingsView: View {
             }
             .padding()
             .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+
+            if let message = purchaseManager.message {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            }
+
+            Button {
+                Task { _ = await purchaseManager.restorePurchases() }
+            } label: {
+                HStack {
+                    if purchaseManager.isRestoring {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text("Restore Purchases")
+                    Spacer()
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .disabled(purchaseManager.isRestoring)
+            .padding()
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
         }
     }
 }
@@ -293,12 +376,17 @@ struct SettingsView: View {
 // MARK: - ISOLATED THEME SELECTOR
 struct ThemeWheelSelector: View {
     @Binding var currentThemeID: String
+    let canSelectTheme: (String) -> Bool
+    let onLockedTheme: (String) -> Void
     
     // Local State (Updates fast, doesn't redraw screen)
     @State private var scrollPosition: String?
 
-    init(currentThemeID: Binding<String>) {
+    init(currentThemeID: Binding<String>, canSelectTheme: @escaping (String) -> Bool = { _ in true },
+         onLockedTheme: @escaping (String) -> Void = { _ in }) {
         self._currentThemeID = currentThemeID
+        self.canSelectTheme = canSelectTheme
+        self.onLockedTheme = onLockedTheme
         self._scrollPosition = State(initialValue: "10-\(currentThemeID.wrappedValue)")
     }
     
@@ -410,6 +498,13 @@ struct ThemeWheelSelector: View {
             let themeID = String(components[1])
             // Only update the heavy binding if it's different
             if currentThemeID != themeID {
+                guard canSelectTheme(themeID) else {
+                    onLockedTheme(themeID)
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                        scrollPosition = "10-\(currentThemeID)"
+                    }
+                    return
+                }
                 currentThemeID = themeID
             }
         }
@@ -495,6 +590,14 @@ struct ThemeWheelSelector: View {
         ThemeOptionRectangle(option: option)
             .id(viewID)
             .onTapGesture {
+                guard canSelectTheme(option.id) else {
+                    onLockedTheme(option.id)
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                        scrollPosition = "10-\(currentThemeID)"
+                        proxy.scrollTo("10-\(currentThemeID)", anchor: .center)
+                    }
+                    return
+                }
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                     scrollPosition = viewID
                     proxy.scrollTo(viewID, anchor: .center)
